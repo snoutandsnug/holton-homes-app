@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v21";
-const LEGACY_KEYS = ["holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v22";
+const LEGACY_KEYS = ["holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -18,6 +18,190 @@ const defaultTemplates = [
   {id:"tpl-new-buyer",name:"New buyer introduction",channel:"Text",category:"Buyer",subject:"",body:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. What monthly payment, area, and move timeline would feel comfortable for you?"},
   {id:"tpl-past-client",name:"Past-client check-in",channel:"Text",category:"Relationship",subject:"",body:"Hi {{first_name}}, I was thinking about you and wanted to see how everything is going with the home. How have you been?"},
   {id:"tpl-referral-thanks",name:"Referral thank-you",channel:"Text",category:"Relationship",subject:"",body:"Hi {{first_name}}, thank you for thinking of me and Holton Homes. I really appreciate the introduction and will take great care of them."}
+];
+
+
+const defaultCallScripts = [
+  {
+    id:"script-new-seller",name:"New seller lead",category:"New Seller",
+    goal:"Learn why a move is being considered, who is involved, and whether a clear next meeting makes sense.",
+    opener:"Hey {{first_name}}, this is {{agent_name}} with Holton Homes. Did I catch you at an okay time? I wanted to personally reach out about your real estate inquiry.",
+    questions:[
+      "What has you thinking about a move right now?",
+      "What would need to happen for selling to make sense?",
+      "When would you ideally like to make a decision?",
+      "Who else should be involved in the conversation?",
+      "Have you already spoken with another agent?"
+    ],
+    close:"Based on what you shared, the best next step is for me to review the home and the market, then show you the realistic options. Would {{appointment_day}} work for a quick meeting?",
+    voicemail:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I’m following up about your real estate inquiry. No rush—call or text me at {{agent_phone}} when you have a minute.",
+    afterVoicemailText:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I just left you a quick voicemail about your real estate inquiry. What has you thinking about a possible move?",
+    objections:[
+      {label:"We’re just curious",response:"That makes complete sense. You do not need to be ready to list. What are you most curious about—the value, timing, or what you would walk away with?"},
+      {label:"We’re not ready",response:"That is okay. My job is not to force the timing. What would have to change before moving became realistic?"},
+      {label:"We already have an agent",response:"Got it. Are you already formally committed, or have you only had an early conversation? I do not want to interfere with an existing agreement."},
+      {label:"Just send a price",response:"I can give you a range, but the useful number depends on condition, competition, and your goal. Let me ask two quick questions so I do not send you a meaningless automated estimate."}
+    ]
+  },
+  {
+    id:"script-valuation",name:"Home valuation conversation",category:"Valuation",
+    goal:"Turn a value request into a useful conversation about motivation, timing, equity, and the next step.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}} with Holton Homes. I’ve been looking at {{property}} and wanted to explain what is actually driving the value instead of just throwing an automated number at you.",
+    questions:[
+      "What prompted you to check the value now?",
+      "What updates or condition details would not show in public records?",
+      "Is the goal to sell, refinance, plan ahead, or simply understand the equity?",
+      "Would you need to buy another home before selling?",
+      "What number were you hoping the home might support?"
+    ],
+    close:"I can tighten this range by seeing the property and understanding the condition. Let’s schedule a short walkthrough so I can give you a number I would actually defend.",
+    voicemail:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I finished an initial look at {{property}} and have a few details that could materially change the value. Call or text me at {{agent_phone}}.",
+    afterVoicemailText:"Hi {{first_name}}, I just left a voicemail. I reviewed {{property}}, and a few condition details could move the value. Is the home mostly updated, mostly original, or somewhere between?",
+    objections:[
+      {label:"Zillow says more",response:"That may be possible. Automated estimates cannot see condition, upgrades, layout, or the exact competing homes. Let’s identify what Zillow may be missing before we accept or reject the number."},
+      {label:"I only want a number",response:"I will give you a range. I just want the assumptions to be clear so the number helps you make a decision instead of creating false confidence."},
+      {label:"Another agent priced it higher",response:"A higher number feels better, but the real question is what the market will support and what strategy protects your net. What evidence did they use?"}
+    ]
+  },
+  {
+    id:"script-future-seller",name:"Future seller check-in",category:"Future Seller",
+    goal:"Reopen the relationship naturally and learn what changed without sounding like a pressure follow-up.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}} with Holton Homes. I had a note to check back in around now. How have things changed since we last talked about {{property}}?",
+    questions:[
+      "Is moving still something you would consider?",
+      "What is the biggest thing holding the decision back?",
+      "Has your ideal timing changed?",
+      "Would seeing an updated value or net estimate help?",
+      "Do you need to solve the next-home side before selling?"
+    ],
+    close:"Let’s update the numbers and the plan so you know what is realistic, even if the move is still months away.",
+    voicemail:"Hi {{first_name}}, it’s {{agent_name}} with Holton Homes. I had a reminder to check back in about {{property}}. No pressure—I just wanted to see whether anything changed.",
+    afterVoicemailText:"Hi {{first_name}}, I had a reminder to check back in about {{property}}. Is a move still on the radar, or has the plan changed?",
+    objections:[
+      {label:"Nothing has changed",response:"That is helpful to know. What is the one condition that would need to change before the move became worth revisiting?"},
+      {label:"Maybe next year",response:"That gives us time to plan well. Which part should we solve first—repairs, value, buying next, or the timeline?"},
+      {label:"Rates are too high",response:"Rates matter, but the right comparison is the full move: sale proceeds, next payment, taxes, and your reason for moving. We can model that before you decide."}
+    ]
+  },
+  {
+    id:"script-listing-appointment",name:"Listing appointment",category:"Listing Appointment",
+    goal:"Confirm motivation and decision criteria, present the plan clearly, and ask directly for the listing.",
+    opener:"Thanks for having me over, {{first_name}}. Before I show you pricing and marketing, I want to make sure I understand what a successful sale looks like for you.",
+    questions:[
+      "Why is moving important now?",
+      "What matters most: timing, price, convenience, or certainty?",
+      "What concerns you most about selling?",
+      "How will you decide which agent to hire?",
+      "Is everyone who needs to approve the decision here?"
+    ],
+    close:"You told me the priorities are clear pricing, strong marketing, and a smooth timeline. My recommendation is that we begin with the plan we reviewed. Are you comfortable moving forward with Holton Homes?",
+    voicemail:"Hi {{first_name}}, it’s {{agent_name}} with Holton Homes confirming our appointment for {{property}}. I’ll bring the pricing range, market evidence, and a clear selling plan.",
+    afterVoicemailText:"Hi {{first_name}}, confirming our appointment for {{property}}. I’ll bring the market evidence, pricing range, and selling plan. Will everyone involved in the decision be able to join us?",
+    objections:[
+      {label:"We want to interview others",response:"That is reasonable. Before I leave, what will you use to compare the agents? I want to make sure you have a clear standard—not just three different suggested prices."},
+      {label:"Your price is too low",response:"I understand. My job is to separate the price we would like from the price buyers will support. Let’s look at which evidence you disagree with and whether a different strategy is defensible."},
+      {label:"Commission is too high",response:"The important comparison is not just the fee—it is your net, the probability of closing, and the work required to protect the deal. Which part of the service feels least valuable to you?"},
+      {label:"We need to think",response:"Of course. What specifically do you need to think through—the timing, price, agreement, or whether I am the right agent?"}
+    ]
+  },
+  {
+    id:"script-active-listing",name:"Active listing seller update",category:"Active Listing",
+    goal:"Give the seller clarity, interpret market feedback, and agree on the next strategy.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}} with your weekly update on {{property}}. I want to cover activity, feedback, competition, and the decision I recommend next.",
+    questions:[
+      "How are you feeling about the activity so far?",
+      "Has your timing or motivation changed?",
+      "What feedback concerns you most?",
+      "Are there any showing restrictions we should revisit?",
+      "Are you comfortable with the next pricing or marketing adjustment?"
+    ],
+    close:"My recommendation is {{recommended_action}} because the current buyer response is telling us {{market_signal}}. Let’s agree on the next step today.",
+    voicemail:"Hi {{first_name}}, it’s {{agent_name}} with your Holton Homes listing update. I have the latest activity, feedback, competition, and my recommended next step.",
+    afterVoicemailText:"Hi {{first_name}}, I just left your listing update. I have new activity, feedback, and a recommendation for {{property}}. What time today works for a quick call?",
+    objections:[
+      {label:"We need more time",response:"We can give it more time, but let’s define what we expect to change and the date when we will reassess. Time alone does not improve the market response."},
+      {label:"Do more marketing",response:"We should absolutely maximize exposure. The key question is whether buyers are not seeing the home or seeing it and rejecting the value. The data tells us which problem we have."},
+      {label:"We will not reduce",response:"I respect that decision. Let’s document the tradeoff: likely longer market time, fewer urgent buyers, and the risk of chasing the market later."}
+    ]
+  },
+  {
+    id:"script-buyer",name:"Buyer discovery",category:"Buyer",
+    goal:"Understand payment comfort, financing, timing, location, and the real reason for the move.",
+    opener:"Hey {{first_name}}, this is {{agent_name}} with Holton Homes. I want to make the search useful instead of sending random listings. Can I ask a few quick questions about what you are trying to accomplish?",
+    questions:[
+      "What is creating the need or desire to move?",
+      "What monthly payment feels comfortable?",
+      "Have you spoken with a lender yet?",
+      "Which areas are realistic for work and daily life?",
+      "What are the three non-negotiables?",
+      "When would you ideally be moved?"
+    ],
+    close:"The best next step is a buyer consultation so we can connect payment, financing, areas, and the search strategy. Let’s get that scheduled.",
+    voicemail:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I’m following up about your home search. Call or text me at {{agent_phone}} and we’ll narrow the search around the payment and areas that actually work.",
+    afterVoicemailText:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I just left a voicemail about your home search. What monthly payment and areas are you targeting?",
+    objections:[
+      {label:"We are just browsing",response:"That is fine. Browsing becomes more useful once the payment and area are clear. What would make you move from browsing to acting?"},
+      {label:"We do not want a lender yet",response:"You do not have to commit to anything. A lender conversation simply turns price into a realistic monthly payment and shows whether anything needs attention early."},
+      {label:"We are using Zillow",response:"Zillow is useful for browsing. I add the strategy: payment, offer strength, property risks, and what the listing does not tell you."}
+    ]
+  },
+  {
+    id:"script-past-client",name:"Past client relationship call",category:"Past Client",
+    goal:"Strengthen the relationship, provide value, and create a natural referral opportunity without making the call transactional.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}}. You crossed my mind and I wanted to check in. How are you and the home doing?",
+    questions:[
+      "What do you enjoy most about the home now?",
+      "Is there anything you wish you had known earlier?",
+      "Have you made any updates?",
+      "Do you want an updated value or neighborhood market snapshot?",
+      "Is anyone around you talking about a move?"
+    ],
+    close:"I’m glad I checked in. I’ll send the market update we discussed, and please reach out anytime you or someone you care about needs honest real estate help.",
+    voicemail:"Hey {{first_name}}, it’s {{agent_name}}. Nothing urgent—I was thinking about you and wanted to see how you and the home are doing.",
+    afterVoicemailText:"Hey {{first_name}}, nothing urgent—I was thinking about you and wanted to see how you and the home are doing. Hope everything is going well.",
+    objections:[
+      {label:"We are not moving",response:"Good—I am not calling to push a move. I want to stay useful after closing too. Is there anything about the home or market you have been wondering about?"},
+      {label:"No referrals right now",response:"No worries at all. I appreciate the relationship more than a forced referral. Just keep me in mind when a real need comes up."}
+    ]
+  },
+  {
+    id:"script-partner",name:"Referral partner call",category:"Partner",
+    goal:"Build a mutually useful relationship and identify a specific next collaboration.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}} with Holton Homes. I wanted to learn more about your business and see whether there is a useful way for us to help each other’s clients.",
+    questions:[
+      "Who is your ideal client?",
+      "Which areas or price points are strongest for you?",
+      "What causes the most friction in your current transactions?",
+      "How do you prefer referrals to be introduced?",
+      "What would make an agent relationship genuinely useful to you?"
+    ],
+    close:"I have a clear idea of who I should send your way. Let’s stay specific and follow through when the right client appears.",
+    voicemail:"Hi {{first_name}}, it’s {{agent_name}} with Holton Homes. I wanted to introduce myself and learn more about your business. Call or text me at {{agent_phone}}.",
+    afterVoicemailText:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I just left a voicemail—I’d like to learn about your business and see where our clients may overlap.",
+    objections:[
+      {label:"We already have partners",response:"That makes sense. I am not asking you to replace anyone. I would rather understand where gaps still exist and earn trust on the right opportunity."},
+      {label:"Send me your info",response:"Absolutely. Before I do, what type of opportunity would be most useful for you so I can make the introduction relevant?"}
+    ]
+  },
+  {
+    id:"script-general",name:"General relationship call",category:"General",
+    goal:"Have a real conversation, learn what matters now, and leave with a clear next step.",
+    opener:"Hey {{first_name}}, it’s {{agent_name}} with Holton Homes. Did I catch you at an okay time?",
+    questions:[
+      "What has changed since we last spoke?",
+      "What is most important to you right now?",
+      "Is there a real estate question I can help clarify?",
+      "What would be a useful next step?",
+      "When should I check back in?"
+    ],
+    close:"That helps a lot. I’ll take care of {{next_step}} and follow up on {{follow_up_day}}.",
+    voicemail:"Hi {{first_name}}, it’s {{agent_name}} with Holton Homes. Nothing urgent—I wanted to check in. Call or text me at {{agent_phone}} when you have a minute.",
+    afterVoicemailText:"Hi {{first_name}}, it’s {{agent_name}} with Holton Homes. Nothing urgent—I wanted to check in. How have you been?",
+    objections:[
+      {label:"Bad time",response:"No problem at all. Is later today or another day better?"},
+      {label:"Not interested",response:"Understood. I do not want to be a nuisance. Should I close the loop completely, or is there a better time to reconnect?"}
+    ]
+  }
 ];
 
 const CLOUD_CONFIG=window.HOLTON_CLOUD_CONFIG||{};
@@ -578,6 +762,7 @@ function workQueueRow(item,index){
     <div class="work-actions">
       ${canCall&&!["task","appointment","deadline","reply","missing-next"].includes(item.kind)?`<button class="quick call" data-action="work-launch" data-id="${item.id}" data-channel="Call">☎</button>`:""}
       ${canText&&!["task","appointment","deadline","reply","missing-next"].includes(item.kind)?`<button class="quick text" data-action="work-launch" data-id="${item.id}" data-channel="Text">✉</button>`:""}
+      ${c?`<button class="quick script" data-action="show-script" data-id="${c.id}" data-context="today" data-work="${item.id}">▤</button>`:""}
       <button class="primary-btn compact" data-action="work-primary" data-id="${item.id}">${workPrimaryLabel(item)}</button>
       <button class="quick" data-action="work-snooze" data-id="${item.id}" title="Snooze">⋯</button>
     </div>
@@ -764,11 +949,12 @@ function mergeCollection(localItems=[],cloudItems=[]){
 function mergeStates(localState,cloudState){
   const merged=normalize(cloudState||{});
   const local=normalize(localState||{});
-  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory"].forEach(key=>{
+  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory","callScripts"].forEach(key=>{
     merged[key]=mergeCollection(local[key],merged[key])
   });
   merged.automationHistory=[...new Set([...(merged.automationHistory||[]),...(local.automationHistory||[])])].slice(-5000);
   merged.workSnoozes={...(merged.workSnoozes||{}),...(local.workSnoozes||{})};
+  merged.scriptDrafts={...(merged.scriptDrafts||{}),...(local.scriptDrafts||{})};
   const localSaved=local.settings?.lastSavedAt||"",cloudSaved=merged.settings?.lastSavedAt||"";
   merged.settings={...(cloudSaved>=localSaved?local.settings:merged.settings),...(cloudSaved>=localSaved?merged.settings:local.settings)};
   return normalize(merged)
@@ -1036,7 +1222,7 @@ function normalize(raw){
   const communications=(raw.communications||raw.activities||[]).map(a=>({
     id:a.id||uid(),contactId:a.contactId||a.personId||"",channel:a.channel||a.type||"Note",
     direction:a.direction||"outbound",outcome:a.outcome||"",body:a.body||a.summary||"",date:a.date?.includes("T")?a.date:`${a.date||TODAY()}T12:00:00`,
-    unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",createdAt:a.createdAt||NOW()
+    unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",scriptId:a.scriptId||"",createdAt:a.createdAt||NOW()
   }));
   const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
   const planRuns=(raw.planRuns||[]).map(r=>({...r,id:r.id||uid(),status:r.status||"Active",startedAt:r.startedAt||TODAY(),stepStates:r.stepStates||{},sourceRuleId:r.sourceRuleId||"",completedAt:r.completedAt||""}));
@@ -1052,7 +1238,14 @@ function normalize(raw){
   const deletedContacts=Array.isArray(raw.deletedContacts)?raw.deletedContacts:[];
   const workSnoozes=raw.workSnoozes&&typeof raw.workSnoozes==="object"?raw.workSnoozes:{};
   const workHistory=Array.isArray(raw.workHistory)?raw.workHistory:[];
-  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",...(raw.settings||{})}};
+  const callScripts=(Array.isArray(raw.callScripts)&&raw.callScripts.length?raw.callScripts:defaultCallScripts).map(s=>({
+    id:s.id||uid(),name:s.name||"Call script",category:s.category||"General",goal:s.goal||"",
+    opener:s.opener||"",questions:Array.isArray(s.questions)?s.questions:[],
+    close:s.close||"",voicemail:s.voicemail||"",afterVoicemailText:s.afterVoicemailText||"",
+    objections:Array.isArray(s.objections)?s.objections.map(o=>({label:o.label||"Objection",response:o.response||""})):[]
+  }));
+  const scriptDrafts=raw.scriptDrafts&&typeof raw.scriptDrafts==="object"?raw.scriptDrafts:{};
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -1067,7 +1260,7 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},settings:{}});
 }
 
 function route(){
@@ -1090,7 +1283,8 @@ function avatar(c){return `<span class="avatar" aria-hidden="true">${esc(initial
 function contactQuickActions(c,labels=false){return `<div class="row-actions">
 <button class="quick call" data-action="quick-launch" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎${labels?" Call":""}</button>
 <button class="quick text" data-action="quick-launch" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉${labels?" Text":""}</button>
-<button class="quick email" data-action="quick-launch" data-channel="Email" data-id="${c.id}" ${hasEmail(c)?"":"disabled"}>@${labels?" Email":""}</button></div>`}
+<button class="quick email" data-action="quick-launch" data-channel="Email" data-id="${c.id}" ${hasEmail(c)?"":"disabled"}>@${labels?" Email":""}</button>
+<button class="quick script" data-action="show-script" data-id="${c.id}">▤${labels?" Script":""}</button></div>`}
 function scoreContact(c){
   let score=0,reasons=[];
   if(hasPhone(c)||hasEmail(c)){score+=10;reasons.push(["Valid contact info",10])}
@@ -1550,6 +1744,283 @@ function applyStageWorkflow(c,oldStage,newStage){
   }
 }
 
+
+let scriptDraftSaveTimer=null;
+function recommendedScriptCategory(c){
+  if(!c)return "General";
+  if(["Realtor","Lender"].includes(c.type))return "Partner";
+  if(c.type==="Past Client")return "Past Client";
+  if(c.type==="Buyer")return "Buyer";
+  if(c.type!=="Seller")return "General";
+  if(c.stage==="Listing Appointment")return "Listing Appointment";
+  if(["Active Listing","Coming Soon","Offer Received"].includes(c.stage))return "Active Listing";
+  if(["Valuation Requested","Valuation Delivered"].includes(c.stage))return "Valuation";
+  if(["Nurture","Follow-Up"].includes(c.stage))return "Future Seller";
+  return "New Seller"
+}
+function scriptForContact(c,scriptId=""){
+  const draft=db.scriptDrafts?.[c?.id]||{};
+  const exact=db.callScripts.find(s=>s.id===(scriptId||draft.scriptId));
+  if(exact)return exact;
+  const category=recommendedScriptCategory(c);
+  return db.callScripts.find(s=>s.category===category)||db.callScripts.find(s=>s.category==="General")||db.callScripts[0]
+}
+function scriptVariables(c,extra={}){
+  const p=primaryProperty(c);
+  return {
+    first_name:c?.firstName||"there",last_name:c?.lastName||"",full_name:c?fullName(c):"",
+    property:propertyAddress(p)||c?.property||"the property",
+    agent_name:db.settings.agentName||"Jacob",agent_phone:db.settings.agentPhone||"your number",
+    agent_email:db.settings.agentEmail||"",appointment_day:extra.appointment_day||"a time that works for you",
+    follow_up_day:extra.follow_up_day||"the date we agree on",next_step:extra.next_step||"the next step",
+    recommended_action:extra.recommended_action||"the next strategy",market_signal:extra.market_signal||"the current response"
+  }
+}
+function fillScriptText(text,c,extra={}){
+  const vars=scriptVariables(c,extra);
+  return String(text||"").replace(/\{\{(\w+)\}\}/g,(_,key)=>vars[key]??`{{${key}}}`)
+}
+function reasonToCall(c){
+  const unread=db.communications.filter(m=>m.contactId===c.id&&m.unread).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  if(unread)return `Unread ${unread.channel.toLowerCase()} waiting since ${dateTimeLabel(unread.date)}`;
+  const callTask=db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done"&&t.type==="Call").sort((a,b)=>String(a.due).localeCompare(String(b.due)))[0];
+  if(callTask)return `${callTask.title} • ${callTask.due<TODAY()?"overdue":"due"} ${dateLabel(callTask.due)}`;
+  if(c.followUp)return `${c.followUp<TODAY()?"Follow-up overdue":"Next follow-up"} • ${dateLabel(c.followUp)}`;
+  if(c.type==="Seller"&&c.stage==="Active Listing")return `${daysSince(c.lastCommunication)} days since the last seller update`;
+  return `${c.type} • ${c.stage} • ${c.heat}`
+}
+function lastConversationPreview(c){
+  const last=db.communications.filter(m=>m.contactId===c.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  if(!last)return "No prior communication is logged.";
+  return `${last.channel}${last.outcome?` • ${last.outcome}`:""} • ${dateTimeLabel(last.date)}${last.body?` — ${last.body.slice(0,170)}`:""}`
+}
+function scriptPrepFacts(c){
+  const p=primaryProperty(c),facts=[];
+  facts.push({label:"Reason now",value:reasonToCall(c)});
+  if(c.type==="Seller"){
+    facts.push({label:"Property",value:propertyAddress(p)||c.property||"Address needed"});
+    facts.push({label:"Motivation",value:p?.motivation||c.sellerDetails?.motivation||"Not learned yet"});
+    facts.push({label:"Timing",value:c.timeframe||"Unknown"});
+    facts.push({label:"Decision makers",value:c.sellerDetails?.decisionMakers||((c.household||[]).filter(x=>x.decisionMaker).map(householdName).join(", ")||"Not confirmed")});
+  }else if(c.type==="Buyer"){
+    facts.push({label:"Payment goal",value:c.buyerDetails?.desiredPayment?money(c.buyerDetails.desiredPayment):"Not learned yet"});
+    facts.push({label:"Areas",value:c.buyerDetails?.areas||c.preferences?.areas||"Not learned yet"});
+    facts.push({label:"Financing",value:c.buyerDetails?.preapproval||"Unknown"});
+    facts.push({label:"Timing",value:c.timeframe||"Unknown"});
+  }else{
+    facts.push({label:"Relationship",value:c.sphereDetails?.relationship||c.professionalDetails?.company||c.type});
+    facts.push({label:"Last touch",value:c.lastCommunication?dateLabel(c.lastCommunication):"Never"});
+  }
+  return facts
+}
+function scriptDraft(c,script){
+  const existing=db.scriptDrafts?.[c.id]||{};
+  return {
+    scriptId:existing.scriptId||script.id,notes:existing.notes||"",outcome:existing.outcome||"Connected",
+    followUp:existing.followUp||c.followUp||addDays(TODAY(),2),appointmentDate:existing.appointmentDate||"",
+    updatedAt:existing.updatedAt||""
+  }
+}
+function scriptOptions(selected){
+  const groups=[...new Set(db.callScripts.map(s=>s.category))];
+  return groups.map(category=>`<optgroup label="${esc(category)}">${db.callScripts.filter(s=>s.category===category).map(s=>`<option value="${s.id}" ${s.id===selected?"selected":""}>${esc(s.name)}</option>`).join("")}</optgroup>`).join("")
+}
+function openConversationMode(contactId,context="profile",taskId="",workItemId="",scriptId=""){
+  const c=contact(contactId);if(!c)return;
+  const script=scriptForContact(c,scriptId),draft=scriptDraft(c,script),facts=scriptPrepFacts(c);
+  const p=primaryProperty(c),phone=c.phone||"No phone number";
+  modal(`Conversation Mode — ${fullName(c)}`,`<div class="conversation-mode">
+    <input type="hidden" id="scriptContactId" value="${c.id}">
+    <input type="hidden" id="scriptContext" value="${esc(context)}">
+    <input type="hidden" id="scriptTaskId" value="${esc(taskId||"")}">
+    <input type="hidden" id="scriptWorkItemId" value="${esc(workItemId||"")}">
+    <header class="conversation-prep">
+      <div class="conversation-person">${avatar(c)}<div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><h2>${esc(fullName(c))}</h2><p>${esc(phone)}${propertyDisplay(c)?` • ${esc(propertyDisplay(c))}`:""}</p></div></div>
+      <div class="conversation-top-actions">
+        <button class="ghost-btn compact" data-action="copy-phone" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>Copy number</button>
+        <button class="primary-btn compact" data-action="script-call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎ Call now</button>
+      </div>
+    </header>
+    <div class="conversation-facts">${facts.map(f=>`<div><label>${esc(f.label)}</label><strong>${esc(String(f.value||"—"))}</strong></div>`).join("")}</div>
+    <div class="conversation-layout">
+      <main class="script-main">
+        <div class="script-selector"><div><span>RECOMMENDED SCRIPT</span><strong>${esc(script.name)}</strong></div><select id="scriptSelect">${scriptOptions(script.id)}</select></div>
+        <section class="script-block opener-block"><div class="script-block-head"><div><span>OPEN NATURALLY</span><h3>Opening</h3></div><button class="copy-script-btn" data-action="copy-script-section" data-section="opener">Copy</button></div><p id="scriptOpenerText">${esc(fillScriptText(script.opener,c))}</p></section>
+        <section class="script-block"><div class="script-block-head"><div><span>LISTEN MORE THAN YOU TALK</span><h3>Questions to uncover the real situation</h3></div></div>
+          <div class="discovery-list">${script.questions.map((q,i)=>`<button class="discovery-question" data-action="toggle-script-question"><span>${i+1}</span>${esc(fillScriptText(q,c))}<b>✓</b></button>`).join("")}</div>
+        </section>
+        <section class="script-block"><div class="script-block-head"><div><span>ASK FOR THE NEXT STEP</span><h3>Close</h3></div><button class="copy-script-btn" data-action="copy-script-section" data-section="close">Copy</button></div><p id="scriptCloseText">${esc(fillScriptText(script.close,c))}</p></section>
+        <section class="script-block voicemail-block"><div class="script-block-head"><div><span>WHEN THEY DO NOT ANSWER</span><h3>Voicemail</h3></div><button class="copy-script-btn" data-action="copy-script-section" data-section="voicemail">Copy</button></div><p id="scriptVoicemailText">${esc(fillScriptText(script.voicemail,c))}</p>
+          <div class="script-inline-actions"><button class="ghost-btn compact" data-action="script-voicemail-text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>Send follow-up text</button><button class="ghost-btn compact" data-action="set-script-outcome" data-outcome="Left Voicemail">Mark voicemail</button></div>
+        </section>
+      </main>
+      <aside class="conversation-side">
+        <section class="call-goal"><span>CALL GOAL</span><strong>${esc(fillScriptText(script.goal,c))}</strong></section>
+        <section class="last-conversation"><span>LAST CONVERSATION</span><p>${esc(lastConversationPreview(c))}</p></section>
+        <section class="objection-coach"><div><span>OBJECTION COACH</span><h3>Tap what they say</h3></div>
+          <div class="objection-buttons">${script.objections.map((o,i)=>`<button data-action="show-script-objection" data-index="${i}">${esc(o.label)}</button>`).join("")}</div>
+          <div class="objection-response" id="objectionResponse"><span>Response appears here</span><p>Stay curious, acknowledge the concern, and ask one useful follow-up question.</p></div>
+        </section>
+        <section class="live-call-notes">
+          <div><span>LIVE NOTES</span><small>Draft syncs across devices</small></div>
+          <textarea id="scriptNotes" placeholder="Motivation, decision makers, objections, timing, next step...">${esc(draft.notes)}</textarea>
+        </section>
+        <section class="script-outcome">
+          <div class="field"><label>Outcome</label><select id="scriptOutcome">${["Connected","Left Voicemail","No Answer","Appointment Set","Follow-Up Needed","Not Interested"].map(x=>`<option ${draft.outcome===x?"selected":""}>${x}</option>`).join("")}</select></div>
+          <div class="field"><label>Next follow-up</label><input id="scriptFollowUp" type="date" value="${esc(draft.followUp)}"></div>
+          <div class="field appointment-field ${draft.outcome==="Appointment Set"?"show":""}" id="scriptAppointmentField"><label>Appointment date</label><input id="scriptAppointmentDate" type="date" value="${esc(draft.appointmentDate)}"></div>
+        </section>
+      </aside>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Keep draft & close</button>${context==="call-queue"?`<button class="ghost-btn" data-action="script-skip-next">Skip to next</button>`:""}<button class="primary-btn" data-action="save-script-outcome">Save outcome${context==="call-queue"?" & next":""}</button>`);
+  document.getElementById("modal").classList.add("script-modal");
+  saveScriptDraftFromFields(false)
+}
+function copyTextValue(text,label="Copied"){
+  const value=String(text||"");
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(value).then(()=>toast(label,value.slice(0,80))).catch(()=>fallbackCopy(value,label))
+  }else fallbackCopy(value,label)
+}
+function fallbackCopy(value,label){
+  const area=document.createElement("textarea");area.value=value;area.style.position="fixed";area.style.opacity="0";document.body.appendChild(area);area.select();
+  try{document.execCommand("copy");toast(label,value.slice(0,80))}finally{area.remove()}
+}
+function copyScriptSection(section){
+  const ids={opener:"scriptOpenerText",close:"scriptCloseText",voicemail:"scriptVoicemailText"};
+  copyTextValue(document.getElementById(ids[section])?.textContent||"","Script copied")
+}
+function showScriptObjection(index){
+  const c=contact(document.getElementById("scriptContactId")?.value),script=db.callScripts.find(s=>s.id===document.getElementById("scriptSelect")?.value);
+  const objection=script?.objections?.[Number(index)];if(!objection||!c)return;
+  document.querySelectorAll(".objection-buttons button").forEach((button,i)=>button.classList.toggle("active",i===Number(index)));
+  const box=document.getElementById("objectionResponse");
+  if(box)box.innerHTML=`<span>${esc(objection.label)}</span><p>${esc(fillScriptText(objection.response,c))}</p><button class="copy-script-btn" data-action="copy-objection" data-index="${index}">Copy response</button>`
+}
+function saveScriptDraftFromFields(immediate=true){
+  const contactId=document.getElementById("scriptContactId")?.value;if(!contactId)return;
+  const draft={
+    scriptId:document.getElementById("scriptSelect")?.value||"",
+    notes:document.getElementById("scriptNotes")?.value||"",
+    outcome:document.getElementById("scriptOutcome")?.value||"Connected",
+    followUp:document.getElementById("scriptFollowUp")?.value||"",
+    appointmentDate:document.getElementById("scriptAppointmentDate")?.value||"",
+    updatedAt:NOW()
+  };
+  db.scriptDrafts[contactId]=draft;
+  clearTimeout(scriptDraftSaveTimer);
+  if(immediate)scriptDraftSaveTimer=setTimeout(()=>save(false),450)
+}
+function changeConversationScript(){
+  const contactId=document.getElementById("scriptContactId")?.value,context=document.getElementById("scriptContext")?.value||"profile",
+    taskId=document.getElementById("scriptTaskId")?.value||"",workItemId=document.getElementById("scriptWorkItemId")?.value||"",
+    scriptId=document.getElementById("scriptSelect")?.value||"";
+  saveScriptDraftFromFields(false);save(false);openConversationMode(contactId,context,taskId,workItemId,scriptId)
+}
+function launchScriptCall(id){
+  const c=contact(id);if(!c||!hasPhone(c))return;
+  saveScriptDraftFromFields(false);save(false);
+  location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`
+}
+function launchVoicemailText(id){
+  const c=contact(id),script=db.callScripts.find(s=>s.id===document.getElementById("scriptSelect")?.value);if(!c||!script||!hasPhone(c))return;
+  const body=fillScriptText(script.afterVoicemailText,c);
+  saveScriptDraftFromFields(false);save(false);
+  location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(body)}`
+}
+function setScriptOutcome(outcome){
+  const select=document.getElementById("scriptOutcome");if(select){select.value=outcome;select.dispatchEvent(new Event("change",{bubbles:true}))}
+}
+function saveConversationOutcome(){
+  const contactId=document.getElementById("scriptContactId")?.value,c=contact(contactId);if(!c)return;
+  const script=db.callScripts.find(s=>s.id===document.getElementById("scriptSelect")?.value),outcome=document.getElementById("scriptOutcome")?.value||"Connected",
+    notes=document.getElementById("scriptNotes")?.value.trim()||"",followUp=document.getElementById("scriptFollowUp")?.value||"",
+    appointmentDate=document.getElementById("scriptAppointmentDate")?.value||"",context=document.getElementById("scriptContext")?.value||"profile",
+    taskId=document.getElementById("scriptTaskId")?.value||"",workItemId=document.getElementById("scriptWorkItemId")?.value||"";
+  if(outcome==="Appointment Set"&&!appointmentDate)return alert("Choose the appointment date.");
+  if(isOpen(c)&&!["Appointment Set","Not Interested"].includes(outcome)&&!followUp)return alert("Set the next follow-up date.");
+  db.communications.unshift({
+    id:uid(),contactId,channel:"Call",direction:"outbound",outcome,
+    body:[script?`Script: ${script.name}`:"",notes].filter(Boolean).join("\n\n"),
+    date:NOW(),unread:false,threadStatus:"open",scriptId:script?.id||"",createdAt:NOW()
+  });
+  c.lastCommunication=TODAY();c.updatedAt=TODAY();
+  if(followUp)c.followUp=followUp;
+  if(outcome==="Appointment Set"){
+    const oldStage=c.stage;c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";applyStageWorkflow(c,oldStage,c.stage);
+    const title=`${c.type==="Buyer"?"Buyer consultation":"Listing appointment"} — ${fullName(c)}`;
+    if(!db.tasks.some(t=>t.contactId===c.id&&t.status!=="Done"&&t.type==="Appointment"&&t.due===appointmentDate)){
+      db.tasks.unshift({id:uid(),contactId:c.id,title,type:"Appointment",due:appointmentDate,status:"Open",priority:"High",planRunId:"",createdAt:TODAY()})
+    }
+    const p=primaryProperty(c);if(p)p.appointmentDate=appointmentDate
+  }
+  if(["Left Voicemail","No Answer","Follow-Up Needed"].includes(outcome)&&followUp&&!db.tasks.some(t=>t.contactId===c.id&&t.status!=="Done"&&t.due===followUp&&t.type==="Call")){
+    db.tasks.unshift({id:uid(),contactId:c.id,title:`Follow up with ${fullName(c)}`,type:"Call",due:followUp,status:"Open",priority:c.heat==="Hot"?"High":"Normal",planRunId:"",createdAt:TODAY()})
+  }
+  if(outcome==="Not Interested"){
+    c.stage="Lost";c.followUp="";
+  }
+  if(taskId){const t=task(taskId);if(t){t.status="Done";t.completedAt=TODAY()}}
+  if(workItemId){delete db.workSnoozes[workItemId];db.workHistory.unshift({id:uid(),itemId:workItemId,contactId,action:"Conversation Mode completed",date:NOW()})}
+  delete db.scriptDrafts[contactId];
+  save();closeModal();toast("Conversation logged",`${outcome} • ${fullName(c)}`);
+  if(context==="call-queue"){
+    const remaining=callQueue();db.settings.callQueueResumeContactId=remaining[0]?.c.id||"";save(false);location.hash="#/call-queue";setTimeout(renderCallQueue,0)
+  }else route()
+}
+function skipConversationToNext(){
+  saveScriptDraftFromFields(false);save(false);closeModal();moveCallQueue(1);
+  const q=callQueue(),active=q[activeCallQueueIndex(q)];if(active)setTimeout(()=>openConversationMode(active.c.id,"call-queue",active.task?.id||""),30)
+}
+function callScriptsSettingsHtml(){
+  return `<section class="setting-card call-script-settings"><div class="setting-card-head"><div><h3>Conversation scripts</h3><p>One editable script library on desktop, iPad, and phone.</p></div><button class="primary-btn compact" data-action="open-call-script">＋ Add</button></div>
+    <div class="script-settings-list">${db.callScripts.map(s=>`<div class="template-row"><div><strong>${esc(s.name)}</strong><span>${esc(s.category)} • ${s.questions.length} questions • ${s.objections.length} objections</span></div><button class="quick" data-action="open-call-script" data-id="${s.id}">Edit</button></div>`).join("")}</div>
+    <button class="ghost-btn compact reset-scripts" data-action="reset-call-scripts">Restore starter scripts</button>
+  </section>`
+}
+function callScriptEditorModal(id=""){
+  const s=db.callScripts.find(x=>x.id===id)||{id:"",name:"",category:"General",goal:"",opener:"",questions:[],close:"",voicemail:"",afterVoicemailText:"",objections:[]};
+  const objections=(s.objections||[]).map(o=>`${o.label} | ${o.response}`).join("\n");
+  modal(s.id?"Edit conversation script":"New conversation script",`<div class="form-grid">
+    <input id="callScriptId" type="hidden" value="${esc(s.id)}">
+    <div class="field"><label>Name</label><input id="callScriptName" value="${esc(s.name)}"></div>
+    <div class="field"><label>Use for</label><select id="callScriptCategory">${["New Seller","Valuation","Future Seller","Listing Appointment","Active Listing","Buyer","Past Client","Partner","General"].map(x=>`<option ${s.category===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field full"><label>Call goal</label><textarea id="callScriptGoal">${esc(s.goal)}</textarea></div>
+    <div class="field full"><label>Opening</label><textarea id="callScriptOpener">${esc(s.opener)}</textarea></div>
+    <div class="field full"><label>Discovery questions — one per line</label><textarea id="callScriptQuestions" rows="7">${esc((s.questions||[]).join("\n"))}</textarea></div>
+    <div class="field full"><label>Close / next-step ask</label><textarea id="callScriptClose">${esc(s.close)}</textarea></div>
+    <div class="field full"><label>Voicemail</label><textarea id="callScriptVoicemail">${esc(s.voicemail)}</textarea></div>
+    <div class="field full"><label>Text after voicemail</label><textarea id="callScriptVoicemailText">${esc(s.afterVoicemailText)}</textarea></div>
+    <div class="field full"><label>Objections — one per line: label | response</label><textarea id="callScriptObjections" rows="8">${esc(objections)}</textarea><small class="field-help">Variables: {{first_name}}, {{property}}, {{agent_name}}, {{agent_phone}}</small></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${s.id?`<button class="danger-btn" data-action="delete-call-script" data-id="${s.id}">Delete</button>`:""}<button class="primary-btn" data-action="save-call-script">Save script</button>`)
+}
+function saveCallScript(){
+  const id=document.getElementById("callScriptId")?.value||uid(),name=document.getElementById("callScriptName")?.value.trim(),
+    opener=document.getElementById("callScriptOpener")?.value.trim();
+  if(!name||!opener)return alert("Add a script name and opening.");
+  const questions=(document.getElementById("callScriptQuestions")?.value||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  const objections=(document.getElementById("callScriptObjections")?.value||"").split("\n").map(line=>{
+    const [label,...rest]=line.split("|");return {label:(label||"").trim(),response:rest.join("|").trim()}
+  }).filter(o=>o.label&&o.response);
+  const script={id,name,category:document.getElementById("callScriptCategory")?.value||"General",
+    goal:document.getElementById("callScriptGoal")?.value.trim()||"",opener,questions,
+    close:document.getElementById("callScriptClose")?.value.trim()||"",voicemail:document.getElementById("callScriptVoicemail")?.value.trim()||"",
+    afterVoicemailText:document.getElementById("callScriptVoicemailText")?.value.trim()||"",objections};
+  const index=db.callScripts.findIndex(x=>x.id===id);if(index>=0)db.callScripts[index]=script;else db.callScripts.push(script);
+  save();closeModal();renderSettings();toast("Conversation script saved",name)
+}
+function deleteCallScript(id){
+  if(db.callScripts.length<=1)return alert("Keep at least one script.");
+  if(!confirm("Delete this conversation script?"))return;
+  db.callScripts=db.callScripts.filter(x=>x.id!==id);
+  Object.values(db.scriptDrafts||{}).forEach(d=>{if(d.scriptId===id)d.scriptId=""});
+  save();closeModal();renderSettings()
+}
+function resetCallScripts(){
+  if(!confirm("Restore all starter scripts? Your custom script edits will be replaced."))return;
+  db.callScripts=JSON.parse(JSON.stringify(defaultCallScripts));save();renderSettings();toast("Starter scripts restored","Conversation Mode is back to the Holton Homes defaults.")
+}
+
 function threads(){
   const map=new Map();
   db.communications.forEach(m=>{
@@ -1805,6 +2276,7 @@ function renderContact(id){
       <div class="next-action-copy"><span>NEXT ACTION</span><strong>${esc(next.title)}</strong><small class="${next.due<TODAY()?"overdue":""}">${next.due===TODAY()?"Due today":`Due ${dateLabel(next.due)}`}</small></div>
       <div class="next-action-buttons">
         <button class="primary-btn" data-action="complete-next-action" data-id="${c.id}" data-channel="${esc(next.channel)}" data-task="${esc(next.taskId)}">Complete & log</button>
+        <button class="ghost-btn" data-action="show-script" data-id="${c.id}" data-context="profile" data-task="${esc(next.taskId)}">▤ Show script</button>
         <button class="ghost-btn" data-action="reschedule-contact" data-id="${c.id}">Reschedule</button>
       </div>
     </section>
@@ -1919,6 +2391,7 @@ function renderCallQueue(){
         <div class="call-summary">${esc(contactSummary(active.c,scoreContact(active.c)))}</div>
         <div class="call-session-actions">
           <button class="primary-btn call-big" data-action="queue-call" data-id="${active.c.id}" data-task="${active.task?.id||""}">☎ Call ${esc(active.c.firstName||"contact")}</button>
+          <button class="ghost-btn script-launch" data-action="show-script" data-id="${active.c.id}" data-context="call-queue" data-task="${active.task?.id||""}">▤ Show script</button>
           <button class="ghost-btn" data-action="quick-launch" data-channel="Text" data-id="${active.c.id}">✉ Text</button>
           <button class="ghost-btn" data-action="open-note" data-id="${active.c.id}">＋ Note</button>
           <a class="ghost-btn" href="#/contact/${active.c.id}">Open profile</a>
@@ -2312,6 +2785,7 @@ function renderSettings(){
     `<div class="settings-grid">
       ${cloudSettingsHtml()}
       ${templatesSettingsHtml()}
+      ${callScriptsSettingsHtml()}
       <section class="setting-card recently-deleted"><div class="setting-card-head"><div><h3>Recently Deleted</h3><p>Restore contacts removed by mistake.</p></div><b>${db.deletedContacts.length}</b></div>
         <div class="deleted-list">${db.deletedContacts.length?db.deletedContacts.slice(0,10).map(item=>`<div class="deleted-row"><div><strong>${esc(fullName(item.contact))}</strong><span>Deleted ${dateTimeLabel(item.deletedAt)}</span></div><button class="ghost-btn compact" data-action="restore-deleted" data-id="${item.id}">Restore</button><button class="quick" data-action="permanent-delete" data-id="${item.id}">×</button></div>`).join(""):`<div class="compact-empty">No deleted contacts.</div>`}</div>
       </section>
@@ -2326,13 +2800,13 @@ function renderSettings(){
         <button class="primary-btn compact" style="margin-top:9px" data-action="save-goals">Save goals</button>
       </section>
       <section class="setting-card"><h3>Data protection</h3><p>The cloud is the shared source of truth. This browser also keeps a local recovery copy for offline use.</p><div class="warning"><strong>Still recommended:</strong> download a JSON backup monthly. Free cloud plans do not replace your own exports.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
-      <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
+      <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Universal Conversation Mode</span><span>✓ Synced call-note drafts</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
       <section class="setting-card"><h3>Device cache</h3><p>Clear only this device’s local cache. Your signed-in cloud data will download again.</p><button class="danger-btn compact" data-action="clear-data">Clear device cache</button></section>
     </div>`;
 }
 
-function modal(title,body,footer){const backdrop=document.getElementById("modalBackdrop"),el=document.getElementById("modal");el.innerHTML=`<div class="modal-head"><h2>${esc(title)}</h2><button class="icon-btn" data-action="close-modal">×</button></div><div class="modal-body">${body}</div><div class="modal-foot">${footer||`<button class="ghost-btn" data-action="close-modal">Close</button>`}</div>`;backdrop.classList.add("open")}
-function closeModal(){document.getElementById("modalBackdrop").classList.remove("open")}
+function modal(title,body,footer){const backdrop=document.getElementById("modalBackdrop"),el=document.getElementById("modal");el.classList.remove("script-modal");el.innerHTML=`<div class="modal-head"><h2>${esc(title)}</h2><button class="icon-btn" data-action="close-modal">×</button></div><div class="modal-body">${body}</div><div class="modal-foot">${footer||`<button class="ghost-btn" data-action="close-modal">Close</button>`}</div>`;backdrop.classList.add("open")}
+function closeModal(){document.getElementById("modalBackdrop").classList.remove("open");document.getElementById("modal")?.classList.remove("script-modal")}
 function contactOptions(selected=""){return `<option value="">Choose person</option>${db.contacts.slice().sort((a,b)=>fullName(a).localeCompare(fullName(b))).map(c=>`<option value="${c.id}" ${c.id===selected?"selected":""}>${esc(fullName(c))}</option>`).join("")}`}
 
 
@@ -2810,6 +3284,24 @@ document.addEventListener("click",event=>{
   if(action==="open-template")templateModal(id||"");
   if(action==="save-template")saveTemplate();
   if(action==="delete-template")deleteTemplate(id);
+  if(action==="show-script")openConversationMode(id,el.dataset.context||"profile",el.dataset.task||"",el.dataset.work||"");
+  if(action==="script-call")launchScriptCall(id);
+  if(action==="copy-phone"){const c=contact(id);if(c)copyTextValue(c.phone,"Phone number copied")}
+  if(action==="copy-script-section")copyScriptSection(el.dataset.section||"");
+  if(action==="toggle-script-question")el.classList.toggle("asked");
+  if(action==="show-script-objection")showScriptObjection(el.dataset.index||0);
+  if(action==="copy-objection"){
+    const c=contact(document.getElementById("scriptContactId")?.value),s=db.callScripts.find(x=>x.id===document.getElementById("scriptSelect")?.value),o=s?.objections?.[Number(el.dataset.index||0)];
+    if(c&&o)copyTextValue(fillScriptText(o.response,c),"Objection response copied")
+  }
+  if(action==="script-voicemail-text")launchVoicemailText(id);
+  if(action==="set-script-outcome")setScriptOutcome(el.dataset.outcome||"Connected");
+  if(action==="save-script-outcome")saveConversationOutcome();
+  if(action==="script-skip-next")skipConversationToNext();
+  if(action==="open-call-script")callScriptEditorModal(id||"");
+  if(action==="save-call-script")saveCallScript();
+  if(action==="delete-call-script")deleteCallScript(id);
+  if(action==="reset-call-scripts")resetCallScripts();
   if(action==="quick-launch")quickLaunch(channel,id);
   if(action==="save-pending-touch")savePendingTouchLog(id,channel);
   if(action==="dismiss-pending-touch"){clearPendingTouch();closeModal()}
@@ -2931,6 +3423,12 @@ document.addEventListener("click",event=>{
   }
 });
 document.addEventListener("change",event=>{
+  if(event.target.id==="scriptSelect"){changeConversationScript();return}
+  if(event.target.id==="scriptOutcome"){
+    document.getElementById("scriptAppointmentField")?.classList.toggle("show",event.target.value==="Appointment Set");
+    saveScriptDraftFromFields();return
+  }
+  if(["scriptFollowUp","scriptAppointmentDate"].includes(event.target.id)){saveScriptDraftFromFields();return}
   const inline=event.target.closest('[data-action="inline-contact-field"]');
   if(inline){const c=contact(inline.dataset.id);if(c){const oldValue=c[inline.dataset.field];c[inline.dataset.field]=inline.value;c.updatedAt=TODAY();if(inline.dataset.field==="stage")applyStageWorkflow(c,oldValue,inline.value);save();renderContact(c.id);toast("Contact updated",`${inline.dataset.field} → ${inline.value}`)}return}
   if(event.target.id==="contactType"){const type=event.target.value,stage=document.getElementById("contactStage");stage.innerHTML=(type==="Buyer"?buyerStages:sellerStages).map(x=>`<option>${x}</option>`).join("");const holder=document.getElementById("contactSpecificFields");if(holder)holder.innerHTML=contactSpecificForm({},type)}
@@ -2939,6 +3437,7 @@ document.addEventListener("change",event=>{
   if(event.target.id==="peopleHeat"){state.peopleHeat=event.target.value;renderPeople()}
 });
 document.addEventListener("input",event=>{
+  if(event.target.id==="scriptNotes"){saveScriptDraftFromFields();return}
   if(event.target.id==="peopleSearch"){state.peopleQuery=event.target.value;renderPeople()}
   if(event.target.id==="globalSearch"){
     const q=event.target.value.toLowerCase().trim(),box=document.getElementById("globalSearchResults");
@@ -2948,6 +3447,11 @@ document.addEventListener("input",event=>{
   }
 });
 document.addEventListener("keydown",event=>{
+  if((event.key==="s"||event.key==="S")&&!event.metaKey&&!event.ctrlKey&&!event.altKey&&!["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)){
+    const match=(location.hash||"").match(/^#\/contact\/([^/]+)/);
+    if(match){event.preventDefault();openConversationMode(match[1],"profile");return}
+    if(state.route==="call-queue"){const q=callQueue(),active=q[activeCallQueueIndex(q)];if(active){event.preventDefault();openConversationMode(active.c.id,"call-queue",active.task?.id||"");return}}
+  }
   if(event.key==="Enter"&&["cloudAuthEmail","cloudAuthPassword"].includes(event.target.id)){
     event.preventDefault();cloudSignIn();return
   }
