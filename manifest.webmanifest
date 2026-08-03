@@ -1,0 +1,10 @@
+{
+  "name": "Holton Homes Business Builder",
+  "short_name": "Holton Homes",
+  "description": "Seller-first, buyer-ready real estate business CRM with Pip.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffaf3",
+  "theme_color": "#a92d66"
+}
