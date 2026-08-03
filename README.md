@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v11
+# Holton Homes Relationship CRM v12
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v11 contact workspace
+## v12 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -38,3 +38,17 @@ This is still a static browser application:
 - Seller, buyer, and sphere-specific information.
 - Inline note/call/text/email/appointment composer.
 - Collapsible right sidebar and actionable empty states.
+
+
+## v12 — built for Holton Homes
+- Readable typography and larger controls across the entire CRM.
+- Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
+- Seller share, daily conversation, and market-area goals.
+- Quick Add Seller, Buyer, and Sphere buttons.
+- Weekly backup warning and top-bar backup button.
+- Second browser-database recovery mirror using IndexedDB.
+- Persistent storage request in Settings.
+- Safer deletion confirmation.
+
+## Data safety
+Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.

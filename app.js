@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v11";
-const LEGACY_KEYS = ["holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v12";
+const LEGACY_KEYS = ["holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
@@ -34,7 +34,60 @@ function contact(id){return db.contacts.find(c=>c.id===id)}
 function task(id){return db.tasks.find(t=>t.id===id)}
 function hasPhone(c){return Boolean((c?.phone||"").replace(/\D/g,""))}
 function hasEmail(c){return Boolean(c?.email && c.email.includes("@"))}
-function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(db));renderNav();renderPip()}
+function save(){
+  db.settings.lastSavedAt=NOW();
+  const payload=JSON.stringify(db);
+  localStorage.setItem(STORAGE_KEY,payload);
+  mirrorToIndexedDb(payload);
+  renderNav();
+  renderPip();
+}
+function openBackupDb(){
+  return new Promise((resolve,reject)=>{
+    if(!("indexedDB" in window)){reject(new Error("IndexedDB unavailable"));return}
+    const request=indexedDB.open("HoltonHomesCRMBackup",1);
+    request.onupgradeneeded=()=>{
+      const database=request.result;
+      if(!database.objectStoreNames.contains("snapshots"))database.createObjectStore("snapshots")
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error)
+  })
+}
+async function mirrorToIndexedDb(payload){
+  try{
+    const database=await openBackupDb();
+    const tx=database.transaction("snapshots","readwrite");
+    tx.objectStore("snapshots").put(payload,"latest")
+  }catch(error){console.warn("Browser backup mirror failed",error)}
+}
+async function restoreFromIndexedDbIfNeeded(){
+  if(localStorage.getItem(STORAGE_KEY))return;
+  try{
+    const database=await openBackupDb();
+    const tx=database.transaction("snapshots","readonly");
+    const request=tx.objectStore("snapshots").get("latest");
+    request.onsuccess=()=>{
+      if(!request.result)return;
+      try{
+        db=normalize(JSON.parse(request.result));
+        localStorage.setItem(STORAGE_KEY,JSON.stringify(db));
+        toast("Emergency recovery","Recovered your CRM from its second browser copy.");
+        route()
+      }catch(error){console.warn("Emergency recovery failed",error)}
+    }
+  }catch(error){console.warn("No browser recovery copy found",error)}
+}
+function backupAgeDays(){
+  return db.settings.lastManualBackupAt?daysSince(db.settings.lastManualBackupAt):999
+}
+function backupWarningHtml(){
+  if(backupAgeDays()<=7)return "";
+  return `<section class="backup-alert">
+    <div><strong>Protect your client database.</strong><span>${db.settings.lastManualBackupAt?`Last downloaded backup: ${dateLabel(db.settings.lastManualBackupAt)}.`:"You have not downloaded a backup yet."} Clearing cookies or site data can erase browser-only records.</span></div>
+    <button class="backup-button" data-action="export-json">Download backup</button>
+  </section>`
+}
 function normalize(raw){
   const contacts=(raw.contacts||raw.people||[]).map(p=>{
     const parts=String(p.name||"").trim().split(/\s+/);
@@ -60,7 +113,7 @@ function normalize(raw){
     unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",createdAt:a.createdAt||NOW()
   }));
   const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
-  return {contacts,communications,tasks,planRuns:raw.planRuns||[],settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,...(raw.settings||{})}};
+  return {contacts,communications,tasks,planRuns:raw.planRuns||[],settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -132,12 +185,47 @@ function bestNext(){
   return {title:"Create one new seller conversation",detail:"Listings are the leverage engine. Start with a homeowner in your sphere.",route:"#/people",action:"Open people"}
 }
 
+
+function goalMetrics(){
+  const closed=db.contacts.filter(c=>c.stage==="Closed");
+  const closedGci=closed.reduce((sum,c)=>sum+c.gci,0);
+  const target=Number(db.settings.annualGciTarget||100000);
+  const sellers=db.contacts.filter(c=>c.type==="Seller").length;
+  const leadTotal=db.contacts.filter(c=>["Seller","Buyer"].includes(c.type)).length;
+  const sellerShare=leadTotal?Math.round(sellers/leadTotal*100):0;
+  const communicationsToday=db.communications.filter(m=>String(m.date).slice(0,10)===TODAY()).length;
+  return {closedGci,target,gciPct:Math.min(100,target?Math.round(closedGci/target*100):0),sellerShare,communicationsToday}
+}
+function holtonPlanHtml(){
+  const g=goalMetrics(),target=Number(db.settings.dailyConversationTarget||5);
+  const sellerCalls=db.communications.filter(m=>String(m.date).slice(0,10)===TODAY()&&contact(m.contactId)?.type==="Seller").length;
+  const followUpsDone=db.tasks.filter(t=>t.completedAt===TODAY()&&["Follow Up","Call","Text","Email"].includes(t.type)).length;
+  return `<section class="holton-plan card card-pad">
+    <div class="card-head"><div><h2>Holton Homes daily scoreboard</h2><small>Seller-first, buyer-ready. Real conversations—not busywork.</small></div><span class="market-pill">${esc(db.settings.coreMarkets||"Your market")}</span></div>
+    <div class="goal-grid">
+      <div class="goal-box"><label>Conversations today</label><strong>${g.communicationsToday}/${target}</strong><div class="goal-track"><span style="width:${Math.min(100,g.communicationsToday/Math.max(1,target)*100)}%"></span></div></div>
+      <div class="goal-box"><label>Seller conversations</label><strong>${sellerCalls}</strong><small>Listings create leverage</small></div>
+      <div class="goal-box"><label>Follow-ups completed</label><strong>${followUpsDone}</strong><small>Protect the pipeline</small></div>
+      <div class="goal-box"><label>Seller share</label><strong>${g.sellerShare}%</strong><small>Goal ${Number(db.settings.sellerShareGoal||60)}%</small></div>
+      <div class="goal-box"><label>Closed GCI</label><strong>${money(g.closedGci)}</strong><div class="goal-track"><span style="width:${g.gciPct}%"></span></div><small>${g.gciPct}% of ${money(g.target)}</small></div>
+    </div>
+    <div class="personal-actions">
+      <button class="quick seller-action" data-action="open-contact-type" data-id="Seller">＋ Add seller</button>
+      <button class="quick buyer-action" data-action="open-contact-type" data-id="Buyer">＋ Add buyer</button>
+      <button class="quick sphere-action" data-action="open-contact-type" data-id="Sphere">＋ Add sphere</button>
+      <a class="quick" href="#/call-queue">Start call queue</a>
+    </div>
+  </section>`
+}
+
 function renderToday(){
   const open=db.contacts.filter(isOpen),sellers=open.filter(c=>c.type==="Seller"),buyers=open.filter(c=>c.type==="Buyer"),due=dueContacts(),unread=db.communications.filter(x=>x.unread),openTasks=db.tasks.filter(t=>t.status!=="Done"),gci=open.reduce((sum,c)=>sum+c.gci,0),next=bestNext();
   const queue=[...due].sort((a,b)=>(b.type==="Seller")-(a.type==="Seller")||scoreContact(b).score-scoreContact(a).score).slice(0,7);
   document.getElementById("view").innerHTML=
+    backupWarningHtml() +
     pageHead("Daily operating system",`Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${db.settings.agentName||"Jacob"}`,"Work the right relationships before marketing or admin.",`<button class="ghost-btn" data-action="seed-demo">Load sample data</button><button class="primary-btn" data-action="open-contact">＋ Add person</button>`) +
     `<section class="focus-card"><div><label>ONE THING NOW</label><h2>${esc(next.title)}</h2><p>${esc(next.detail)}</p></div><a class="primary-btn" href="${next.route}">${esc(next.action)} →</a></section>
+    ${holtonPlanHtml()}
     <section class="metric-grid">
       <div class="metric"><label>Follow-ups due</label><strong>${due.length}</strong><small>Today and overdue</small></div>
       <div class="metric"><label>Unread messages</label><strong>${unread.length}</strong><small>Inbox conversations</small></div>
@@ -324,6 +412,7 @@ function renderContact(id){
     summary=contactSummary(c,s);
   const stages=c.type==="Buyer"?buyerStages:sellerStages;
   document.getElementById("view").innerHTML=
+    backupWarningHtml() +
     `<section class="contact-hero">
       <div class="contact-identity">${avatar(c)}<div>
         <div class="eyebrow">${esc(c.type)} CONTACT</div>
@@ -484,7 +573,15 @@ function renderSettings(){
       <section class="setting-card"><h3>Agent profile</h3><p>Used in the daily dashboard and future message templates.</p><div class="field"><label>Agent name</label><input id="settingAgentName" value="${esc(db.settings.agentName||"")}"></div><div class="field" style="margin-top:7px"><label>Email</label><input id="settingAgentEmail" value="${esc(db.settings.agentEmail||"")}"></div><div class="field" style="margin-top:7px"><label>Phone</label><input id="settingAgentPhone" value="${esc(db.settings.agentPhone||"")}"></div><button class="primary-btn compact" style="margin-top:9px" data-action="save-settings">Save</button></section>
       <section class="setting-card"><h3>Export backup</h3><p>Download all contacts, communications, tasks, behavior, and plans.</p><button class="primary-btn compact" data-action="export-json">Export JSON</button><button class="ghost-btn compact" data-action="export-csv">Export people CSV</button></section>
       <section class="setting-card"><h3>Import backup</h3><p>Restore a JSON backup created by this CRM.</p><input id="importFile" type="file" accept=".json"><button class="ghost-btn compact" style="margin-top:9px" data-action="import-json">Import</button></section>
-      <section class="setting-card"><h3>Browser storage</h3><p>Current data lives in this browser. GitHub hosts only the app code—not your contacts.</p><div class="warning">Use Export JSON regularly. Cross-device sync requires a secure backend and login.</div></section>
+      <section class="setting-card"><h3>Holton Homes goals</h3><p>These targets shape the Today dashboard and keep the CRM focused on production.</p>
+        <div class="field"><label>Annual GCI target</label><input id="settingGciTarget" type="number" value="${esc(db.settings.annualGciTarget||100000)}"></div>
+        <div class="field" style="margin-top:8px"><label>Seller share goal (%)</label><input id="settingSellerShare" type="number" min="0" max="100" value="${esc(db.settings.sellerShareGoal||60)}"></div>
+        <div class="field" style="margin-top:8px"><label>Daily conversation target</label><input id="settingConversationTarget" type="number" min="1" value="${esc(db.settings.dailyConversationTarget||5)}"></div>
+        <div class="field" style="margin-top:8px"><label>Core markets</label><textarea id="settingCoreMarkets">${esc(db.settings.coreMarkets||"")}</textarea></div>
+        <button class="primary-btn compact" style="margin-top:9px" data-action="save-goals">Save goals</button>
+      </section>
+      <section class="setting-card"><h3>Data protection</h3><p>Your CRM is stored in this browser and mirrored into a second browser database.</p><div class="warning"><strong>Important:</strong> clearing all site data can still erase both copies. Download JSON backups weekly.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
+      <section class="setting-card"><h3>Full-potential upgrade</h3><p>A secure login and cloud database are the next real upgrade—not another cosmetic dashboard.</p><div class="cloud-roadmap"><span>✓ Seller and buyer pipelines</span><span>✓ Communication workflow</span><span>✓ Browser recovery mirror</span><span>○ Secure login</span><span>○ Cloud database</span><span>○ Phone and email sync</span></div></section>
       <section class="setting-card"><h3>Reset</h3><p>Delete all CRM data stored in this browser.</p><button class="danger-btn compact" data-action="clear-data">Clear everything</button></section>
     </div>`;
 }
@@ -679,6 +776,14 @@ document.addEventListener("click",event=>{
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
   if(action==="open-contact")openContactModal(id||"");
+  if(action==="open-contact-type"){
+    openContactModal("");
+    const type=document.getElementById("contactType");
+    if(type){
+      type.value=id;
+      type.dispatchEvent(new Event("change",{bubbles:true}))
+    }
+  }
   if(action==="save-contact")saveContact();
   if(action==="composer-channel"){document.getElementById("profileComposerChannel").value=channel;document.querySelectorAll(".composer-tab").forEach(b=>b.classList.toggle("active",b.dataset.channel===channel));const launch=document.querySelector('[data-action="launch-inline-channel"]');if(launch)launch.textContent=["Call","Text","Email"].includes(channel)?`Launch ${channel}`:"No launch needed"}
   if(action==="launch-inline-channel"){const ch=document.getElementById("profileComposerChannel").value;if(["Call","Text","Email"].includes(ch))launchChannel(ch,id)}
@@ -721,10 +826,32 @@ document.addEventListener("click",event=>{
   if(action==="ask-pip")askPip();
   if(action==="seed-demo")seedDemo();
   if(action==="save-settings"){db.settings.agentName=document.getElementById("settingAgentName").value.trim()||"Jacob";db.settings.agentEmail=document.getElementById("settingAgentEmail").value.trim();db.settings.agentPhone=document.getElementById("settingAgentPhone").value.trim();save();toast("Settings saved","Agent profile updated.")}
-  if(action==="export-json")download(`holton-homes-backup-${TODAY()}.json`,"application/json",JSON.stringify(db,null,2));
+  if(action==="save-goals"){
+    db.settings.annualGciTarget=Number(document.getElementById("settingGciTarget").value||100000);
+    db.settings.sellerShareGoal=Number(document.getElementById("settingSellerShare").value||60);
+    db.settings.dailyConversationTarget=Number(document.getElementById("settingConversationTarget").value||5);
+    db.settings.coreMarkets=document.getElementById("settingCoreMarkets").value.trim();
+    save();toast("Goals saved","Your dashboard now reflects how Holton Homes should operate.")
+  }
+  if(action==="export-json"){db.settings.lastManualBackupAt=TODAY();save();download(`holton-homes-backup-${TODAY()}.json`,"application/json",JSON.stringify(db,null,2));toast("Backup downloaded","Keep this file in Google Drive, iCloud, or Dropbox.")}
   if(action==="export-csv")exportCsv();
   if(action==="import-json"){const f=document.getElementById("importFile").files[0];if(!f){alert("Choose a JSON backup.");return}const reader=new FileReader();reader.onload=()=>{try{db=normalize(JSON.parse(reader.result));save();toast("Backup imported","CRM data restored.");route()}catch{alert("That backup could not be read.")}};reader.readAsText(f)}
-  if(action==="clear-data"&&confirm("Delete all CRM data stored in this browser?")){db=normalize({});save();route();toast("CRM cleared","All browser data was removed.")}
+  if(action==="request-persistent-storage"){
+    if(navigator.storage?.persist){
+      navigator.storage.persist().then(granted=>{
+        const status=document.getElementById("storageProtectionStatus");
+        if(status)status.textContent=granted?"Protection enabled. The browser is less likely to remove CRM data automatically. Manual deletion can still erase it.":"Protection was not granted. Weekly downloaded backups remain essential.";
+        toast(granted?"Browser protection enabled":"Protection unavailable",granted?"Automatic browser cleanup is less likely to remove this CRM.":"Keep downloading backups.")
+      })
+    }else toast("Not supported","This browser does not support persistent-storage requests.")
+  }
+  if(action==="clear-data"&&confirm("Delete ALL clients, tasks, activity, and browser recovery copies from this device? Download a backup first. This cannot be undone.")){
+    db=normalize({});
+    localStorage.removeItem(STORAGE_KEY);
+    try{indexedDB.deleteDatabase("HoltonHomesCRMBackup")}catch(error){}
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(db));
+    route();toast("CRM cleared","All browser data and the recovery copy were removed.")
+  }
 });
 document.addEventListener("change",event=>{
   const inline=event.target.closest('[data-action="inline-contact-field"]');
@@ -750,5 +877,5 @@ document.addEventListener("drop",event=>{const col=event.target.closest(".kanban
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);
-renderPip();route();
+renderPip();route();restoreFromIndexedDbIfNeeded();
 })();
