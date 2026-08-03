@@ -672,3 +672,39 @@ table{min-width:1160px}th{padding:12px;font-size:10px}td{padding:12px;font-size:
   .script-block>p{font-size:12px}
   .conversation-person h2{font-size:19px}
 }
+
+
+/* v23 — Contact and mailing addresses */
+.contact-address-section{display:flex;justify-content:space-between;gap:10px;align-items:end}
+.contact-address-section small{font-size:8px;color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0}
+.checkbox-row{display:flex!important;align-items:center;gap:7px;min-height:38px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#faf7f8;font-size:9px!important;text-transform:none!important;letter-spacing:0!important}
+.checkbox-row input{width:auto}
+.address-copy-field .ghost-btn{width:100%;min-height:38px}
+.contact-hero-address{display:flex;gap:7px;align-items:center;margin-top:6px}
+.contact-hero-address>a{font-size:10px;color:#6c4e5b;text-decoration:none;font-weight:750}
+.contact-hero-address>button{border:0;background:#f6e9ef;color:var(--pink-dark);border-radius:6px;padding:4px 7px;font-size:7px;font-weight:900}
+.missing-address-hero{font-size:9px!important;padding:6px 9px!important}
+.contact-address-panel{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center}
+.contact-address-icon{width:36px;height:36px;border-radius:11px;background:#f8e4ec;color:#a1295a;display:grid;place-items:center;font-size:16px}
+.contact-address-copy{min-width:0}
+.contact-address-copy span{display:block;font-size:7px;color:var(--pink-dark);font-weight:900;text-transform:uppercase;letter-spacing:.07em}
+.contact-address-copy strong{display:block;font-size:11px;line-height:1.4;margin-top:3px}
+.contact-address-copy small{display:block;font-size:8px;color:var(--muted);margin-top:2px}
+.contact-address-actions{display:flex;gap:4px}
+.contact-address-actions>a{text-decoration:none;display:grid;place-items:center}
+.contact-address-empty{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.contact-address-empty strong{display:block;font-size:11px}
+.contact-address-empty span{display:block;font-size:8px;color:var(--muted);line-height:1.4;margin-top:2px}
+.people-address-cell{min-width:180px;max-width:250px}
+.people-address-cell>a{display:block;font-size:9px;line-height:1.35;color:#4e3c45;text-decoration:none;font-weight:750}
+.people-address-cell small{display:block;font-size:7px;color:var(--muted);margin-top:3px}
+.missing-address-button{border:1px dashed #d9bdc8;background:#fff7fa;border-radius:7px;padding:6px 8px;color:#9e2c59;font-size:8px;font-weight:900}
+.mobile-contact-address{color:#735966!important;margin-top:4px!important}
+@media(max-width:760px){
+  .contact-address-section{display:block}
+  .contact-address-section small{display:block;margin-top:4px}
+  .contact-address-panel{grid-template-columns:34px minmax(0,1fr)}
+  .contact-address-actions{grid-column:2;display:grid;grid-template-columns:1fr 1fr 1fr}
+  .contact-address-empty{display:grid}
+  .contact-hero-address{align-items:flex-start;flex-wrap:wrap}
+}

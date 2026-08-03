@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v22
+# Holton Homes Relationship CRM v23
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v22 contact workspace
+## v23 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -40,7 +40,7 @@ This is still a static browser application:
 - Collapsible right sidebar and actionable empty states.
 
 
-## v22 — built for Holton Homes
+## v23 — built for Holton Homes
 - Readable typography and larger controls across the entire CRM.
 - Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
 - Seller share, daily conversation, and market-area goals.
@@ -54,7 +54,7 @@ This is still a static browser application:
 Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.
 
 
-## v22
+## v23
 - Fixed the global top-bar Add Person button with a dedicated direct event listener.
 - Added Realtor and Lender relationship types.
 - Added company, role, license/NMLS, service area, specialties, and referral-note fields.
@@ -63,14 +63,14 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 - Added Add Realtor and Add Lender shortcuts to the Holton Homes daily dashboard.
 
 
-## v22
+## v23
 - Every visible contact name is now the direct profile link.
 - Initials/avatar icons are decorative and no longer act as navigation controls.
 - Name links are consistent across People, Today, Inbox, Pipeline, Tasks, Activity, and search.
 - Added stronger hover and keyboard-focus styling so it is obvious that the real name is clickable.
 
 
-## v22 — Holton Automation Studio
+## v23 — Holton Automation Studio
 
 ### Automation engine
 - Deterministic rule engine with active/disabled controls.
@@ -99,7 +99,7 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 Scheduled rules and plan steps process when the CRM is open, reopened, or its data changes. True server-side execution while every device is offline requires the future secure cloud backend.
 
 
-## v22 — Household and spouse relationships
+## v23 — Household and spouse relationships
 - Dedicated Household & Decision Makers section on every contact profile.
 - Add spouse, partner, co-owner, parent, adult child, sibling, or another household member.
 - Store phone, email, anniversary, birthday, decision-maker status, and household notes.
@@ -109,7 +109,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 - Contact summaries now mention spouses and decision makers.
 
 
-## v22 — Realtor Daily OS and structured property records
+## v23 — Realtor Daily OS and structured property records
 
 ### Daily lead command center
 - New and untouched leads
@@ -139,7 +139,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 The spouse/household features and Automation Studio remain included.
 
 
-## v22 — Holton Homes, not a CRM demo
+## v23 — Holton Homes, not a CRM demo
 
 - Removed "What a Realtor actually needs today" and similar explanatory copy.
 - Renamed People to Leads & Contacts.
@@ -153,7 +153,7 @@ The spouse/household features and Automation Studio remain included.
 - Kept households, properties, automations, pipelines, backups, and all v17 data.
 
 
-## v22 — Mobile working build
+## v23 — Mobile working build
 
 ### Phone usability
 - Desktop sidebar becomes a fixed, horizontally scrollable bottom navigation.
@@ -182,7 +182,7 @@ The spouse/household features and Automation Studio remain included.
 This remains a browser-based bridge. The native phone/SMS apps perform communication; true two-way in-app communication requires the cloud and phone-provider phase.
 
 
-## v22 — Cloud sync foundation
+## v23 — Cloud sync foundation
 
 - Supabase email/password authentication.
 - One private cloud CRM state per authenticated user.
@@ -200,7 +200,7 @@ This remains a browser-based bridge. The native phone/SMS apps perform communica
 Run `SUPABASE_SETUP.sql` before trying to sign in.
 
 
-## v22 — Daily Operating CRM
+## v23 — Daily Operating CRM
 
 ### Work Today
 - One priority queue combines replies, untouched leads, due tasks, follow-ups, appointments, transaction deadlines, active-listing updates, stale hot leads, and missing next steps.
@@ -230,7 +230,7 @@ Run `SUPABASE_SETUP.sql` before trying to sign in.
 No paid phone provider is required for these features. Native phone, SMS, and email apps still perform the communication.
 
 
-## v22 — Universal Conversation Mode
+## v23 — Universal Conversation Mode
 
 Conversation Mode has the same capabilities on desktop, iPad, and phone. Only the responsive layout changes.
 
@@ -278,4 +278,38 @@ Conversation Mode has the same capabilities on desktop, iPad, and phone. Only th
 - Add custom scripts.
 - Restore the starter library at any time.
 
-No new Supabase SQL is required for v22.
+No new Supabase SQL is required for v23.
+
+
+## v23 — Contact and Mailing Addresses
+
+The CRM now treats a person's contact address and a real-estate property address as separate records.
+
+### Contact address
+- Home, mailing, work, or other address type.
+- Street, unit, city, state, ZIP, and county.
+- Available when creating or editing every contact type.
+- Optional sync to the contact's primary property address.
+- Existing sellers and past clients with a structured primary property are migrated automatically.
+
+### Address visibility
+- Contact profile header.
+- Dedicated contact-address panel.
+- Desktop contact table.
+- Mobile contact cards.
+- Global search and contact search.
+- Conversation Mode preparation.
+- CSV exports.
+- Data-health reporting.
+
+### Address tools
+- Open in Google Maps.
+- Copy the complete address.
+- Use a primary property to fill the contact address.
+- Missing Contact Address Smart List.
+- Fix Records address fields.
+- Address completeness added to lead intake.
+
+Property addresses remain in Properties & Opportunities and are not overwritten by a mailing address.
+
+No new Supabase SQL is required for v23.

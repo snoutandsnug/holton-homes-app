@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v22";
-const LEGACY_KEYS = ["holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v23";
+const LEGACY_KEYS = ["holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -420,6 +420,79 @@ function propertyAddress(p){
   const locality=[p.city,p.state,p.zip].filter(Boolean).join(" ");
   return [line,locality].filter(Boolean).join(", ")
 }
+
+function blankContactAddress(){
+  return {type:"Home",street:"",unit:"",city:"",state:"OH",zip:"",county:"",sameAsPrimaryProperty:false}
+}
+function addressFromProperty(p,existing={}){
+  if(!p)return {...blankContactAddress(),...existing};
+  return {
+    type:existing.type||"Home",street:p.street||"",unit:p.unit||"",city:p.city||"",
+    state:p.state||"OH",zip:p.zip||"",county:p.county||"",
+    sameAsPrimaryProperty:true
+  }
+}
+function contactAddressObject(c){
+  if(!c)return blankContactAddress();
+  const stored={...blankContactAddress(),...(c.address||{})};
+  if(stored.sameAsPrimaryProperty){
+    const p=primaryProperty(c);
+    if(p)return addressFromProperty(p,stored)
+  }
+  return stored
+}
+function formattedAddress(address){
+  if(!address)return "";
+  const line=[address.street,address.unit].filter(Boolean).join(" ");
+  const locality=[address.city,address.state,address.zip].filter(Boolean).join(" ");
+  return [line,locality].filter(Boolean).join(", ")
+}
+function contactAddressDisplay(c){return formattedAddress(contactAddressObject(c))}
+function contactAddressComplete(c){
+  const a=contactAddressObject(c);
+  return Boolean(a.street&&a.city&&a.state&&a.zip)
+}
+function syncContactAddressFromPrimaryProperty(c){
+  if(!c?.address?.sameAsPrimaryProperty)return;
+  const p=primaryProperty(c);
+  if(p)c.address=addressFromProperty(p,c.address)
+}
+function contactAddressPanelHtml(c){
+  const a=contactAddressObject(c),display=formattedAddress(a);
+  if(!display){
+    return `<div class="contact-address-empty"><div><strong>No contact address saved.</strong><span>Add where this person lives or receives mail. This stays separate from the property opportunity.</span></div><button class="primary-btn compact" data-action="open-contact" data-id="${c.id}">＋ Add address</button></div>`
+  }
+  return `<div class="contact-address-panel">
+    <div class="contact-address-icon">⌖</div>
+    <div class="contact-address-copy"><span>${esc(a.type||"Home")} address${a.sameAsPrimaryProperty?" • synced to primary property":""}</span><strong>${esc(display)}</strong>${a.county?`<small>${esc(a.county)} County</small>`:""}</div>
+    <div class="contact-address-actions">
+      <a class="quick" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(display)}">Map</a>
+      <button class="quick" data-action="copy-contact-address" data-id="${c.id}">Copy</button>
+      <button class="quick" data-action="open-contact" data-id="${c.id}">Edit</button>
+    </div>
+  </div>`
+}
+function fillContactAddressFromPrimaryProperty(){
+  const contactId=document.getElementById("contactId")?.value||"";
+  const c=contact(contactId);
+  const p=c?primaryProperty(c):null;
+  const values=p?{
+    street:p.street||"",unit:p.unit||"",city:p.city||"",state:p.state||"OH",zip:p.zip||"",county:p.county||""
+  }:{
+    street:document.getElementById("sellerPropertyStreet")?.value||"",
+    unit:document.getElementById("sellerPropertyUnit")?.value||"",
+    city:document.getElementById("sellerPropertyCity")?.value||"",
+    state:document.getElementById("sellerPropertyState")?.value||"OH",
+    zip:document.getElementById("sellerPropertyZip")?.value||"",
+    county:document.getElementById("sellerPropertyCounty")?.value||""
+  };
+  const mapping={contactAddressStreet:"street",contactAddressUnit:"unit",contactAddressCity:"city",contactAddressState:"state",contactAddressZip:"zip",contactAddressCounty:"county"};
+  Object.entries(mapping).forEach(([id,key])=>{const input=document.getElementById(id);if(input)input.value=values[key]||""});
+  const checkbox=document.getElementById("contactAddressSameAsProperty");if(checkbox)checkbox.checked=true;
+  if(values.street||values.city)toast("Address copied","The contact address will stay synced to the primary property.");
+  else toast("No property address yet","Enter the seller property below, then tap this again—or save with sync turned on.")
+}
+
 function primaryProperty(c){
   const items=propertiesForContact(c.id);
   return items.find(p=>p.primary)||items[0]||null
@@ -559,7 +632,7 @@ function saveProperty(){
   if(p.appointmentDate&&!db.tasks.some(t=>t.contactId===contactId&&t.type==="Appointment"&&t.due===p.appointmentDate&&t.status!=="Done")){
     db.tasks.unshift({id:uid(),contactId,title:`${p.role==="Seller Property"?"Listing":"Property"} appointment — ${propertyAddress(p)||fullName(c)}`,type:"Appointment",due:p.appointmentDate,status:"Open",priority:"High",planRunId:"",completedAt:"",createdAt:TODAY()})
   }
-  c.updatedAt=TODAY();save();closeModal();toast("Property saved",propertyAddress(p)||p.role);renderContact(contactId)
+  syncContactAddressFromPrimaryProperty(c);c.updatedAt=TODAY();save();closeModal();toast("Property saved",propertyAddress(p)||p.role);renderContact(contactId)
 }
 function deleteProperty(contactId,propertyId){
   const c=contact(contactId),p=(db.properties||[]).find(x=>x.id===propertyId);if(!c||!p)return;
@@ -567,16 +640,17 @@ function deleteProperty(contactId,propertyId){
   db.properties=db.properties.filter(x=>x.id!==propertyId);
   const remaining=propertiesForContact(contactId);
   if(p.primary&&remaining.length)remaining[0].primary=true;
-  c.property=propertyDisplay(c);c.updatedAt=TODAY();save();toast("Property removed",propertyAddress(p));renderContact(contactId)
+  c.property=propertyDisplay(c);syncContactAddressFromPrimaryProperty(c);c.updatedAt=TODAY();save();toast("Property removed",propertyAddress(p));renderContact(contactId)
 }
 function makePrimaryProperty(contactId,propertyId){
   const c=contact(contactId),p=(db.properties||[]).find(x=>x.id===propertyId);if(!c||!p)return;
   db.properties.filter(x=>x.contactId===contactId).forEach(x=>x.primary=x.id===propertyId);
-  c.property=propertyAddress(p);c.updatedAt=TODAY();save();toast("Primary property updated",propertyAddress(p));renderContact(contactId)
+  c.property=propertyAddress(p);syncContactAddressFromPrimaryProperty(c);c.updatedAt=TODAY();save();toast("Primary property updated",propertyAddress(p));renderContact(contactId)
 }
 function leadIntakeItems(c){
   const p=primaryProperty(c),items=[
     {label:"Valid phone or email",done:hasPhone(c)||hasEmail(c)},
+    {label:"Contact / mailing address",done:contactAddressComplete(c)},
     {label:"Lead source",done:Boolean(c.source&&c.source!=="Other")},
     {label:"Timeframe",done:Boolean(c.timeframe&&c.timeframe!=="Unknown")},
     {label:"Next follow-up",done:Boolean(c.followUp)},
@@ -635,7 +709,7 @@ function syncPrimaryPropertyFromSellerForm(c){
   };
   const i=db.properties.findIndex(x=>x.id===id);if(i>=0)db.properties[i]=p;else db.properties.push(p);
   db.properties.filter(x=>x.contactId===c.id&&x.id!==id).forEach(x=>x.primary=false);
-  c.property=propertyAddress(p)
+  c.property=propertyAddress(p);syncContactAddressFromPrimaryProperty(c)
 }
 function untouchedLeads(){
   return db.contacts.filter(c=>isOpen(c)&&["Seller","Buyer"].includes(c.type)&&!c.lastCommunication&&daysSince(c.createdAt)<=14)
@@ -1164,9 +1238,21 @@ function normalize(raw){
   const contacts=(raw.contacts||raw.people||[]).map(p=>{
     const parts=String(p.name||"").trim().split(/\s+/);
     const firstName=p.firstName||parts.shift()||"",lastName=p.lastName||parts.join(" ");
+    const rawAddress=(p.address&&typeof p.address==="object")?p.address:(p.mailingAddress&&typeof p.mailingAddress==="object")?p.mailingAddress:{};
     return {
       id:p.id||uid(),firstName,lastName,name:[firstName,lastName].filter(Boolean).join(" "),
-      phone:p.phone||"",email:p.email||"",type:p.type||"Seller",stage:p.stage||"New",heat:p.heat||"Warm",
+      phone:p.phone||"",email:p.email||"",
+      address:{
+        type:rawAddress.type||p.addressType||"Home",
+        street:rawAddress.street||p.addressStreet||"",
+        unit:rawAddress.unit||p.addressUnit||"",
+        city:rawAddress.city||p.addressCity||"",
+        state:rawAddress.state||p.addressState||"OH",
+        zip:rawAddress.zip||p.addressZip||"",
+        county:rawAddress.county||p.addressCounty||"",
+        sameAsPrimaryProperty:Boolean(rawAddress.sameAsPrimaryProperty||p.addressSameAsPrimaryProperty)
+      },
+      type:p.type||"Seller",stage:p.stage||"New",heat:p.heat||"Warm",
       timeframe:p.timeframe||"Unknown",followUp:p.followUp||"",lastCommunication:p.lastCommunication||p.lastContact||"",
       source:p.source||"Sphere",gci:Number(p.gci||0),property:p.property||"",tags:Array.isArray(p.tags)?p.tags:[],
       notes:p.notes||"",createdAt:p.createdAt||TODAY(),updatedAt:p.updatedAt||TODAY(),
@@ -1219,6 +1305,18 @@ function normalize(raw){
       createdAt:c.createdAt||TODAY(),updatedAt:TODAY()
     })
   });
+
+  contacts.forEach(c=>{
+    const hasStored=Boolean(c.address?.street||c.address?.city||c.address?.zip);
+    if(hasStored)return;
+    if(!["Seller","Past Client"].includes(c.type))return;
+    const p=properties.find(property=>property.contactId===c.id&&property.primary)||properties.find(property=>property.contactId===c.id);
+    if(p?.street){
+      c.address=addressFromProperty(p,c.address||{});
+      c.address.sameAsPrimaryProperty=true
+    }
+  });
+
   const communications=(raw.communications||raw.activities||[]).map(a=>({
     id:a.id||uid(),contactId:a.contactId||a.personId||"",channel:a.channel||a.type||"Note",
     direction:a.direction||"outbound",outcome:a.outcome||"",body:a.body||a.summary||"",date:a.date?.includes("T")?a.date:`${a.date||TODAY()}T12:00:00`,
@@ -1397,6 +1495,7 @@ function behaviorAlertsHtml(limit=10){
 function cleanupIssues(c){
   const issues=[];
   if(!hasPhone(c)&&!hasEmail(c))issues.push({id:"contact",label:"Phone or email missing"});
+  if(!contactAddressComplete(c))issues.push({id:"contactAddress",label:"Contact address incomplete"});
   if(!c.followUp&&isOpen(c))issues.push({id:"followup",label:"Next follow-up missing"});
   if(c.timeframe==="Unknown"&&["Seller","Buyer"].includes(c.type))issues.push({id:"timeframe",label:"Timeframe unknown"});
   if(!c.source||c.source==="Other")issues.push({id:"source",label:"Lead source missing"});
@@ -1420,10 +1519,11 @@ function cleanupBadges(c){
 }
 function cleanupModal(id){
   const c=contact(id),issues=cleanupIssues(c);if(!c)return;
-  const p=primaryProperty(c)||{};
+  const p=primaryProperty(c)||{},a=contactAddressObject(c);
   modal(`Fix record — ${fullName(c)}`,`<div class="cleanup-intro"><strong>${issues.length} item${issues.length===1?"":"s"} need attention</strong><span>Save the missing information and this contact will automatically leave Fix Records.</span></div>
     <div class="form-grid cleanup-form">
       ${issues.some(x=>x.id==="contact")?`<div class="field"><label>Phone</label><input id="cleanupPhone" type="tel" value="${esc(c.phone||"")}"></div><div class="field"><label>Email</label><input id="cleanupEmail" type="email" value="${esc(c.email||"")}"></div>`:""}
+      ${issues.some(x=>x.id==="contactAddress")?`<div class="field full section-label">Contact / mailing address</div><div class="field full"><label>Street address</label><input id="cleanupContactStreet" value="${esc(a.street||"")}"></div><div class="field"><label>Unit</label><input id="cleanupContactUnit" value="${esc(a.unit||"")}"></div><div class="field"><label>City</label><input id="cleanupContactCity" value="${esc(a.city||"")}"></div><div class="field"><label>State</label><input id="cleanupContactState" value="${esc(a.state||"OH")}"></div><div class="field"><label>ZIP</label><input id="cleanupContactZip" value="${esc(a.zip||"")}"></div><div class="field"><label>County</label><input id="cleanupContactCounty" value="${esc(a.county||"")}"></div>`:""}
       ${issues.some(x=>x.id==="followup")?`<div class="field"><label>Next follow-up</label><input id="cleanupFollowUp" type="date" value="${addDays(TODAY(),3)}"></div>`:""}
       ${issues.some(x=>x.id==="timeframe")?`<div class="field"><label>Timeframe</label><select id="cleanupTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${c.timeframe===x?"selected":""}>${x}</option>`).join("")}</select></div>`:""}
       ${issues.some(x=>x.id==="source")?`<div class="field"><label>Lead source</label><select id="cleanupSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>`:""}
@@ -1440,6 +1540,12 @@ function saveCleanup(id){
   if(document.getElementById("cleanupFollowUp"))c.followUp=document.getElementById("cleanupFollowUp").value;
   if(document.getElementById("cleanupTimeframe"))c.timeframe=document.getElementById("cleanupTimeframe").value;
   if(document.getElementById("cleanupSource"))c.source=document.getElementById("cleanupSource").value;
+  if(document.getElementById("cleanupContactStreet")){
+    c.address={...contactAddressObject(c),street:document.getElementById("cleanupContactStreet").value.trim(),
+      unit:document.getElementById("cleanupContactUnit").value.trim(),city:document.getElementById("cleanupContactCity").value.trim(),
+      state:document.getElementById("cleanupContactState").value.trim()||"OH",zip:document.getElementById("cleanupContactZip").value.trim(),
+      county:document.getElementById("cleanupContactCounty").value.trim(),sameAsPrimaryProperty:false}
+  }
   if(document.getElementById("cleanupAreas")){
     c.buyerDetails={...c.buyerDetails,areas:document.getElementById("cleanupAreas").value.trim()};
     c.property=c.buyerDetails.areas
@@ -1502,6 +1608,7 @@ function smartLists(){
     {id:"past-clients",collection:"Relationships",name:"Past Clients — 90 Days",description:"Past clients without a personal touch in ninety days.",items:db.contacts.filter(c=>c.type==="Past Client"&&daysSince(c.lastCommunication)>=90)},
     {id:"partners",collection:"Relationships",name:"Partners Due",description:"Realtors and lenders without a personal touch in thirty days.",items:db.contacts.filter(c=>["Realtor","Lender"].includes(c.type)&&daysSince(c.lastCommunication)>=30)},
     {id:"missing-next",collection:"Protect the Database",name:"Missing Next Step",description:"Open sellers and buyers without a follow-up date.",items:open.filter(c=>["Seller","Buyer"].includes(c.type)&&!c.followUp)},
+    {id:"missing-address",collection:"Protect the Database",name:"Missing Contact Address",description:"People without a complete street, city, state, and ZIP.",items:db.contacts.filter(c=>!contactAddressComplete(c))},
     {id:"cleanup",collection:"Protect the Database",name:"Fix Records",description:"Records missing information required for useful follow-up.",items:open.filter(c=>!cleanupIsSnoozed(c)&&cleanupIssues(c).length)},
     {id:"duplicates",collection:"Protect the Database",name:"Possible Duplicates",description:"Contacts sharing a phone number or email address.",items:db.contacts.filter(c=>duplicateIds.has(c.id))},
     {id:"stale",collection:"Protect the Database",name:"No Contact 14+ Days",description:"Open relationships without personal communication in fourteen days.",items:open.filter(c=>daysSince(c.lastCommunication)>=14)}
@@ -1525,6 +1632,7 @@ function smartListReason(c,listId=state.smartList){
   if(listId==="past-clients")return `${daysSince(c.lastCommunication)} days since the last personal touch`;
   if(listId==="partners")return `${c.type} partner • ${daysSince(c.lastCommunication)} days since last touch`;
   if(listId==="missing-next")return `Open ${c.type.toLowerCase()} with no next follow-up`;
+  if(listId==="missing-address")return "Contact / mailing address is incomplete";
   if(listId==="cleanup")return cleanupIssues(c).map(x=>x.label).slice(0,2).join(" • ");
   if(listId==="duplicates")return `Matches ${duplicateMatches(c).map(fullName).join(", ")}`;
   if(listId==="stale")return `${daysSince(c.lastCommunication)} days since last personal communication`;
@@ -1543,7 +1651,7 @@ function filteredPeople(){
   const list=smartLists().find(x=>x.id===state.smartList)?.items||db.contacts;
   const q=state.peopleQuery.toLowerCase();
   return list.filter(c=>{
-    const blob=[fullName(c),c.phone,c.email,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();
+    const blob=[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();
     return (!q||blob.includes(q))&&(!state.peopleType||c.type===state.peopleType)&&(!state.peopleStage||c.stage===state.peopleStage)&&(!state.peopleHeat||c.heat===state.peopleHeat)
   }).sort((a,b)=>(a.followUp||"9999").localeCompare(b.followUp||"9999"))
 }
@@ -1558,14 +1666,14 @@ function renderPeople(){
       <section>
         <div class="active-list-head"><div><span>${esc(active.collection)}</span><h2>${esc(active.name)}</h2><p>${esc(active.description)}</p></div><b>${people.length}</b></div>
         <div class="toolbar">
-          <input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search name, phone, email, property, source, or tag">
+          <input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search name, phone, email, contact address, property, source, or tag">
           <select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select>
           <select id="peopleStage"><option value="">All stages</option>${[...new Set([...sellerStages,...buyerStages])].map(x=>`<option ${state.peopleStage===x?"selected":""}>${x}</option>`).join("")}</select>
           <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
           <button class="ghost-btn compact" data-action="clear-people">Clear</button>
         </div>
-        <div class="table-wrap desktop-people"><table><thead><tr><th>Person and reason</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Open GCI</th><th>Actions</th></tr></thead>
-        <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">Nobody is on this list right now.</div></td></tr>`}</tbody></table></div>
+        <div class="table-wrap desktop-people"><table><thead><tr><th>Person and reason</th><th>Contact Address</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Open GCI</th><th>Actions</th></tr></thead>
+        <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="10"><div class="empty">Nobody is on this list right now.</div></td></tr>`}</tbody></table></div>
         <div class="mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="empty">Nobody is on this list right now.</div>`}</div>
       </section>
     </div>`
@@ -1574,6 +1682,7 @@ function personRow(c){
   const s=scoreContact(c),reason=smartListReason(c);
   return `<tr>
     <td><a class="contact-cell contact-cell-link" href="#/contact/${c.id}">${avatar(c)}<div><strong>${esc(fullName(c))}</strong><small>${esc(reason||c.phone||c.email||"No contact information")}</small>${renderTagChips(c.tags)}</div></a>${state.smartList==="cleanup"?cleanupBadges(c):""}</td>
+    <td class="people-address-cell">${contactAddressDisplay(c)?`<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactAddressDisplay(c))}">${esc(contactAddressDisplay(c))}</a><small>${esc(contactAddressObject(c).type||"Home")}${contactAddressObject(c).sameAsPrimaryProperty?" • property synced":""}</small>`:`<button class="missing-address-button" data-action="open-contact" data-id="${c.id}">＋ Add address</button>`}</td>
     <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
     <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
     <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td>
@@ -1589,6 +1698,7 @@ function mobilePersonCard(c){
         <div class="mobile-contact-title"><strong>${esc(fullName(c))}</strong><span class="score ${scoreClass(s.score)}">${s.score}</span></div>
         <span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span>
         <small>${esc(reason||`${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"} • ${c.followUp?`Next ${dateLabel(c.followUp)}`:"No next step"}`)}</small>
+        <small class="mobile-contact-address">${contactAddressDisplay(c)?`⌖ ${esc(contactAddressDisplay(c))}`:"⌖ Contact address missing"}</small>
         ${renderTagChips(c.tags)}
       </div>
     </a>
@@ -1626,6 +1736,7 @@ function mergeContacts(primaryId,secondaryId){
   const primary=contact(primaryId),secondary=contact(secondaryId);if(!primary||!secondary)return;
   if(!confirm(`Merge ${fullName(secondary)} into ${fullName(primary)}? The primary profile will remain.`))return;
   const fillFields=["phone","email","timeframe","followUp","lastCommunication","property","notes"];
+  if(!contactAddressComplete(primary)&&contactAddressComplete(secondary))primary.address={...contactAddressObject(secondary),sameAsPrimaryProperty:false};
   fillFields.forEach(field=>{if(!primary[field]&&secondary[field])primary[field]=secondary[field]});
   primary.tags=[...new Set([...(primary.tags||[]),...(secondary.tags||[])])];
   const householdKeys=new Set((primary.household||[]).map(m=>`${cleanPhone(m.phone)}|${String(m.email||"").toLowerCase()}|${householdName(m).toLowerCase()}`));
@@ -1769,7 +1880,7 @@ function scriptVariables(c,extra={}){
   const p=primaryProperty(c);
   return {
     first_name:c?.firstName||"there",last_name:c?.lastName||"",full_name:c?fullName(c):"",
-    property:propertyAddress(p)||c?.property||"the property",
+    property:propertyAddress(p)||c?.property||"the property",contact_address:contactAddressDisplay(c)||"the contact address",
     agent_name:db.settings.agentName||"Jacob",agent_phone:db.settings.agentPhone||"your number",
     agent_email:db.settings.agentEmail||"",appointment_day:extra.appointment_day||"a time that works for you",
     follow_up_day:extra.follow_up_day||"the date we agree on",next_step:extra.next_step||"the next step",
@@ -1797,6 +1908,7 @@ function lastConversationPreview(c){
 function scriptPrepFacts(c){
   const p=primaryProperty(c),facts=[];
   facts.push({label:"Reason now",value:reasonToCall(c)});
+  facts.push({label:"Contact address",value:contactAddressDisplay(c)||"Not saved yet"});
   if(c.type==="Seller"){
     facts.push({label:"Property",value:propertyAddress(p)||c.property||"Address needed"});
     facts.push({label:"Motivation",value:p?.motivation||c.sellerDetails?.motivation||"Not learned yet"});
@@ -1835,7 +1947,7 @@ function openConversationMode(contactId,context="profile",taskId="",workItemId="
     <input type="hidden" id="scriptTaskId" value="${esc(taskId||"")}">
     <input type="hidden" id="scriptWorkItemId" value="${esc(workItemId||"")}">
     <header class="conversation-prep">
-      <div class="conversation-person">${avatar(c)}<div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><h2>${esc(fullName(c))}</h2><p>${esc(phone)}${propertyDisplay(c)?` • ${esc(propertyDisplay(c))}`:""}</p></div></div>
+      <div class="conversation-person">${avatar(c)}<div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><h2>${esc(fullName(c))}</h2><p>${esc(phone)}${contactAddressDisplay(c)?` • ${esc(contactAddressDisplay(c))}`:" • Address missing"}</p></div></div>
       <div class="conversation-top-actions">
         <button class="ghost-btn compact" data-action="copy-phone" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>Copy number</button>
         <button class="primary-btn compact" data-action="script-call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎ Call now</button>
@@ -1991,7 +2103,7 @@ function callScriptEditorModal(id=""){
     <div class="field full"><label>Close / next-step ask</label><textarea id="callScriptClose">${esc(s.close)}</textarea></div>
     <div class="field full"><label>Voicemail</label><textarea id="callScriptVoicemail">${esc(s.voicemail)}</textarea></div>
     <div class="field full"><label>Text after voicemail</label><textarea id="callScriptVoicemailText">${esc(s.afterVoicemailText)}</textarea></div>
-    <div class="field full"><label>Objections — one per line: label | response</label><textarea id="callScriptObjections" rows="8">${esc(objections)}</textarea><small class="field-help">Variables: {{first_name}}, {{property}}, {{agent_name}}, {{agent_phone}}</small></div>
+    <div class="field full"><label>Objections — one per line: label | response</label><textarea id="callScriptObjections" rows="8">${esc(objections)}</textarea><small class="field-help">Variables: {{first_name}}, {{property}}, {{contact_address}}, {{agent_name}}, {{agent_phone}}</small></div>
   </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${s.id?`<button class="danger-btn" data-action="delete-call-script" data-id="${s.id}">Delete</button>`:""}<button class="primary-btn" data-action="save-call-script">Save script</button>`)
 }
 function saveCallScript(){
@@ -2262,6 +2374,9 @@ function renderContact(id){
           <span>•</span>
           ${hasEmail(c)?`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`:`<span class="missing">No email</span>`}
         </div>
+        <div class="contact-hero-address">
+          ${contactAddressDisplay(c)?`<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactAddressDisplay(c))}">⌖ ${esc(contactAddressDisplay(c))}</a><button data-action="copy-contact-address" data-id="${c.id}">Copy</button>`:`<button class="missing-address-hero" data-action="open-contact" data-id="${c.id}">＋ Add contact address</button>`}
+        </div>
         <div class="inline-fields">
           <span class="field-label">Stage ${inlineSelect("stage",c.stage,stages,c.id)}</span>
           <span class="field-label">Heat ${inlineSelect("heat",c.heat,["Hot","Warm","Cold"],c.id)}</span>
@@ -2301,6 +2416,8 @@ function renderContact(id){
           ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Estimated from open opportunities GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
         </div></details>
 
+        <details class="compact-panel" open><summary>Contact / mailing address <span>${contactAddressComplete(c)?"Complete":"Missing"}</span></summary><div class="compact-body">${contactAddressPanelHtml(c)}</div></details>
+
         <details class="compact-panel" open><summary>Lead intake & data health <span>${leadIntakeItems(c).filter(x=>x.done).length}/${leadIntakeItems(c).length}</span></summary><div class="compact-body">${leadIntakeHtml(c)}</div></details>
 
         <details class="compact-panel" open><summary>Properties & opportunities <span>${propertiesForContact(c.id).length}</span></summary><div class="compact-body property-panel-body">${propertyCardsHtml(c)}</div></details>
@@ -2338,6 +2455,7 @@ function contactSummary(c,s){
   else pieces.push(`${first} is a ${c.heat.toLowerCase()} ${c.type.toLowerCase()} contact currently in ${c.stage}.`);
   if(c.timeframe&&c.timeframe!=="Unknown")pieces.push(`Timing: ${c.timeframe.toLowerCase()}.`);
   else pieces.push("Timing is still unknown.");
+  if(contactAddressDisplay(c))pieces.push(`Contact address: ${contactAddressDisplay(c)}.`);
   if(propertyDisplay(c))pieces.push(`${c.type==="Buyer"?"Target":"Property"}: ${propertyDisplay(c)}.`);
   const spouse=spouseMember(c);
   if(spouse)pieces.push(`${householdName(spouse)} is listed as ${spouse.relationship.toLowerCase()}${spouse.decisionMaker?" and a decision maker":""}.`);
@@ -2775,7 +2893,7 @@ function renderReports(){
     <div class="grid two"><section class="card card-pad"><div class="card-head"><div><h2>Lead sources</h2><small>People and projected GCI by source.</small></div></div>${barChart(Object.entries(sourceMap).map(([label,v])=>({label,value:v.count,display:`${v.count} • ${money(v.gci)}`})))}</section>
     <section class="card card-pad"><div class="card-head"><div><h2>Stage funnel</h2><small>Where relationships are sitting.</small></div></div>${barChart(Object.entries(stageMap).map(([label,value])=>({label,value,display:value})))}</section></div>
     <div class="grid two" style="margin-top:10px"><section class="card card-pad"><div class="card-head"><div><h2>Estimated from open opportunities GCI</h2><small>Seller vs. buyer opportunity.</small></div></div>${barChart(["Seller","Buyer"].map(type=>({label:type,value:open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0),display:money(open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0))})))}</section>
-    <section class="card card-pad"><div class="card-head"><div><h2>Data health</h2><small>Missing information that weakens follow-up.</small></div></div>${barChart([{label:"No follow-up",value:open.filter(c=>!c.followUp).length},{label:"No phone/email",value:open.filter(c=>!hasPhone(c)&&!hasEmail(c)).length},{label:"Unknown timeframe",value:open.filter(c=>c.timeframe==="Unknown").length},{label:"Stale 14+ days",value:open.filter(c=>daysSince(c.lastCommunication)>=14).length}])}</section></div>`;
+    <section class="card card-pad"><div class="card-head"><div><h2>Data health</h2><small>Missing information that weakens follow-up.</small></div></div>${barChart([{label:"No follow-up",value:open.filter(c=>!c.followUp).length},{label:"No contact address",value:open.filter(c=>!contactAddressComplete(c)).length},{label:"No phone/email",value:open.filter(c=>!hasPhone(c)&&!hasEmail(c)).length},{label:"Unknown timeframe",value:open.filter(c=>c.timeframe==="Unknown").length},{label:"Stale 14+ days",value:open.filter(c=>daysSince(c.lastCommunication)>=14).length}])}</section></div>`;
 }
 function barChart(data){const max=Math.max(1,...data.map(x=>Number(x.value)||0));return `<div class="chart">${data.length?data.sort((a,b)=>b.value-a.value).map(x=>`<div class="bar-row"><label>${esc(x.label)}</label><div class="track"><div class="fill" style="width:${Math.max(2,(Number(x.value)||0)/max*100)}%"></div></div><b>${esc(x.display??x.value)}</b></div>`).join(""):`<div class="empty">No data yet.</div>`}</div>`}
 
@@ -2869,13 +2987,23 @@ function contactSpecificForm(c,type){
 }
 
 function openContactModal(id=""){
-  const c=contact(id)||{},type=c.type||"Seller";
+  const c=contact(id)||{},type=c.type||"Seller",address=contactAddressObject(c);
   modal(c.id?"Edit person":"Add person",`<div class="form-grid">
     <input type="hidden" id="contactId" value="${esc(c.id||"")}">
     <div class="field"><label>First name</label><input id="contactFirst" value="${esc(c.firstName||"")}" autocomplete="given-name"></div>
     <div class="field"><label>Last name</label><input id="contactLast" value="${esc(c.lastName||"")}" autocomplete="family-name"></div>
     <div class="field"><label>Phone</label><input id="contactPhone" value="${esc(c.phone||"")}" type="tel"></div>
     <div class="field"><label>Email</label><input id="contactEmail" value="${esc(c.email||"")}" type="email"></div>
+    <div class="field full section-label contact-address-section">Contact / mailing address <small>Where this person lives or receives mail—not necessarily the property being sold.</small></div>
+    <div class="field"><label>Address type</label><select id="contactAddressType">${["Home","Mailing","Work","Other"].map(x=>`<option ${address.type===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field address-sync-field"><label>Property sync</label><label class="checkbox-row"><input id="contactAddressSameAsProperty" type="checkbox" ${address.sameAsPrimaryProperty?"checked":""}> Keep synced to primary property</label></div>
+    <div class="field full"><label>Street address</label><input id="contactAddressStreet" value="${esc(address.street||"")}" autocomplete="street-address"></div>
+    <div class="field"><label>Unit / apartment</label><input id="contactAddressUnit" value="${esc(address.unit||"")}"></div>
+    <div class="field"><label>City</label><input id="contactAddressCity" value="${esc(address.city||"")}" autocomplete="address-level2"></div>
+    <div class="field"><label>State</label><input id="contactAddressState" value="${esc(address.state||"OH")}" autocomplete="address-level1"></div>
+    <div class="field"><label>ZIP</label><input id="contactAddressZip" value="${esc(address.zip||"")}" autocomplete="postal-code"></div>
+    <div class="field"><label>County</label><input id="contactAddressCounty" value="${esc(address.county||"")}"></div>
+    <div class="field address-copy-field"><label>Quick fill</label><button type="button" class="ghost-btn compact" data-action="fill-contact-address-from-property">Use primary property address</button></div>
     <div class="field"><label>Type</label><select id="contactType">${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${type===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Stage</label><select id="contactStage">${(type==="Buyer"?buyerStages:sellerStages).map(x=>`<option ${c.stage===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Heat</label><select id="contactHeat">${["Hot","Warm","Cold"].map(x=>`<option ${c.heat===x?"selected":""}>${x}</option>`).join("")}</select></div>
@@ -2897,7 +3025,17 @@ function saveContact(){
     ["Realtor","Lender"].includes(type)?(document.getElementById("professionalServiceArea")?.value.trim()||old?.property||""):
     old?.property||"";
   if(["Seller","Buyer"].includes(type)&&!["Closed","Lost"].includes(stage)&&!followUp){alert("Every open seller or buyer needs a next follow-up date.");return}
-  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,gci:Number(document.getElementById("contactGci").value||0),property:propertyValue,tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
+  const address={
+    type:document.getElementById("contactAddressType").value,
+    street:document.getElementById("contactAddressStreet").value.trim(),
+    unit:document.getElementById("contactAddressUnit").value.trim(),
+    city:document.getElementById("contactAddressCity").value.trim(),
+    state:document.getElementById("contactAddressState").value.trim()||"OH",
+    zip:document.getElementById("contactAddressZip").value.trim(),
+    county:document.getElementById("contactAddressCounty").value.trim(),
+    sameAsPrimaryProperty:document.getElementById("contactAddressSameAsProperty").checked
+  };
+  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),address,type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,gci:Number(document.getElementById("contactGci").value||0),property:propertyValue,tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
   sellerDetails:type==="Seller"?{motivation:document.getElementById("sellerMotivation")?.value.trim()||"",estimatedValue:document.getElementById("sellerEstimatedValue")?.value||"",mortgageBalance:document.getElementById("sellerMortgageBalance")?.value||"",condition:document.getElementById("sellerCondition")?.value.trim()||"",decisionMakers:document.getElementById("sellerDecisionMakers")?.value.trim()||""}:(old?.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""}),
   buyerDetails:type==="Buyer"?{preapproval:document.getElementById("buyerPreapproval")?.value||"Unknown",lender:document.getElementById("buyerLender")?.value.trim()||"",budget:document.getElementById("buyerBudget")?.value||"",desiredPayment:document.getElementById("buyerDesiredPayment")?.value||"",areas:document.getElementById("buyerAreas")?.value.trim()||"",beds:document.getElementById("buyerBeds")?.value||"",baths:document.getElementById("buyerBaths")?.value||"",leaseExpiration:document.getElementById("buyerLeaseExpiration")?.value||""}:(old?.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""}),
   sphereDetails:["Sphere","Past Client"].includes(type)?{relationship:document.getElementById("sphereRelationship")?.value.trim()||"",homeowner:document.getElementById("sphereHomeowner")?.value||"Unknown",neighborhood:document.getElementById("sphereNeighborhood")?.value.trim()||"",birthday:document.getElementById("sphereBirthday")?.value||"",likelyOpportunity:document.getElementById("sphereLikelyOpportunity")?.value.trim()||""}:(old?.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""}),
@@ -2906,6 +3044,7 @@ function saveContact(){
   const i=db.contacts.findIndex(x=>x.id===id);if(i>=0)db.contacts[i]=c;else db.contacts.unshift(c);
   applyStageWorkflow(c,old?.stage||"",c.stage);
   syncPrimaryPropertyFromSellerForm(c);
+  syncContactAddressFromPrimaryProperty(c);
   const primary=primaryProperty(c);
   if(primary?.appointmentDate&&!db.tasks.some(t=>t.contactId===c.id&&t.type==="Appointment"&&t.due===primary.appointmentDate&&t.status!=="Done")){
     db.tasks.unshift({id:uid(),contactId:c.id,title:`Listing appointment — ${propertyAddress(primary)||fullName(c)}`,type:"Appointment",due:primary.appointmentDate,status:"Open",priority:"High",planRunId:"",completedAt:"",createdAt:TODAY()})
@@ -3238,8 +3377,8 @@ function askPip(){
 function toast(title,text){const el=document.getElementById("toast");document.getElementById("toastTitle").textContent=title;document.getElementById("toastText").textContent=text;el.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove("show"),2400)}
 function download(name,type,text){const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
 function exportCsv(){
-  const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Estimated from open opportunities GCI","Primary Property","City","State","ZIP","County","Property Type","Beds","Baths","Square Feet","Acres","Estimated Value","Mortgage Balance","Estimated Equity","Motivation","Tags","Notes"],
-    ...db.contacts.map(c=>{const p=primaryProperty(c);return [c.firstName,c.lastName,c.phone,c.email,c.type,c.stage,c.heat,c.timeframe,c.followUp,c.lastCommunication,c.source,c.gci,propertyAddress(p)||c.property,p?.city||"",p?.state||"",p?.zip||"",p?.county||"",p?.propertyType||"",p?.beds||"",p?.baths||"",p?.sqft||"",p?.acres||"",p?.estimatedValue||"",p?.mortgageBalance||"",p?.estimatedValue?propertyEquity(p):"",p?.motivation||c.sellerDetails?.motivation||"",c.tags.join("; "),c.notes]})];
+  const rows=[["First Name","Last Name","Phone","Email","Contact Address","Contact Street","Contact Unit","Contact City","Contact State","Contact ZIP","Contact County","Contact Address Type","Synced to Primary Property","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Estimated from open opportunities GCI","Primary Property","Property City","Property State","Property ZIP","Property County","Property Type","Beds","Baths","Square Feet","Acres","Estimated Value","Mortgage Balance","Estimated Equity","Motivation","Tags","Notes"],
+    ...db.contacts.map(c=>{const p=primaryProperty(c),a=contactAddressObject(c);return [c.firstName,c.lastName,c.phone,c.email,formattedAddress(a),a.street,a.unit,a.city,a.state,a.zip,a.county,a.type,a.sameAsPrimaryProperty?"Yes":"No",c.type,c.stage,c.heat,c.timeframe,c.followUp,c.lastCommunication,c.source,c.gci,propertyAddress(p)||c.property,p?.city||"",p?.state||"",p?.zip||"",p?.county||"",p?.propertyType||"",p?.beds||"",p?.baths||"",p?.sqft||"",p?.acres||"",p?.estimatedValue||"",p?.mortgageBalance||"",p?.estimatedValue?propertyEquity(p):"",p?.motivation||c.sellerDetails?.motivation||"",c.tags.join("; "),c.notes]})];
   download(`holton-homes-people-${TODAY()}.csv`,"text/csv",rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"))
 }
 function seedDemo(){
@@ -3284,6 +3423,8 @@ document.addEventListener("click",event=>{
   if(action==="open-template")templateModal(id||"");
   if(action==="save-template")saveTemplate();
   if(action==="delete-template")deleteTemplate(id);
+  if(action==="fill-contact-address-from-property")fillContactAddressFromPrimaryProperty();
+  if(action==="copy-contact-address"){const c=contact(id);if(c&&contactAddressDisplay(c))copyTextValue(contactAddressDisplay(c),"Address copied")}
   if(action==="show-script")openConversationMode(id,el.dataset.context||"profile",el.dataset.task||"",el.dataset.work||"");
   if(action==="script-call")launchScriptCall(id);
   if(action==="copy-phone"){const c=contact(id);if(c)copyTextValue(c.phone,"Phone number copied")}
@@ -3442,7 +3583,7 @@ document.addEventListener("input",event=>{
   if(event.target.id==="globalSearch"){
     const q=event.target.value.toLowerCase().trim(),box=document.getElementById("globalSearchResults");
     if(!q){box.classList.remove("open");box.innerHTML="";return}
-    const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
+    const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
     box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong class="person-name-link">${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
   }
 });
