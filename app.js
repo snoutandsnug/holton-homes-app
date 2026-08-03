@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v12";
-const LEGACY_KEYS = ["holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v13";
+const LEGACY_KEYS = ["holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
@@ -23,6 +23,18 @@ let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleSt
 function uid(){return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
 function fullName(c){return [c.firstName,c.lastName].filter(Boolean).join(" ").trim() || c.name || "Unnamed Contact"}
+function renderTagChips(tags=[],contactId=""){
+  if(!tags.length)return `<span class="tag-empty">No tags</span>`;
+  return `<div class="tag-chips">${tags.map(tag=>`<button class="tag-chip" data-action="filter-tag" data-tag="${esc(tag)}" title="Show everyone tagged ${esc(tag)}"><span>${esc(tag)}</span>${contactId?`<b data-action="remove-tag" data-id="${contactId}" data-tag="${esc(tag)}" title="Remove tag">×</b>`:""}</button>`).join("")}</div>`
+}
+function normalizeTag(value){return String(value||"").trim().replace(/^#+/,"").replace(/\s+/g," ")}
+function addTagToContact(id,tag){
+  const c=contact(id),clean=normalizeTag(tag);
+  if(!c||!clean)return false;
+  if(!c.tags.some(existing=>existing.toLowerCase()===clean.toLowerCase()))c.tags.push(clean);
+  c.updatedAt=TODAY();save();return true
+}
+
 function initials(c){return `${(c.firstName||c.name||"?").trim()[0]||"?"}${(c.lastName||"").trim()[0]||""}`.toUpperCase()}
 function money(value){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(Number(value)||0)}
 function dateLabel(value){if(!value)return "Not set";const d=new Date(`${value}T12:00:00`);return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:d.getFullYear()!==new Date().getFullYear()?"numeric":undefined})}
@@ -103,6 +115,7 @@ function normalize(raw){
       sellerDetails:p.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""},
       buyerDetails:p.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""},
       sphereDetails:p.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""},
+      professionalDetails:p.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""},
       alertSettings:p.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},
       behaviors:Array.isArray(p.behaviors)?p.behaviors:[]
     }
@@ -212,7 +225,7 @@ function holtonPlanHtml(){
     <div class="personal-actions">
       <button class="quick seller-action" data-action="open-contact-type" data-id="Seller">＋ Add seller</button>
       <button class="quick buyer-action" data-action="open-contact-type" data-id="Buyer">＋ Add buyer</button>
-      <button class="quick sphere-action" data-action="open-contact-type" data-id="Sphere">＋ Add sphere</button>
+      <button class="quick sphere-action" data-action="open-contact-type" data-id="Sphere">＋ Add sphere</button><button class="quick partner-action" data-action="open-contact-type" data-id="Realtor">＋ Add Realtor</button><button class="quick partner-action" data-action="open-contact-type" data-id="Lender">＋ Add lender</button>
       <a class="quick" href="#/call-queue">Start call queue</a>
     </div>
   </section>`
@@ -294,7 +307,7 @@ function renderPeople(){
       <section>
         <div class="toolbar">
           <input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search name, phone, email, property, source, or tag">
-          <select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select>
+          <select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select>
           <select id="peopleStage"><option value="">All stages</option>${[...new Set([...sellerStages,...buyerStages])].map(x=>`<option ${state.peopleStage===x?"selected":""}>${x}</option>`).join("")}</select>
           <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
           <button class="ghost-btn compact" data-action="clear-people">Clear</button>
@@ -305,8 +318,8 @@ function renderPeople(){
     </div>`;
 }
 function personRow(c){const s=scoreContact(c);return `<tr>
-  <td><div class="contact-cell">${avatar(c)}<div><button data-action="open-profile" data-id="${c.id}">${esc(fullName(c))}</button><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small></div></div></td>
-  <td><span class="badge ${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
+  <td><div class="contact-cell">${avatar(c)}<div><button data-action="open-profile" data-id="${c.id}">${esc(fullName(c))}</button><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small>${renderTagChips(c.tags)}</div></div></td>
+  <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
   <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
   <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td>${contactQuickActions(c)}</td></tr>`}
 
@@ -360,6 +373,8 @@ function nextActionFor(c,tasks){
   const nextTask=tasks.find(t=>t.status!=="Done");
   if(nextTask)return {title:nextTask.title,due:nextTask.due,channel:nextTask.type==="Follow Up"?(hasPhone(c)?"Call":"Email"):nextTask.type,taskId:nextTask.id};
   if(!c.lastCommunication){
+    if(c.type==="Realtor")return {title:"Introduce Holton Homes and discuss referral opportunities",due:c.followUp||TODAY(),channel:hasPhone(c)?"Call":"Email",taskId:""};
+    if(c.type==="Lender")return {title:"Discuss loan programs, response times, and referral fit",due:c.followUp||TODAY(),channel:hasPhone(c)?"Call":"Email",taskId:""};
     if(c.type==="Sphere"||c.type==="Past Client")return {title:"Send a personal introduction and ask about their real estate plans",due:c.followUp||TODAY(),channel:hasPhone(c)?"Text":"Email",taskId:""};
     if(c.type==="Seller")return {title:"Call to confirm motivation, property, and selling timeline",due:c.followUp||TODAY(),channel:"Call",taskId:""};
     if(c.type==="Buyer")return {title:"Call to confirm financing, payment goal, and target area",due:c.followUp||TODAY(),channel:"Call",taskId:""};
@@ -375,6 +390,10 @@ function typeSpecificHtml(c){
   if(c.type==="Buyer"){
     const d=c.buyerDetails||{};
     return `${detail("Preapproval",d.preapproval||"Unknown")}${detail("Lender",d.lender||"Not set")}${detail("Budget",d.budget?money(d.budget):"Unknown")}${detail("Desired payment",d.desiredPayment?money(d.desiredPayment):"Unknown")}${detail("Areas",d.areas||c.property||"Not set")}${detail("Beds / baths",[d.beds,d.baths].filter(Boolean).join(" / ")||"Unknown")}${detail("Lease expiration",d.leaseExpiration?dateLabel(d.leaseExpiration):"Not set")}`;
+  }
+  if(["Realtor","Lender"].includes(c.type)){
+    const d=c.professionalDetails||{};
+    return `${detail("Company",d.company||"Not set")}${detail("Role",d.role||c.type)}${detail("License / NMLS",d.licenseNumber||"Not set")}${detail("Service area",d.serviceArea||c.property||"Not set")}${detail("Specialties",d.specialties||"Not set")}${detail("Referral notes",d.referralNotes||"Not set")}`;
   }
   const d=c.sphereDetails||{};
   return `${detail("Relationship",d.relationship||"Not set")}${detail("Homeowner",d.homeowner||"Unknown")}${detail("Neighborhood",d.neighborhood||c.property||"Not set")}${detail("Likely opportunity",d.likelyOpportunity||"Unknown")}${detail("Birthday",d.birthday?dateLabel(d.birthday):"Not set")}`;
@@ -415,7 +434,7 @@ function renderContact(id){
     backupWarningHtml() +
     `<section class="contact-hero">
       <div class="contact-identity">${avatar(c)}<div>
-        <div class="eyebrow">${esc(c.type)} CONTACT</div>
+        <div class="eyebrow">${["Realtor","Lender"].includes(c.type)?"REFERRAL PARTNER":`${esc(c.type)} CONTACT`}</div>
         <h1>${esc(fullName(c))}</h1>
         <div class="contact-lines">
           ${hasPhone(c)?`<a href="tel:${esc(c.phone.replace(/[^\d+]/g,""))}">${esc(c.phone)}</a>`:`<span class="missing">No phone</span>`}
@@ -457,10 +476,10 @@ function renderContact(id){
 
       <aside class="contact-sidebar">
         <details class="compact-panel" open><summary>Contact & lead details <span>Edit inline above</span></summary><div class="compact-body detail-grid">
-          ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Projected GCI",money(c.gci))}${detail("Tags",c.tags.length?c.tags.map(t=>`#${t}`).join(" "):"None")}
+          ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Projected GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
         </div></details>
 
-        <details class="compact-panel" open><summary>${c.type==="Seller"?"Seller opportunity":c.type==="Buyer"?"Buyer criteria":"Sphere relationship"} <span>${esc(c.type)}</span></summary><div class="compact-body detail-grid">${typeSpecificHtml(c)}</div></details>
+        <details class="compact-panel" open><summary>${c.type==="Seller"?"Seller opportunity":c.type==="Buyer"?"Buyer criteria":c.type==="Realtor"?"Realtor partner":c.type==="Lender"?"Lending partner":"Sphere relationship"} <span>${esc(c.type)}</span></summary><div class="compact-body detail-grid">${typeSpecificHtml(c)}</div></details>
 
         <details class="compact-panel" open><summary>Upcoming tasks <span>${tasks.length}</span></summary><div class="compact-body">
           ${tasks.length?tasks.slice(0,5).map(t=>`<div class="sidebar-task"><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)} • ${dateLabel(t.due)}</small></div></div>`).join(""):`<div class="compact-empty"><span>No open tasks.</span><button class="ghost-btn compact" data-action="open-task" data-id="${c.id}">＋ Add task</button></div>`}
@@ -484,7 +503,10 @@ function detail(label,value){return `<div class="detail"><label>${esc(label)}</l
 function contactSummary(c,s){
   const first=c.firstName||fullName(c);
   const pieces=[];
-  if(!c.lastCommunication)pieces.push(`${first} is a new ${c.type.toLowerCase()} contact with no communication history.`);
+  if(["Realtor","Lender"].includes(c.type)){
+    const d=c.professionalDetails||{};
+    pieces.push(`${first} is a ${c.type.toLowerCase()} referral partner${d.company?` with ${d.company}`:""}.`);
+  }else if(!c.lastCommunication)pieces.push(`${first} is a new ${c.type.toLowerCase()} contact with no communication history.`);
   else pieces.push(`${first} is a ${c.heat.toLowerCase()} ${c.type.toLowerCase()} contact currently in ${c.stage}.`);
   if(c.timeframe&&c.timeframe!=="Unknown")pieces.push(`Timing: ${c.timeframe.toLowerCase()}.`);
   else pieces.push("Timing is still unknown.");
@@ -613,6 +635,16 @@ function contactSpecificForm(c,type){
       <div class="field"><label>Baths</label><input id="buyerBaths" value="${esc(d.baths||"")}"></div>
       <div class="field"><label>Lease expiration</label><input id="buyerLeaseExpiration" type="date" value="${esc(d.leaseExpiration||"")}"></div>`;
   }
+  if(["Realtor","Lender"].includes(type)){
+    const d=c.professionalDetails||{};
+    return `<div class="field full section-label">${type==="Realtor"?"Realtor partner":"Lending partner"}</div>
+      <div class="field"><label>Company</label><input id="professionalCompany" value="${esc(d.company||"")}"></div>
+      <div class="field"><label>Role</label><input id="professionalRole" value="${esc(d.role||type)}"></div>
+      <div class="field"><label>${type==="Lender"?"NMLS number":"License number"}</label><input id="professionalLicenseNumber" value="${esc(d.licenseNumber||"")}"></div>
+      <div class="field"><label>Service area</label><input id="professionalServiceArea" value="${esc(d.serviceArea||"")}"></div>
+      <div class="field full"><label>Specialties</label><input id="professionalSpecialties" value="${esc(d.specialties||"")}" placeholder="${type==="Realtor"?"Luxury, farms, relocation":"FHA, VA, USDA, first-time buyers"}"></div>
+      <div class="field full"><label>Referral notes</label><textarea id="professionalReferralNotes">${esc(d.referralNotes||"")}</textarea></div>`;
+  }
   const d=c.sphereDetails||{};
   return `<div class="field full section-label">Sphere relationship</div>
     <div class="field"><label>Relationship</label><input id="sphereRelationship" value="${esc(d.relationship||"")}" placeholder="Friend, family, neighbor, former coworker"></div>
@@ -630,7 +662,7 @@ function openContactModal(id=""){
     <div class="field"><label>Last name</label><input id="contactLast" value="${esc(c.lastName||"")}" autocomplete="family-name"></div>
     <div class="field"><label>Phone</label><input id="contactPhone" value="${esc(c.phone||"")}" type="tel"></div>
     <div class="field"><label>Email</label><input id="contactEmail" value="${esc(c.email||"")}" type="email"></div>
-    <div class="field"><label>Type</label><select id="contactType">${["Seller","Buyer","Sphere","Past Client"].map(x=>`<option ${type===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Type</label><select id="contactType">${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${type===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Stage</label><select id="contactStage">${(type==="Buyer"?buyerStages:sellerStages).map(x=>`<option ${c.stage===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Heat</label><select id="contactHeat">${["Hot","Warm","Cold"].map(x=>`<option ${c.heat===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Timeframe</label><select id="contactTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${(c.timeframe||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
@@ -638,7 +670,7 @@ function openContactModal(id=""){
     <div class="field"><label>Source</label><select id="contactSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Property / target area</label><input id="contactProperty" value="${esc(c.property||"")}"></div>
     <div class="field"><label>Projected GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
-    <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="farm, inherited home, first-time buyer"></div>
+    <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="Type tags separated by commas: farm, referral partner, hot lead"><small class="field-help">Tags appear as clickable bubbles throughout the CRM.</small></div>
     <div id="contactSpecificFields" class="field full specific-fields-grid">${contactSpecificForm(c,type)}</div>
     <div class="field full"><label>Relationship notes</label><textarea id="contactNotes">${esc(c.notes||"")}</textarea></div>
   </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-contact">Save person</button>`);
@@ -652,6 +684,7 @@ function saveContact(){
   sellerDetails:type==="Seller"?{motivation:document.getElementById("sellerMotivation")?.value.trim()||"",estimatedValue:document.getElementById("sellerEstimatedValue")?.value||"",mortgageBalance:document.getElementById("sellerMortgageBalance")?.value||"",condition:document.getElementById("sellerCondition")?.value.trim()||"",decisionMakers:document.getElementById("sellerDecisionMakers")?.value.trim()||""}:(old?.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""}),
   buyerDetails:type==="Buyer"?{preapproval:document.getElementById("buyerPreapproval")?.value||"Unknown",lender:document.getElementById("buyerLender")?.value.trim()||"",budget:document.getElementById("buyerBudget")?.value||"",desiredPayment:document.getElementById("buyerDesiredPayment")?.value||"",areas:document.getElementById("buyerAreas")?.value.trim()||"",beds:document.getElementById("buyerBeds")?.value||"",baths:document.getElementById("buyerBaths")?.value||"",leaseExpiration:document.getElementById("buyerLeaseExpiration")?.value||""}:(old?.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""}),
   sphereDetails:["Sphere","Past Client"].includes(type)?{relationship:document.getElementById("sphereRelationship")?.value.trim()||"",homeowner:document.getElementById("sphereHomeowner")?.value||"Unknown",neighborhood:document.getElementById("sphereNeighborhood")?.value.trim()||"",birthday:document.getElementById("sphereBirthday")?.value||"",likelyOpportunity:document.getElementById("sphereLikelyOpportunity")?.value.trim()||""}:(old?.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""}),
+  professionalDetails:["Realtor","Lender"].includes(type)?{company:document.getElementById("professionalCompany")?.value.trim()||"",role:document.getElementById("professionalRole")?.value.trim()||type,licenseNumber:document.getElementById("professionalLicenseNumber")?.value.trim()||"",serviceArea:document.getElementById("professionalServiceArea")?.value.trim()||"",specialties:document.getElementById("professionalSpecialties")?.value.trim()||"",referralNotes:document.getElementById("professionalReferralNotes")?.value.trim()||""}:(old?.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""}),
   alertSettings:old?.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},behaviors:old?.behaviors||[]};
   const i=db.contacts.findIndex(x=>x.id===id);if(i>=0)db.contacts[i]=c;else db.contacts.unshift(c);save();closeModal();toast("Person saved",fullName(c));location.hash=`#/contact/${c.id}`
 }
@@ -721,6 +754,16 @@ function saveReschedule(id){
 function completeNextAction(id,channel,taskId){
   state.pendingTaskId=taskId||"";
   communicationModal(id,channel||"Call");
+}
+
+function openTagModal(id){
+  const c=contact(id);
+  modal(`Add tag to ${fullName(c)}`,`<div class="field"><label>Tag</label><input id="newTagValue" placeholder="Referral partner, farm seller, USDA lender..." autofocus></div><div class="suggested-tags"><span>Suggestions</span>${["Referral Partner","Farm","Past Client","VIP","Hot Lead","First-Time Buyer","USDA","FHA","VA","Investor"].map(tag=>`<button class="tag-chip suggestion" data-action="choose-tag" data-tag="${tag}">${tag}</button>`).join("")}</div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-tag" data-id="${id}">Add tag</button>`)
+}
+function removeTag(id,tag){
+  const c=contact(id);if(!c)return;
+  c.tags=c.tags.filter(existing=>existing.toLowerCase()!==String(tag).toLowerCase());
+  c.updatedAt=TODAY();save();toast("Tag removed",tag);route()
 }
 
 function behaviorModal(id){
@@ -798,6 +841,11 @@ document.addEventListener("click",event=>{
   if(action==="save-communication")saveCommunication();
   if(action==="launch-channel")launchChannel(channel,id);
   if(action==="open-profile")location.hash=`#/contact/${id}`;
+  if(action==="open-tag")openTagModal(id);
+  if(action==="choose-tag"){const input=document.getElementById("newTagValue");if(input)input.value=el.dataset.tag||""}
+  if(action==="save-tag"){const input=document.getElementById("newTagValue");if(addTagToContact(id,input?.value||"")){closeModal();toast("Tag added",normalizeTag(input.value));route()}}
+  if(action==="remove-tag"){event.preventDefault();event.stopPropagation();removeTag(id,el.dataset.tag||"")}
+  if(action==="filter-tag"){state.peopleQuery=el.dataset.tag||"";state.smartList="all";location.hash="#/people";setTimeout(renderPeople,0)}
   if(action==="smart-list"){state.smartList=id;renderPeople()}
   if(action==="clear-people"){state.peopleQuery=state.peopleType=state.peopleStage=state.peopleHeat="";renderPeople()}
   if(action==="inbox-folder"){state.inboxFolder=id;state.activeThread=null;renderInbox()}
@@ -870,10 +918,22 @@ document.addEventListener("input",event=>{
     box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong>${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
   }
 });
+document.addEventListener("keydown",event=>{
+  if(event.key==="Enter"&&event.target.id==="newTagValue"){
+    event.preventDefault();
+    const saveButton=document.querySelector('[data-action="save-tag"]');
+    if(saveButton)saveButton.click()
+  }
+});
 document.addEventListener("dragstart",event=>{const card=event.target.closest(".deal-card");if(card)event.dataTransfer.setData("text/plain",card.dataset.contact)});
 document.addEventListener("dragover",event=>{const col=event.target.closest(".kanban-column");if(col){event.preventDefault();col.classList.add("dragover")}});
 document.addEventListener("dragleave",event=>event.target.closest(".kanban-column")?.classList.remove("dragover"));
 document.addEventListener("drop",event=>{const col=event.target.closest(".kanban-column");if(!col)return;event.preventDefault();col.classList.remove("dragover");const c=contact(event.dataTransfer.getData("text/plain"));if(c){c.stage=col.dataset.stage;c.updatedAt=TODAY();if(c.stage==="Under Contract"&&!db.tasks.some(t=>t.contactId===c.id&&t.type==="Transaction"&&t.status!=="Done"))["Inspection / due diligence","Appraisal and financing","Title / closing preparation","Final walkthrough"].forEach((title,i)=>db.tasks.push({id:uid(),contactId:c.id,title,type:"Transaction",due:addDays(TODAY(),[7,14,21,28][i]),status:"Open",priority:"High",planRunId:"",createdAt:TODAY()}));save();renderPipeline();toast("Stage updated",`${fullName(c)} → ${c.stage}`)}})
+document.getElementById("globalAddPerson")?.addEventListener("click",event=>{
+  event.preventDefault();
+  event.stopPropagation();
+  openContactModal("");
+});
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);

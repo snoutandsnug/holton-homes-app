@@ -145,3 +145,27 @@ table{min-width:1160px}th{padding:12px;font-size:10px}td{padding:12px;font-size:
 @media(max-width:900px){.contact-workspace{grid-template-columns:1fr}.contact-sidebar{position:static}.goal-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:820px){#app{grid-template-columns:82px minmax(0,1fr)}.primary-nav a,.sidebar-link{padding:9px}.view{padding:18px 14px 75px}.topbar{height:68px}.backup-top-btn{display:none}.page-head h1{font-size:28px}}
 @media(max-width:650px){body{font-size:14px}.metric-grid,.goal-grid{grid-template-columns:1fr 1fr}.contact-identity h1{font-size:26px}.next-action-copy strong{white-space:normal}.backup-alert{align-items:flex-start;flex-direction:column}.backup-button{width:100%}.market-pill{max-width:100%}}
+
+
+/* v13: partner relationships, tags, and reliable add-person flow */
+.tag-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.tag-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid #ecc2d3;background:#fff1f7;color:var(--pink-dark);border-radius:999px;padding:4px 8px;font-size:10px;font-weight:850;line-height:1.1}
+.tag-chip:hover{background:#fce3ed;border-color:#dd93b2}
+.tag-chip b{display:grid;place-items:center;width:14px;height:14px;border-radius:50%;background:rgba(159,36,92,.12);font-size:10px}
+.tag-empty{font-size:10px;color:var(--muted)}
+.tag-detail{grid-column:1/-1}
+.add-tag-inline{border:0;background:transparent;color:var(--pink-dark);font-size:10px;font-weight:900;padding:5px 0 0}
+.add-tag-inline:hover{text-decoration:underline}
+.suggested-tags{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.suggested-tags>span{font-size:10px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+.tag-chip.suggestion{cursor:pointer}
+.field-help{font-size:10px;color:var(--muted);margin-top:3px}
+.contact-cell .tag-chips{max-width:360px}
+.contact-cell .tag-chip{font-size:9px;padding:3px 7px;pointer-events:auto}
+.partner-action{background:#fff0dd;color:#9a5d08;border-color:#efcf9c}
+.type-realtor,.type-lender{background:#fff0dd;color:#9a5d08}
+#globalAddPerson{position:relative;z-index:2}
+@media(max-width:650px){
+  .contact-cell .tag-chips{max-width:250px}
+  .tag-chip{font-size:9px}
+}

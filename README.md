@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v12
+# Holton Homes Relationship CRM v13
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v12 contact workspace
+## v13 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -40,7 +40,7 @@ This is still a static browser application:
 - Collapsible right sidebar and actionable empty states.
 
 
-## v12 — built for Holton Homes
+## v13 — built for Holton Homes
 - Readable typography and larger controls across the entire CRM.
 - Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
 - Seller share, daily conversation, and market-area goals.
@@ -52,3 +52,12 @@ This is still a static browser application:
 
 ## Data safety
 Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.
+
+
+## v13
+- Fixed the global top-bar Add Person button with a dedicated direct event listener.
+- Added Realtor and Lender relationship types.
+- Added company, role, license/NMLS, service area, specialties, and referral-note fields.
+- Added clickable tag bubbles throughout the People and Contact views.
+- Added quick tag suggestions, inline tag removal, and tag filtering.
+- Added Add Realtor and Add Lender shortcuts to the Holton Homes daily dashboard.
