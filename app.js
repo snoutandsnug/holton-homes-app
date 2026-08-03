@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v17";
-const LEGACY_KEYS = ["holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v18";
+const LEGACY_KEYS = ["holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
@@ -447,18 +447,18 @@ function dailyLane(title,subtitle,items,kind){
       if(!c)return "";
       const detail=item.contactId?`${item.type} • ${dateLabel(item.due)}`:`${c.type} • ${c.stage}${c.followUp?` • ${dateLabel(c.followUp)}`:""}`;
       return `<div class="daily-lead-row">${avatar(c)}<div><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a><small>${esc(detail)}</small></div>${kind==="lead"?contactQuickActions(c):`<button class="quick" data-action="complete-task-button" data-id="${item.id}">Done</button>`}</div>`
-    }).join(""):`<div class="lane-empty">Nothing waiting here.</div>`}</div></section>`
+    }).join(""):`<div class="lane-empty">Nothing due.</div>`}</div></section>`
 }
 function dailyCommandHtml(){
   const untouched=untouchedLeads(),followups=dueContacts().sort((a,b)=>(b.heat==="Hot")-(a.heat==="Hot")||String(a.followUp).localeCompare(String(b.followUp))),
     appointments=upcomingTasksByType("Appointment",7),deadlines=upcomingTasksByType("Transaction",7);
   return `<section class="daily-command">
-    <div class="daily-command-head"><div><div class="eyebrow">LEAD COMMAND CENTER</div><h2>What a Realtor actually needs today</h2><p>Respond, follow up, attend appointments, and protect contract deadlines before doing anything else.</p></div><a class="primary-btn compact" href="#/people">Open lead database</a></div>
+    <div class="daily-command-head"><div><h2>Leads and deadlines</h2><p>The people and commitments that need attention.</p></div><a class="primary-btn compact" href="#/people">View all leads</a></div>
     <div class="daily-lanes">
-      ${dailyLane("New & untouched","No real communication logged",untouched,"lead")}
-      ${dailyLane("Follow up now","Today and overdue",followups,"lead")}
-      ${dailyLane("Appointments","Next seven days",appointments,"task")}
-      ${dailyLane("Deadlines","Transaction tasks due soon",deadlines,"task")}
+      ${dailyLane("New leads","No call, text, email, or note yet",untouched,"lead")}
+      ${dailyLane("Follow-ups","Due today or overdue",followups,"lead")}
+      ${dailyLane("Appointments","Next 7 days",appointments,"task")}
+      ${dailyLane("Deadlines","Due in the next 7 days",deadlines,"task")}
     </div>
   </section>`
 }
@@ -681,7 +681,7 @@ function bestNext(){
   const due=dueContacts()[0];if(due)return {title:`Follow up with ${fullName(due)}`,detail:"The next step already exists—complete it.",route:`#/contact/${due.id}`,action:"Open contact"};
   const over=overdueTasks()[0];if(over)return {title:over.title,detail:"Finish the overdue commitment before adding more work.",route:"#/tasks",action:"Open tasks"};
   if(!db.contacts.length)return {title:"Add the first 10 people you genuinely know",detail:"A useful CRM begins with real relationships, not empty dashboards.",route:"#/people",action:"Add people"};
-  return {title:"Create one new seller conversation",detail:"Listings are the leverage engine. Start with a homeowner in your sphere.",route:"#/people",action:"Open people"}
+  return {title:"Add your first seller lead",detail:"Add a real lead and the CRM will organize the next follow-up.",route:"#/people",action:"Open people"}
 }
 
 
@@ -700,21 +700,15 @@ function holtonPlanHtml(){
   const sellerCalls=db.communications.filter(m=>String(m.date).slice(0,10)===TODAY()&&contact(m.contactId)?.type==="Seller").length;
   const followUpsDone=db.tasks.filter(t=>t.completedAt===TODAY()&&["Follow Up","Call","Text","Email"].includes(t.type)).length;
   return `<section class="holton-plan card card-pad">
-    <div class="card-head"><div><h2>Holton Homes daily scoreboard</h2><small>Seller-first, buyer-ready. Real conversations—not busywork.</small></div><span class="market-pill">${esc(db.settings.coreMarkets||"Your market")}</span></div>
+    <div class="card-head"><div><h2>This week</h2><small>Your activity and pipeline at a glance.</small></div><span class="market-pill">${esc(db.settings.coreMarkets||"Your market")}</span></div>
     <div class="goal-grid">
       <div class="goal-box"><label>Conversations today</label><strong>${g.communicationsToday}/${target}</strong><div class="goal-track"><span style="width:${Math.min(100,g.communicationsToday/Math.max(1,target)*100)}%"></span></div></div>
-      <div class="goal-box"><label>Seller conversations</label><strong>${sellerCalls}</strong><small>Listings create leverage</small></div>
-      <div class="goal-box"><label>Follow-ups completed</label><strong>${followUpsDone}</strong><small>Protect the pipeline</small></div>
-      <div class="goal-box"><label>Seller share</label><strong>${g.sellerShare}%</strong><small>Goal ${Number(db.settings.sellerShareGoal||60)}%</small></div>
+      <div class="goal-box"><label>Seller conversations</label><strong>${sellerCalls}</strong><small>Seller conversations logged</small></div>
+      <div class="goal-box"><label>Follow-ups completed</label><strong>${followUpsDone}</strong><small>Completed follow-ups</small></div>
+      
       <div class="goal-box"><label>Closed GCI</label><strong>${money(g.closedGci)}</strong><div class="goal-track"><span style="width:${g.gciPct}%"></span></div><small>${g.gciPct}% of ${money(g.target)}</small></div>
     </div>
-    <div class="personal-actions">
-      <button class="quick seller-action" data-action="open-contact-type" data-id="Seller">＋ Add seller</button>
-      <button class="quick buyer-action" data-action="open-contact-type" data-id="Buyer">＋ Add buyer</button>
-      <button class="quick sphere-action" data-action="open-contact-type" data-id="Sphere">＋ Add sphere</button><button class="quick partner-action" data-action="open-contact-type" data-id="Realtor">＋ Add Realtor</button><button class="quick partner-action" data-action="open-contact-type" data-id="Lender">＋ Add lender</button>
-      <a class="quick" href="#/call-queue">Start call queue</a>
-    </div>
-  </section>`
+    </section>`
 }
 
 function renderToday(){
@@ -722,25 +716,25 @@ function renderToday(){
   const queue=[...due].sort((a,b)=>(b.type==="Seller")-(a.type==="Seller")||scoreContact(b).score-scoreContact(a).score).slice(0,7);
   document.getElementById("view").innerHTML=
     backupWarningHtml() +
-    pageHead("Daily operating system",`Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${db.settings.agentName||"Jacob"}`,"Work the right relationships before marketing or admin.",`<button class="ghost-btn" data-action="seed-demo">Load sample data</button><button class="primary-btn" data-action="open-contact">＋ Add person</button>`) +
-    `<section class="focus-card"><div><label>ONE THING NOW</label><h2>${esc(next.title)}</h2><p>${esc(next.detail)}</p></div><a class="primary-btn" href="${next.route}">${esc(next.action)} →</a></section>
+    pageHead("",`Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${db.settings.agentName||"Jacob"}`,"Here is what needs your attention today.","") +
+    `<section class="focus-card"><div><label>NEXT UP</label><h2>${esc(next.title)}</h2><p>${esc(next.detail)}</p></div><a class="primary-btn" href="${next.route}">${esc(next.action)} →</a></section>
     ${holtonPlanHtml()}
     ${dailyCommandHtml()}
     <section class="metric-grid">
-      <div class="metric"><label>Untouched leads</label><strong>${untouchedLeads().length}</strong><small>New leads with no communication</small></div>
-      <div class="metric"><label>Follow-ups due</label><strong>${due.length}</strong><small>Today and overdue</small></div>
-      <div class="metric"><label>Unread messages</label><strong>${unread.length}</strong><small>Inbox conversations</small></div>
-      <div class="metric"><label>Hot sellers</label><strong>${sellers.filter(c=>c.heat==="Hot").length}</strong><small>Listing opportunities</small></div>
-      <div class="metric"><label>Active buyers</label><strong>${buyers.filter(c=>!["New","Attempted Contact","Contacted","Nurture"].includes(c.stage)).length}</strong><small>Consultation or beyond</small></div>
-      <div class="metric"><label>Projected GCI</label><strong>${money(gci)}</strong><small>Open pipeline</small></div>
+      <div class="metric"><label>New leads</label><strong>${untouchedLeads().length}</strong><small>No communication logged yet</small></div>
+      <div class="metric"><label>Follow-ups</label><strong>${due.length}</strong><small>Due today or overdue</small></div>
+      <div class="metric"><label>Unread</label><strong>${unread.length}</strong><small>Unread conversations</small></div>
+      <div class="metric"><label>Hot seller leads</label><strong>${sellers.filter(c=>c.heat==="Hot").length}</strong><small>Seller leads marked hot</small></div>
+      <div class="metric"><label>Active buyer leads</label><strong>${buyers.filter(c=>!["New","Attempted Contact","Contacted","Nurture"].includes(c.stage)).length}</strong><small>Consultation stage or later</small></div>
+      <div class="metric"><label>Estimated from open opportunities GCI</label><strong>${money(gci)}</strong><small>Estimated from open opportunities</small></div>
     </section>
     <div class="grid two">
-      <section class="card"><div class="card-pad card-head"><div><h2>Who needs you today</h2><small>FUB-style relationship queue: stage + last communication + next follow-up.</small></div><a class="ghost-btn compact" href="#/people">All people</a></div>
+      <section class="card"><div class="card-pad card-head"><div><h2>Leads needing attention</h2><small>Sorted by urgency, stage, and last communication.</small></div><a class="ghost-btn compact" href="#/people">All people</a></div>
         <div class="queue">${queue.length?queue.map(c=>queueRow(c)).join(""):`<div class="empty">Your follow-up list is clear. Create a seller conversation.</div>`}</div>
       </section>
       <section class="grid">
-        <div class="card card-pad"><div class="card-head"><div><h2>Behavior alerts</h2><small>High-intent activity worth acting on.</small></div><a class="ghost-btn compact" href="#/activity">All activity</a></div>${behaviorAlertsHtml(5)}</div>
-        <div class="card card-pad"><div class="card-head"><div><h2>Execution</h2><small>Today’s promises and call queue.</small></div></div>
+        <div class="card card-pad"><div class="card-head"><div><h2>Recent lead activity</h2><small>Saved homes, repeat views, valuations, and showing requests.</small></div><a class="ghost-btn compact" href="#/activity">All activity</a></div>${behaviorAlertsHtml(5)}</div>
+        <div class="card card-pad"><div class="card-head"><div><h2>Tasks</h2><small>Calls and follow-ups waiting for you.</small></div></div>
           <div class="queue">
             <div class="queue-row"><span class="avatar">☎</span><div><strong>Call Queue</strong><small>${callQueue().length} due calls ready</small></div><a class="ghost-btn compact" href="#/call-queue">Start</a></div>
             <div class="queue-row"><span class="avatar">✓</span><div><strong>Open tasks</strong><small>${openTasks.length} actions waiting</small></div><a class="ghost-btn compact" href="#/tasks">Work</a></div>
@@ -802,7 +796,7 @@ function renderPeople(){
           <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
           <button class="ghost-btn compact" data-action="clear-people">Clear</button>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Person</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Projected GCI</th><th>Quick Actions</th></tr></thead>
+        <div class="table-wrap"><table><thead><tr><th>Person</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Estimated from open opportunities GCI</th><th>Quick Actions</th></tr></thead>
         <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">No people match this list.</div></td></tr>`}</tbody></table></div>
       </section>
     </div>`;
@@ -1089,7 +1083,7 @@ function renderContact(id){
 
       <aside class="contact-sidebar">
         <details class="compact-panel" open><summary>Contact & lead details <span>Edit inline above</span></summary><div class="compact-body detail-grid">
-          ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Projected GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
+          ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Estimated from open opportunities GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
         </div></details>
 
         <details class="compact-panel" open><summary>Lead intake & data health <span>${leadIntakeItems(c).filter(x=>x.done).length}/${leadIntakeItems(c).length}</span></summary><div class="compact-body">${leadIntakeHtml(c)}</div></details>
@@ -1154,7 +1148,7 @@ function timelineHtml(c,comms,tasks=[]){
 function renderCallQueue(){
   const queue=callQueue();if(state.callIndex>=queue.length)state.callIndex=0;const active=queue[state.callIndex];
   document.getElementById("view").innerHTML=
-    pageHead("Lofty-inspired dialing workflow","Call Queue","Work due calls, capture an outcome, and schedule the callback before moving on.",`<button class="ghost-btn" data-action="create-call-tasks">Create from follow-ups</button>`) +
+    pageHead("Call list","Call Queue","Work due calls, capture an outcome, and schedule the callback before moving on.",`<button class="ghost-btn" data-action="create-call-tasks">Create from follow-ups</button>`) +
     `<div class="grid two"><section class="card">${queue.length?queue.map((x,i)=>`<div class="queue-row ${i===state.callIndex?"active":""}">${avatar(x.c)}<div><strong><a class="person-name-link" href="#/contact/${x.c.id}">${esc(fullName(x.c))}</a></strong><small>${esc(x.c.type)} • ${esc(x.c.stage)} • ${x.task?esc(x.task.title):"Follow-up due"} • Score ${scoreContact(x.c).score}</small></div><button class="ghost-btn compact" data-action="select-call" data-index="${i}">Select</button></div>`).join(""):`<div class="empty">No calls due. Add a call task or follow-up date.</div>`}</section>
     <section class="card card-pad">${active?`<div class="card-head"><div><h2>Call ${esc(fullName(active.c))}</h2><small>${esc(active.c.phone)} • ${esc(active.c.stage)}</small></div><span class="score ${scoreClass(scoreContact(active.c).score)}">${scoreContact(active.c).score}</span></div>
       <div class="summary">${esc(contactSummary(active.c,scoreContact(active.c)))}</div>
@@ -1413,16 +1407,6 @@ function automationOverviewHtml(){
     <button class="primary-btn" data-action="run-engine">Run engine now</button>
   </section>
   <div class="grid two">
-    <section class="card card-pad"><div class="card-head"><div><h2>What this fixes</h2><small>Built from common CRM friction—not feature collecting.</small></div></div>
-      <div class="fix-grid">
-        <div class="fix-card"><b>Preview first</b><span>See exactly who matches before a rule runs.</span></div>
-        <div class="fix-card"><b>Explain every run</b><span>Logs show the rule, person, action, result, and reason.</span></div>
-        <div class="fix-card"><b>Human approval queue</b><span>Batch texts and emails are personalized drafts, never blind blasts.</span></div>
-        <div class="fix-card"><b>Notes count as work</b><span>Face-to-face and manual notes can pause plans and update the relationship.</span></div>
-        <div class="fix-card"><b>Transaction plans</b><span>Inspection, appraisal, title, walkthrough, and closing live in the CRM.</span></div>
-        <div class="fix-card"><b>Goal-aware plans</b><span>A plan stops when the contact reaches its actual conversion goal.</span></div>
-      </div>
-    </section>
     <section class="card card-pad"><div class="card-head"><div><h2>Automation health</h2><small>Problems are visible instead of silently failing.</small></div></div>
       <div class="health-list">
         <div><span>Missing phone/email for queued messages</span><b class="${health.missingChannels?"health-bad":"health-good"}">${health.missingChannels}</b></div>
@@ -1432,7 +1416,7 @@ function automationOverviewHtml(){
       </div>
     </section>
   </div>
-  <section class="card card-pad" style="margin-top:12px"><div class="card-head"><div><h2>Recent automation activity</h2><small>A deterministic audit trail—not a mystery AI score.</small></div><button class="ghost-btn compact" data-action="automation-tab" data-id="logs">View all logs</button></div>${automationLogsTable(recent)}</section>`
+  <section class="card card-pad" style="margin-top:12px"><div class="card-head"><div><h2>Recent automation activity</h2><small>A clear record of what ran and why.</small></div><button class="ghost-btn compact" data-action="automation-tab" data-id="logs">View all logs</button></div>${automationLogsTable(recent)}</section>`
 }
 function automationRulesHtml(){
   const rules=db.automationRules||[];
@@ -1513,9 +1497,9 @@ function renderAutomations(){
   document.getElementById("view").innerHTML=
     backupWarningHtml()+
     pageHead(
-      "Holton operating system",
+      "Automation",
       "Automation Studio",
-      "A transparent rule engine, action-plan builder, approval queue, and transaction workflow built for a solo listing-focused agent.",
+      "Rules, follow-up plans, message drafts, and transaction checklists.",
       `<button class="ghost-btn" data-action="run-engine">Run engine</button><button class="primary-btn" data-action="open-rule-builder">＋ New rule</button>`
     )+
     `<nav class="automation-tabs">${tabs.map(([id,label])=>{
@@ -1530,7 +1514,7 @@ function renderActivity(){
   db.contacts.forEach(c=>(c.behaviors||[]).forEach(b=>entries.push({date:`${b.date}T12:00:00`,kind:"Behavior",contact:c,title:b.type,detail:b.property||b.details||""})));
   entries.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById("view").innerHTML=
-    pageHead("Communication and intent","Activity","A single timeline across calls, texts, emails, notes, and website behavior.",`<button class="primary-btn" data-action="open-communication" data-channel="Note">＋ Log activity</button>`) +
+    pageHead("Communication and intent","Activity","Calls, texts, emails, notes, appointments, and property activity.",`<button class="primary-btn" data-action="open-communication" data-channel="Note">＋ Log activity</button>`) +
     `<section class="card"><div class="timeline" style="padding:0 12px">${entries.length?entries.map(e=>`<div class="timeline-item"><span class="timeline-icon">${e.kind==="Call"?"☎":e.kind==="Text"?"✉":e.kind==="Email"?"@":e.kind==="Behavior"?"◉":"✎"}</span><div><strong>${e.contact?`<a class="person-name-link" href="#/contact/${e.contact.id}">${esc(fullName(e.contact))}</a> — `:""}${esc(e.title)}</strong><p>${esc(e.detail||"No details")}</p></div><time>${dateTimeLabel(e.date)}</time></div>`).join(""):`<div class="empty">No activity yet.</div>`}</div></section>`;
 }
 
@@ -1543,7 +1527,7 @@ function renderReports(){
     `<section class="metric-grid"><div class="metric"><label>Database</label><strong>${db.contacts.length}</strong><small>Total people</small></div><div class="metric"><label>Seller share</label><strong>${db.contacts.length?Math.round(db.contacts.filter(c=>c.type==="Seller").length/db.contacts.length*100):0}%</strong><small>Listing-focused mix</small></div><div class="metric"><label>Activity this week</label><strong>${communications7.length}</strong><small>Logged touches</small></div><div class="metric"><label>Call connect rate</label><strong>${calls?Math.round(connected/calls*100):0}%</strong><small>Connected or appointment</small></div><div class="metric"><label>Closed GCI</label><strong>${money(closed.reduce((s,c)=>s+c.gci,0))}</strong><small>Recorded closings</small></div></section>
     <div class="grid two"><section class="card card-pad"><div class="card-head"><div><h2>Lead sources</h2><small>People and projected GCI by source.</small></div></div>${barChart(Object.entries(sourceMap).map(([label,v])=>({label,value:v.count,display:`${v.count} • ${money(v.gci)}`})))}</section>
     <section class="card card-pad"><div class="card-head"><div><h2>Stage funnel</h2><small>Where relationships are sitting.</small></div></div>${barChart(Object.entries(stageMap).map(([label,value])=>({label,value,display:value})))}</section></div>
-    <div class="grid two" style="margin-top:10px"><section class="card card-pad"><div class="card-head"><div><h2>Open pipeline GCI</h2><small>Seller vs. buyer opportunity.</small></div></div>${barChart(["Seller","Buyer"].map(type=>({label:type,value:open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0),display:money(open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0))})))}</section>
+    <div class="grid two" style="margin-top:10px"><section class="card card-pad"><div class="card-head"><div><h2>Estimated from open opportunities GCI</h2><small>Seller vs. buyer opportunity.</small></div></div>${barChart(["Seller","Buyer"].map(type=>({label:type,value:open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0),display:money(open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0))})))}</section>
     <section class="card card-pad"><div class="card-head"><div><h2>Data health</h2><small>Missing information that weakens follow-up.</small></div></div>${barChart([{label:"No follow-up",value:open.filter(c=>!c.followUp).length},{label:"No phone/email",value:open.filter(c=>!hasPhone(c)&&!hasEmail(c)).length},{label:"Unknown timeframe",value:open.filter(c=>c.timeframe==="Unknown").length},{label:"Stale 14+ days",value:open.filter(c=>daysSince(c.lastCommunication)>=14).length}])}</section></div>`;
 }
 function barChart(data){const max=Math.max(1,...data.map(x=>Number(x.value)||0));return `<div class="chart">${data.length?data.sort((a,b)=>b.value-a.value).map(x=>`<div class="bar-row"><label>${esc(x.label)}</label><div class="track"><div class="fill" style="width:${Math.max(2,(Number(x.value)||0)/max*100)}%"></div></div><b>${esc(x.display??x.value)}</b></div>`).join(""):`<div class="empty">No data yet.</div>`}</div>`}
@@ -1645,7 +1629,7 @@ function openContactModal(id=""){
     <div class="field"><label>Timeframe</label><select id="contactTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${(c.timeframe||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Next follow-up</label><input id="contactFollowUp" type="date" value="${esc(c.followUp||TODAY())}"></div>
     <div class="field"><label>Source</label><select id="contactSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>
-    <div class="field"><label>Projected GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
+    <div class="field"><label>Estimated from open opportunities GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
     <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="Type tags separated by commas: farm, referral partner, hot lead"><small class="field-help">Tags appear as clickable bubbles throughout the CRM.</small></div>
     <div id="contactSpecificFields" class="field full specific-fields-grid">${contactSpecificForm(c,type)}</div>
     <div class="field full"><label>Relationship notes</label><textarea id="contactNotes">${esc(c.notes||"")}</textarea></div>
@@ -1934,7 +1918,7 @@ function askPip(){
 function toast(title,text){const el=document.getElementById("toast");document.getElementById("toastTitle").textContent=title;document.getElementById("toastText").textContent=text;el.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove("show"),2400)}
 function download(name,type,text){const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
 function exportCsv(){
-  const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Projected GCI","Primary Property","City","State","ZIP","County","Property Type","Beds","Baths","Square Feet","Acres","Estimated Value","Mortgage Balance","Estimated Equity","Motivation","Tags","Notes"],
+  const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Estimated from open opportunities GCI","Primary Property","City","State","ZIP","County","Property Type","Beds","Baths","Square Feet","Acres","Estimated Value","Mortgage Balance","Estimated Equity","Motivation","Tags","Notes"],
     ...db.contacts.map(c=>{const p=primaryProperty(c);return [c.firstName,c.lastName,c.phone,c.email,c.type,c.stage,c.heat,c.timeframe,c.followUp,c.lastCommunication,c.source,c.gci,propertyAddress(p)||c.property,p?.city||"",p?.state||"",p?.zip||"",p?.county||"",p?.propertyType||"",p?.beds||"",p?.baths||"",p?.sqft||"",p?.acres||"",p?.estimatedValue||"",p?.mortgageBalance||"",p?.estimatedValue?propertyEquity(p):"",p?.motivation||c.sellerDetails?.motivation||"",c.tags.join("; "),c.notes]})];
   download(`holton-homes-people-${TODAY()}.csv`,"text/csv",rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"))
 }
@@ -2037,7 +2021,7 @@ document.addEventListener("click",event=>{
   if(action==="open-pip")openPip();
   if(action==="close-pip")closePip();
   if(action==="ask-pip")askPip();
-  if(action==="seed-demo")seedDemo();
+  
   if(action==="save-settings"){db.settings.agentName=document.getElementById("settingAgentName").value.trim()||"Jacob";db.settings.agentEmail=document.getElementById("settingAgentEmail").value.trim();db.settings.agentPhone=document.getElementById("settingAgentPhone").value.trim();save();toast("Settings saved","Agent profile updated.")}
   if(action==="save-goals"){
     db.settings.annualGciTarget=Number(document.getElementById("settingGciTarget").value||100000);

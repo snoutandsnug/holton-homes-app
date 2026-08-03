@@ -259,3 +259,43 @@ table{min-width:1160px}th{padding:12px;font-size:10px}td{padding:12px;font-size:
 .intake-score{display:flex;align-items:center;gap:10px;padding:10px 0}.intake-score>div:first-child{min-width:94px}.intake-score strong{font-size:20px}.intake-score span{display:block;font-size:7px;color:var(--muted);text-transform:uppercase}.intake-track{height:8px;flex:1;background:#eee7eb;border-radius:999px;overflow:hidden}.intake-track i{display:block;height:100%;background:linear-gradient(90deg,#ef7aa8,var(--pink-dark));border-radius:999px}.intake-checklist{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:9px}.intake-checklist>div{display:grid;grid-template-columns:20px 1fr;gap:5px;align-items:center;border-radius:7px;padding:6px}.intake-checklist>div.done{background:var(--green-soft);color:var(--green)}.intake-checklist>div.missing{background:var(--gold-soft);color:#835b0b}.intake-checklist span{width:18px;height:18px;border-radius:6px;background:rgba(255,255,255,.65);display:grid;place-items:center;font-size:8px;font-weight:950}.intake-checklist b{font-size:8px}
 @media(max-width:1300px){.daily-lanes{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.daily-command-head{align-items:flex-start;flex-direction:column}.daily-lanes{grid-template-columns:1fr}.property-money{grid-template-columns:1fr 1fr}.intake-checklist{grid-template-columns:1fr}.property-empty{align-items:flex-start;flex-direction:column}}
+
+
+/* v18: quieter, more personal, less generated */
+.view{background:#f7f5f5}
+.page-head{align-items:center;margin-bottom:16px}
+.page-head .eyebrow:empty{display:none}
+.page-head h1{font-size:32px;font-weight:800;letter-spacing:-.04em}
+.page-head p{font-size:13px;color:#766b71}
+.focus-card{
+  background:#2d2329;
+  border:1px solid #3c3036;
+  box-shadow:none;
+  padding:18px 20px;
+}
+.focus-card label{color:#eab1c7}
+.focus-card h2{font-size:22px}
+.focus-card p{font-size:12px;color:#d7c9d0}
+.focus-card .primary-btn{background:#fff;color:#33272d}
+.holton-plan{background:white;box-shadow:none}
+.holton-plan .card-head small{color:var(--muted)}
+.market-pill{display:none}
+.goal-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.goal-box{background:#fbf9fa;border-color:#ebe4e7}
+.goal-box strong{font-size:25px}
+.daily-command{box-shadow:none;border-radius:14px}
+.daily-command-head h2{font-size:19px;font-weight:800}
+.daily-command-head p{font-size:11px}
+.daily-lane{background:#fff}
+.daily-lane-head{background:#faf8f9}
+.daily-lane-head>b{background:#f9e2eb}
+.metric{box-shadow:none}
+.metric strong{font-size:29px}
+.card{box-shadow:none}
+.eyebrow{letter-spacing:.11em}
+.primary-btn{background:#d73375}
+.primary-btn:hover{background:#ad285e}
+.sidebar{background:#251c22}
+.brand small{letter-spacing:.08em}
+.ai-explainer,.fix-grid{display:none!important}
+@media(max-width:1000px){.goal-grid{grid-template-columns:1fr 1fr}}
