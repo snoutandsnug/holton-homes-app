@@ -1,17 +1,16 @@
-# Holton Homes Business Builder
+# Holton Homes Business Builder — FUB Workflow Upgrade
 
-Upload the contents of this folder to the root of the `holton-homes-app` repository.
+This version adds:
 
-## Included
-- `index.html` — the app
-- `404.html` — fallback page
-- `manifest.webmanifest` — installable web-app settings
-- `service-worker.js` — offline caching
-- `.nojekyll` — GitHub Pages compatibility
-- `.github/workflows/pages.yml` — automatic GitHub Pages deployment
-- `assets/pip.jpg` — the plush Pip reference used in the app
+- Separate first and last name fields
+- Full contact workspace
+- One-click call, text, and email launch buttons
+- Communication logging with outcomes and next follow-up
+- Contact-specific timeline and tasks
+- FUB-style relationship workflow
+- Cropped Pip avatar and sticker asset
 
-## GitHub Pages
-After uploading, open the repository's **Settings → Pages** and set **Source** to **GitHub Actions**.
+## Publish
+Upload every file and folder in this package to the root of the GitHub repository.
 
-This build stores CRM data in the browser on the device being used. It is not yet a secure cloud database and does not sync automatically across devices.
+The CRM currently stores data in the browser on the device being used. It does not yet sync through a cloud database.

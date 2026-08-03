@@ -1,20 +1,5 @@
-const CACHE='holton-homes-v8';
-const ASSETS=['./','./index.html','./404.html','./manifest.webmanifest','./assets/pip.jpg'];
-self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
-  self.skipWaiting();
-});
-self.addEventListener('activate',event=>{
-  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
-  self.clients.claim();
-});
-self.addEventListener('fetch',event=>{
-  if(event.request.method!=='GET') return;
-  event.respondWith(
-    caches.match(event.request).then(cached=>cached || fetch(event.request).then(response=>{
-      const copy=response.clone();
-      caches.open(CACHE).then(cache=>cache.put(event.request,copy));
-      return response;
-    }).catch(()=>caches.match('./index.html')))
-  );
-});
+const CACHE='holton-homes-v9';
+const ASSETS=['./','./index.html','./404.html','./manifest.webmanifest','./assets/pip-avatar.png','./assets/pip-cutout.png'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))));self.clients.claim();});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(x=>{const y=x.clone();caches.open(CACHE).then(c=>c.put(e.request,y));return x;}).catch(()=>caches.match('./index.html'))));});
