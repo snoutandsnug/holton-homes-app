@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v10
+# Holton Homes Relationship CRM v11
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -28,3 +28,13 @@ This is still a static browser application:
 - Contact data is stored in the current browser's localStorage.
 - Call/text/email buttons launch the device's native apps and then log activity.
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
+
+
+## v11 contact workspace
+- Communication timeline is the primary workspace.
+- Prominent next-action strip with complete/log and reschedule controls.
+- Inline stage, heat, source, and timeframe editing.
+- Compact lead score explanation and coaching.
+- Seller, buyer, and sphere-specific information.
+- Inline note/call/text/email/appointment composer.
+- Collapsible right sidebar and actionable empty states.
