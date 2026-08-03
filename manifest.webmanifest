@@ -1,10 +1,11 @@
 {
-  "name": "Holton Homes CRM",
-  "short_name": "Holton Homes",
+  "name": "Holton Homes Cloud CRM",
+  "short_name": "Holton CRM",
   "description": "Seller-focused, buyer-ready real estate relationship CRM.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f5f4f6",
-  "theme_color": "#a92d66"
+  "theme_color": "#a92d66",
+  "orientation": "portrait-primary"
 }

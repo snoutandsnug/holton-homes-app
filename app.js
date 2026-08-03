@@ -1,14 +1,25 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v18";
-const LEGACY_KEYS = ["holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v20";
+const LEGACY_KEYS = ["holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
 const buyerStages = ["New","Attempted Contact","Contacted","Nurture","Buyer Consultation","Pre-Approved","Touring Homes","Offer Submitted","Under Contract","Closed","Lost"];
 const sources = ["Sphere","Referral","Social Media","Website","Open House","Farm / Homestead Brand","Cold Outreach","Sign Call","Past Client","Other"];
 const behaviorTypes = ["Viewed Property","Saved Property","Repeated Property View","Requested Showing","Home Valuation","Opened Email","Clicked Property Alert","Searched Website"];
+
+const CLOUD_CONFIG=window.HOLTON_CLOUD_CONFIG||{};
+const cloudClient=window.supabase&&CLOUD_CONFIG.url&&CLOUD_CONFIG.publishableKey
+  ? window.supabase.createClient(CLOUD_CONFIG.url,CLOUD_CONFIG.publishableKey,{
+      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+    })
+  : null;
+const CLOUD_TABLE=CLOUD_CONFIG.table||"crm_state";
+let cloudSession=null,cloudUser=null,cloudReady=false,cloudApplying=false,cloudSaving=false;
+let cloudSaveTimer=null,cloudStatus="Sign in to sync",cloudSubscription=null,pendingCloudRow=null;
+let cloudInitialized=false;
 const defaultPlans = [
   {
     id:"seller-speed",name:"Seller Speed-to-Lead",category:"Seller",
@@ -486,15 +497,270 @@ function contact(id){return db.contacts.find(c=>c.id===id)}
 function task(id){return db.tasks.find(t=>t.id===id)}
 function hasPhone(c){return Boolean((c?.phone||"").replace(/\D/g,""))}
 function hasEmail(c){return Boolean(c?.email && c.email.includes("@"))}
-function save(evaluate=true){
-  ensureStructuredProperties();
-  db.settings.lastSavedAt=NOW();
+
+function meaningfulDataCount(stateObj){
+  if(!stateObj)return 0;
+  return ["contacts","properties","communications","tasks","planRuns","automationQueue"].reduce(
+    (sum,key)=>sum+(Array.isArray(stateObj[key])?stateObj[key].length:0),0
+  )
+}
+function setCloudStatus(status,detail=""){
+  cloudStatus=status;
+  const button=document.getElementById("cloudSyncButton");
+  const label=document.getElementById("cloudSyncLabel");
+  const dot=document.getElementById("cloudSyncDot");
+  const sidebar=document.getElementById("cloudSidebarStatus");
+  if(label)label.textContent=status;
+  if(sidebar)sidebar.textContent=detail||status;
+  if(button){
+    button.classList.toggle("synced",status==="Synced");
+    button.classList.toggle("syncing",status==="Syncing…");
+    button.classList.toggle("offline",status.includes("Offline")||status.includes("error"));
+    button.title=detail||status
+  }
+  if(dot)dot.textContent=status==="Synced"?"✓":status==="Syncing…"?"↻":status.includes("Offline")?"!":"●"
+  const settingsStatus=document.getElementById("cloudSettingsStatus");
+  if(settingsStatus)settingsStatus.textContent=detail||status
+}
+function persistLocalSnapshot(){
   const payload=JSON.stringify(db);
   localStorage.setItem(STORAGE_KEY,payload);
   mirrorToIndexedDb(payload);
   renderNav();
   renderPip();
+  setCloudStatus(cloudStatus,cloudUser?`${cloudUser.email||"Signed in"} • ${cloudStatus}`:cloudStatus)
+}
+function scheduleCloudSave(delay=700){
+  if(!cloudReady||!cloudUser||cloudApplying)return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(()=>pushCloudState(),delay)
+}
+async function pushCloudState({force=false}={}){
+  if(!cloudClient||!cloudUser||cloudSaving||(!cloudReady&&!force))return false;
+  cloudSaving=true;setCloudStatus("Syncing…","Saving changes to the cloud");
+  try{
+    const revision=Math.max(Number(db.settings.cloudRevision||0)+1,1);
+    const updatedAt=NOW();
+    const snapshot=JSON.parse(JSON.stringify(db));
+    snapshot.settings={
+      ...snapshot.settings,
+      cloudUserId:cloudUser.id,
+      cloudRevision:revision,
+      cloudUpdatedAt:updatedAt,
+      cloudEmail:cloudUser.email||""
+    };
+    const {error}=await cloudClient.from(CLOUD_TABLE).upsert({
+      user_id:cloudUser.id,
+      state:snapshot,
+      revision,
+      updated_at:updatedAt
+    },{onConflict:"user_id"});
+    if(error)throw error;
+    db=normalize(snapshot);
+    cloudReady=true;
+    persistLocalSnapshot();
+    setCloudStatus("Synced",`Saved ${dateTimeLabel(updatedAt)} • ${cloudUser.email||""}`);
+    return true
+  }catch(error){
+    console.error("Cloud save failed",error);
+    setCloudStatus(navigator.onLine?"Sync error":"Offline — saved locally",error.message||"Cloud save failed");
+    return false
+  }finally{cloudSaving=false}
+}
+function applyCloudRow(row,{announce=true}={}){
+  if(!row?.state)return;
+  cloudApplying=true;
+  try{
+    db=normalize(row.state);
+    db.settings.cloudUserId=cloudUser.id;
+    db.settings.cloudRevision=Number(row.revision||0);
+    db.settings.cloudUpdatedAt=row.updated_at||NOW();
+    db.settings.cloudEmail=cloudUser.email||"";
+    cloudReady=true;
+    persistLocalSnapshot();
+    route();
+    if(announce)toast("Cloud data loaded",`${db.contacts.length} contacts are available on this device.`);
+    setCloudStatus("Synced",`Loaded ${dateTimeLabel(row.updated_at)} • ${cloudUser.email||""}`)
+  }finally{cloudApplying=false}
+}
+function newerRecord(a,b){
+  const fields=["updatedAt","date","createdAt","completedAt","sentAt","startedAt"];
+  const aTime=fields.map(f=>a?.[f]).find(Boolean)||"";
+  const bTime=fields.map(f=>b?.[f]).find(Boolean)||"";
+  return String(bTime)>String(aTime)?b:a
+}
+function mergeCollection(localItems=[],cloudItems=[]){
+  const map=new Map();
+  [...cloudItems,...localItems].forEach(item=>{
+    if(!item?.id)return;
+    map.set(item.id,map.has(item.id)?newerRecord(map.get(item.id),item):item)
+  });
+  return [...map.values()]
+}
+function mergeStates(localState,cloudState){
+  const merged=normalize(cloudState||{});
+  const local=normalize(localState||{});
+  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs"].forEach(key=>{
+    merged[key]=mergeCollection(local[key],merged[key])
+  });
+  merged.automationHistory=[...new Set([...(merged.automationHistory||[]),...(local.automationHistory||[])])].slice(-5000);
+  const localSaved=local.settings?.lastSavedAt||"",cloudSaved=merged.settings?.lastSavedAt||"";
+  merged.settings={...(cloudSaved>=localSaved?local.settings:merged.settings),...(cloudSaved>=localSaved?merged.settings:local.settings)};
+  return normalize(merged)
+}
+function showCloudConflict(row){
+  pendingCloudRow=row;
+  const cloudState=normalize(row.state||{});
+  modal("Choose the first cloud copy",`<div class="cloud-conflict">
+    <h3>This device and the cloud both contain CRM data.</h3>
+    <p>Nothing will be deleted until you choose. The safest option is <strong>Merge both</strong>.</p>
+    <div class="cloud-copy-grid">
+      <div><label>This device</label><strong>${db.contacts.length} contacts</strong><span>${meaningfulDataCount(db)} total records</span></div>
+      <div><label>Cloud</label><strong>${cloudState.contacts.length} contacts</strong><span>${meaningfulDataCount(cloudState)} total records</span></div>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="cloud-use-remote">Use cloud</button><button class="ghost-btn" data-action="cloud-use-local">Use this device</button><button class="primary-btn" data-action="cloud-merge">Merge both</button>`)
+}
+async function pullCloudState({force=false,announce=false}={}){
+  if(!cloudClient||!cloudUser)return false;
+  setCloudStatus("Syncing…","Checking the cloud");
+  try{
+    const {data,error}=await cloudClient.from(CLOUD_TABLE)
+      .select("state,revision,updated_at")
+      .eq("user_id",cloudUser.id)
+      .maybeSingle();
+    if(error)throw error;
+    if(!data){
+      cloudReady=true;
+      return await pushCloudState({force:true})
+    }
+    const localCount=meaningfulDataCount(db),cloudState=normalize(data.state||{}),cloudCount=meaningfulDataCount(cloudState);
+    const linked=db.settings.cloudUserId===cloudUser.id;
+    const localRevision=Number(db.settings.cloudRevision||0),remoteRevision=Number(data.revision||0);
+    if(force){
+      applyCloudRow(data,{announce});return true
+    }
+    if(!cloudCount&&localCount){
+      cloudReady=true;return await pushCloudState({force:true})
+    }
+    if(cloudCount&&!localCount){
+      applyCloudRow(data,{announce:true});return true
+    }
+    if(!cloudCount&&!localCount){
+      applyCloudRow(data,{announce:false});return true
+    }
+    if(linked){
+      if(remoteRevision>localRevision)applyCloudRow(data,{announce});
+      else if(localRevision>remoteRevision){cloudReady=true;await pushCloudState({force:true})}
+      else{cloudReady=true;setCloudStatus("Synced",`Up to date • ${cloudUser.email||""}`)}
+      return true
+    }
+    showCloudConflict(data);
+    return false
+  }catch(error){
+    console.error("Cloud load failed",error);
+    setCloudStatus(navigator.onLine?"Sync error":"Offline — using device copy",error.message||"Cloud load failed");
+    return false
+  }
+}
+function subscribeToCloud(){
+  if(!cloudClient||!cloudUser)return;
+  if(cloudSubscription)cloudClient.removeChannel(cloudSubscription);
+  cloudSubscription=cloudClient.channel(`crm-${cloudUser.id}`)
+    .on("postgres_changes",{
+      event:"UPDATE",schema:"public",table:CLOUD_TABLE,filter:`user_id=eq.${cloudUser.id}`
+    },payload=>{
+      if(cloudSaving||cloudApplying)return;
+      const incoming=payload.new;
+      if(Number(incoming?.revision||0)>Number(db.settings.cloudRevision||0))applyCloudRow(incoming,{announce:false})
+    }).subscribe()
+}
+function showAuthScreen(message=""){
+  const screen=document.getElementById("cloudAuthScreen");
+  if(screen)screen.classList.add("open");
+  const status=document.getElementById("cloudAuthStatus");
+  if(status)status.textContent=message;
+  setCloudStatus("Sign in to sync","Same contacts on phone and computer")
+}
+function hideAuthScreen(){
+  document.getElementById("cloudAuthScreen")?.classList.remove("open")
+}
+function authFields(){
+  return {
+    email:document.getElementById("cloudAuthEmail")?.value.trim()||"",
+    password:document.getElementById("cloudAuthPassword")?.value||""
+  }
+}
+async function cloudSignIn(){
+  if(!cloudClient)return showAuthScreen("Cloud client did not load. Refresh the page.");
+  const {email,password}=authFields();
+  if(!email||!password)return showAuthScreen("Enter your email and password.");
+  showAuthScreen("Signing in…");
+  const {error}=await cloudClient.auth.signInWithPassword({email,password});
+  if(error)showAuthScreen(error.message)
+}
+async function cloudSignUp(){
+  if(!cloudClient)return showAuthScreen("Cloud client did not load. Refresh the page.");
+  const {email,password}=authFields();
+  if(!email||password.length<6)return showAuthScreen("Use a valid email and a password with at least 6 characters.");
+  showAuthScreen("Creating your CRM login…");
+  const {data,error}=await cloudClient.auth.signUp({email,password});
+  if(error)return showAuthScreen(error.message);
+  if(!data.session)showAuthScreen("Account created. Check your email to confirm it, then return here and sign in.");
+}
+async function cloudResetPassword(){
+  if(!cloudClient)return;
+  const email=authFields().email;
+  if(!email)return showAuthScreen("Enter your email first.");
+  const redirectTo=`${location.origin}${location.pathname}`;
+  const {error}=await cloudClient.auth.resetPasswordForEmail(email,{redirectTo});
+  showAuthScreen(error?error.message:"Password-reset email sent.")
+}
+async function cloudSignOut(){
+  if(!cloudClient)return;
+  await cloudClient.auth.signOut();
+}
+async function handleCloudSession(session){
+  cloudSession=session||null;cloudUser=session?.user||null;
+  if(!cloudUser){
+    cloudReady=false;
+    if(cloudSubscription){cloudClient?.removeChannel(cloudSubscription);cloudSubscription=null}
+    showAuthScreen();
+    return
+  }
+  hideAuthScreen();
+  setCloudStatus("Syncing…",`Signing in as ${cloudUser.email||""}`);
+  await pullCloudState();
+  subscribeToCloud()
+}
+async function initCloud(){
+  if(cloudInitialized)return;
+  cloudInitialized=true;
+  if(!cloudClient){
+    showAuthScreen("Cloud configuration is missing.");
+    return
+  }
+  cloudClient.auth.onAuthStateChange((event,session)=>{
+    setTimeout(()=>handleCloudSession(session),0)
+  });
+  const {data,error}=await cloudClient.auth.getSession();
+  if(error)showAuthScreen(error.message);
+  else await handleCloudSession(data.session)
+}
+function cloudSettingsHtml(){
+  const signedIn=Boolean(cloudUser);
+  return `<section class="setting-card cloud-setting-card"><h3>Cloud sync</h3>
+    <p>${signedIn?`Signed in as <strong>${esc(cloudUser.email||"")}</strong>. Changes sync between your phone and computer.`:"Sign in to use the same CRM on every device."}</p>
+    <div class="cloud-settings-status"><span id="cloudSettingsStatus">${esc(cloudStatus)}</span><small>${db.settings.cloudUpdatedAt?`Last cloud save: ${dateTimeLabel(db.settings.cloudUpdatedAt)}`:"No cloud save yet"}</small></div>
+    <div class="setting-actions">${signedIn?`<button class="primary-btn compact" data-action="cloud-sync-now">Sync now</button><button class="ghost-btn compact" data-action="cloud-pull-now">Reload cloud</button><button class="ghost-btn compact" data-action="cloud-sign-out">Sign out</button>`:`<button class="primary-btn compact" data-action="cloud-open-login">Sign in</button>`}</div>
+  </section>`
+}
+
+function save(evaluate=true){
+  ensureStructuredProperties();
+  db.settings.lastSavedAt=NOW();
+  persistLocalSnapshot();
   if(evaluate)scheduleAutomationEvaluation();
+  scheduleCloudSave();
 }
 function openBackupDb(){
   return new Promise((resolve,reject)=>{
@@ -536,9 +802,10 @@ function backupAgeDays(){
   return db.settings.lastManualBackupAt?daysSince(db.settings.lastManualBackupAt):999
 }
 function backupWarningHtml(){
-  if(backupAgeDays()<=7)return "";
+  const limit=cloudReady?30:7;
+  if(backupAgeDays()<=limit)return "";
   return `<section class="backup-alert">
-    <div><strong>Protect your client database.</strong><span>${db.settings.lastManualBackupAt?`Last downloaded backup: ${dateLabel(db.settings.lastManualBackupAt)}.`:"You have not downloaded a backup yet."} Clearing cookies or site data can erase browser-only records.</span></div>
+    <div><strong>Download a safety backup.</strong><span>${cloudReady?"Your CRM is syncing to the cloud, but a monthly JSON export is still smart.":"This device is not cloud-synced yet. Download a backup before clearing browser data."}</span></div>
     <button class="backup-button" data-action="export-json">Download backup</button>
   </section>`
 }
@@ -570,6 +837,7 @@ function normalize(raw){
       buyerDetails:p.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""},
       sphereDetails:p.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""},
       professionalDetails:p.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""},
+      cleanupSnoozedUntil:p.cleanupSnoozedUntil||"",
       alertSettings:p.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},
       behaviors:Array.isArray(p.behaviors)?p.behaviors:[]
     }
@@ -648,9 +916,9 @@ function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.te
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
 function avatar(c){return `<span class="avatar" aria-hidden="true">${esc(initials(c))}</span>`}
 function contactQuickActions(c,labels=false){return `<div class="row-actions">
-<button class="quick call" data-action="communicate" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎${labels?" Call":""}</button>
-<button class="quick text" data-action="communicate" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉${labels?" Text":""}</button>
-<button class="quick email" data-action="communicate" data-channel="Email" data-id="${c.id}" ${hasEmail(c)?"":"disabled"}>@${labels?" Email":""}</button></div>`}
+<button class="quick call" data-action="quick-launch" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎${labels?" Call":""}</button>
+<button class="quick text" data-action="quick-launch" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉${labels?" Text":""}</button>
+<button class="quick email" data-action="quick-launch" data-channel="Email" data-id="${c.id}" ${hasEmail(c)?"":"disabled"}>@${labels?" Email":""}</button></div>`}
 function scoreContact(c){
   let score=0,reasons=[];
   if(hasPhone(c)||hasEmail(c)){score+=10;reasons.push(["Valid contact info",10])}
@@ -759,6 +1027,86 @@ function behaviorAlertsHtml(limit=10){
   return alerts.length?`<div class="queue">${alerts.map(({c,b})=>`<div class="queue-row"><span class="avatar">◉</span><div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(b.type)}${b.property?` • ${esc(b.property)}`:""} • ${dateLabel(b.date)}</small></div><button class="quick call" data-action="communicate" data-channel="Call" data-id="${c.id}">Call</button></div>`).join("")}</div>`:`<div class="empty">No high-intent website activity logged yet.</div>`
 }
 
+
+function cleanupIssues(c){
+  const issues=[];
+  if(!hasPhone(c)&&!hasEmail(c))issues.push({id:"contact",label:"Phone or email missing"});
+  if(!c.followUp&&isOpen(c))issues.push({id:"followup",label:"Next follow-up missing"});
+  if(c.timeframe==="Unknown"&&["Seller","Buyer"].includes(c.type))issues.push({id:"timeframe",label:"Timeframe unknown"});
+  if(!c.source||c.source==="Other")issues.push({id:"source",label:"Lead source missing"});
+  if(c.type==="Seller"){
+    const p=primaryProperty(c);
+    if(!p?.street||!p?.city||!p?.zip)issues.push({id:"address",label:"Property address incomplete"});
+    if(!(p?.motivation||c.sellerDetails?.motivation))issues.push({id:"motivation",label:"Seller motivation missing"});
+  }
+  if(c.type==="Buyer"){
+    if(!(c.buyerDetails?.areas||c.property))issues.push({id:"areas",label:"Target areas missing"});
+    if(!(c.buyerDetails?.budget||c.buyerDetails?.desiredPayment))issues.push({id:"budget",label:"Budget or payment missing"});
+  }
+  return issues
+}
+function cleanupIsSnoozed(c){
+  return Boolean(c.cleanupSnoozedUntil&&c.cleanupSnoozedUntil>TODAY())
+}
+function cleanupBadges(c){
+  const issues=cleanupIssues(c);
+  return issues.length?`<div class="cleanup-badges">${issues.slice(0,4).map(issue=>`<span>${esc(issue.label)}</span>`).join("")}${issues.length>4?`<span>＋${issues.length-4} more</span>`:""}</div>`:""
+}
+function cleanupModal(id){
+  const c=contact(id),issues=cleanupIssues(c);if(!c)return;
+  const p=primaryProperty(c)||{};
+  modal(`Fix record — ${fullName(c)}`,`<div class="cleanup-intro"><strong>${issues.length} item${issues.length===1?"":"s"} need attention</strong><span>Save the missing information and this contact will automatically leave Fix Records.</span></div>
+    <div class="form-grid cleanup-form">
+      ${issues.some(x=>x.id==="contact")?`<div class="field"><label>Phone</label><input id="cleanupPhone" type="tel" value="${esc(c.phone||"")}"></div><div class="field"><label>Email</label><input id="cleanupEmail" type="email" value="${esc(c.email||"")}"></div>`:""}
+      ${issues.some(x=>x.id==="followup")?`<div class="field"><label>Next follow-up</label><input id="cleanupFollowUp" type="date" value="${addDays(TODAY(),3)}"></div>`:""}
+      ${issues.some(x=>x.id==="timeframe")?`<div class="field"><label>Timeframe</label><select id="cleanupTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${c.timeframe===x?"selected":""}>${x}</option>`).join("")}</select></div>`:""}
+      ${issues.some(x=>x.id==="source")?`<div class="field"><label>Lead source</label><select id="cleanupSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>`:""}
+      ${issues.some(x=>x.id==="address")?`<div class="field full"><label>Street address</label><input id="cleanupStreet" value="${esc(p.street||"")}"></div><div class="field"><label>City</label><input id="cleanupCity" value="${esc(p.city||"")}"></div><div class="field"><label>ZIP</label><input id="cleanupZip" value="${esc(p.zip||"")}"></div>`:""}
+      ${issues.some(x=>x.id==="motivation")?`<div class="field full"><label>Seller motivation</label><input id="cleanupMotivation" value="${esc(p.motivation||c.sellerDetails?.motivation||"")}"></div>`:""}
+      ${issues.some(x=>x.id==="areas")?`<div class="field full"><label>Target areas</label><input id="cleanupAreas" value="${esc(c.buyerDetails?.areas||c.property||"")}"></div>`:""}
+      ${issues.some(x=>x.id==="budget")?`<div class="field"><label>Budget</label><input id="cleanupBudget" type="number" value="${esc(c.buyerDetails?.budget||"")}"></div><div class="field"><label>Desired payment</label><input id="cleanupPayment" type="number" value="${esc(c.buyerDetails?.desiredPayment||"")}"></div>`:""}
+    </div>`,`<button class="ghost-btn" data-action="snooze-cleanup" data-id="${id}">Snooze 30 days</button><button class="primary-btn" data-action="save-cleanup" data-id="${id}">Save fixes</button>`)
+}
+function saveCleanup(id){
+  const c=contact(id);if(!c)return;
+  if(document.getElementById("cleanupPhone"))c.phone=document.getElementById("cleanupPhone").value.trim();
+  if(document.getElementById("cleanupEmail"))c.email=document.getElementById("cleanupEmail").value.trim();
+  if(document.getElementById("cleanupFollowUp"))c.followUp=document.getElementById("cleanupFollowUp").value;
+  if(document.getElementById("cleanupTimeframe"))c.timeframe=document.getElementById("cleanupTimeframe").value;
+  if(document.getElementById("cleanupSource"))c.source=document.getElementById("cleanupSource").value;
+  if(document.getElementById("cleanupAreas")){
+    c.buyerDetails={...c.buyerDetails,areas:document.getElementById("cleanupAreas").value.trim()};
+    c.property=c.buyerDetails.areas
+  }
+  if(document.getElementById("cleanupBudget")||document.getElementById("cleanupPayment")){
+    c.buyerDetails={...c.buyerDetails,budget:document.getElementById("cleanupBudget")?.value||c.buyerDetails?.budget||"",desiredPayment:document.getElementById("cleanupPayment")?.value||c.buyerDetails?.desiredPayment||""}
+  }
+  if(document.getElementById("cleanupStreet")){
+    let p=primaryProperty(c);
+    if(!p){
+      p={id:uid(),contactId:c.id,role:"Seller Property",status:"Prospect",primary:true,street:"",unit:"",city:"",state:"OH",zip:"",county:"",propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",yearBuilt:"",occupancy:"Unknown",ownership:"Unknown",estimatedValue:0,mortgageBalance:0,listPrice:0,expectedSalePrice:0,targetDate:"",appointmentDate:"",condition:"",motivation:"",notes:"",createdAt:TODAY(),updatedAt:TODAY()};
+      db.properties.push(p)
+    }
+    p.street=document.getElementById("cleanupStreet").value.trim();
+    p.city=document.getElementById("cleanupCity").value.trim();
+    p.zip=document.getElementById("cleanupZip").value.trim();
+    if(document.getElementById("cleanupMotivation"))p.motivation=document.getElementById("cleanupMotivation").value.trim();
+    p.updatedAt=TODAY();c.property=propertyAddress(p)
+  }else if(document.getElementById("cleanupMotivation")){
+    const p=primaryProperty(c);
+    const value=document.getElementById("cleanupMotivation").value.trim();
+    if(p)p.motivation=value;
+    c.sellerDetails={...c.sellerDetails,motivation:value}
+  }
+  c.cleanupSnoozedUntil="";c.updatedAt=TODAY();
+  const remaining=cleanupIssues(c);
+  save();closeModal();toast(remaining.length?"Record updated":"Record cleaned",remaining.length?`${remaining.length} item${remaining.length===1?"":"s"} remain.`:"This contact left Fix Records.");renderPeople()
+}
+function snoozeCleanup(id){
+  const c=contact(id);if(!c)return;
+  c.cleanupSnoozedUntil=addDays(TODAY(),30);save();closeModal();toast("Cleanup snoozed",`${fullName(c)} will return in 30 days.`);renderPeople()
+}
+
 function smartLists(){
   const open=db.contacts.filter(isOpen);
   return [
@@ -767,10 +1115,13 @@ function smartLists(){
     {id:"untouched",name:"Untouched Leads",items:untouchedLeads()},
     {id:"appointments",name:"Appointments This Week",items:[...new Set(upcomingTasksByType("Appointment",7).map(t=>contact(t.contactId)).filter(Boolean))]},
     {id:"due",name:"Follow-Up Due",items:dueContacts()},
+    {id:"replies",name:"Replies Needed",items:[...new Set(db.communications.filter(m=>m.unread&&m.direction==="inbound").map(m=>contact(m.contactId)).filter(Boolean))]},
+    {id:"stale-hot",name:"Stale Hot Leads",items:open.filter(c=>c.heat==="Hot"&&daysSince(c.lastCommunication)>=3)},
+    {id:"missing-next",name:"Missing Next Step",items:open.filter(c=>["Seller","Buyer"].includes(c.type)&&!c.followUp)},
     {id:"hot-sellers",name:"Hot Sellers",items:open.filter(c=>c.type==="Seller"&&c.heat==="Hot")},
     {id:"active-buyers",name:"Active Buyers",items:open.filter(c=>c.type==="Buyer"&&!["New","Attempted Contact","Contacted","Nurture"].includes(c.stage))},
     {id:"stale",name:"No Contact 7+ Days",items:open.filter(c=>daysSince(c.lastCommunication)>=7)},
-    {id:"cleanup",name:"Needs Cleanup",items:open.filter(c=>!c.followUp||(!hasPhone(c)&&!hasEmail(c))||c.timeframe==="Unknown")},
+    {id:"cleanup",name:"Fix Records",items:open.filter(c=>!cleanupIsSnoozed(c)&&cleanupIssues(c).length)},
     {id:"high-intent",name:"High Intent",items:open.filter(c=>scoreContact(c).score>=70)}
   ];
 }
@@ -796,16 +1147,38 @@ function renderPeople(){
           <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
           <button class="ghost-btn compact" data-action="clear-people">Clear</button>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Person</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Estimated from open opportunities GCI</th><th>Quick Actions</th></tr></thead>
-        <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">No people match this list.</div></td></tr>`}</tbody></table></div>
+        <div class="table-wrap desktop-people"><table><thead><tr><th>Person</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Open GCI</th><th>Quick Actions</th></tr></thead>
+        <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">No contacts match this list.</div></td></tr>`}</tbody></table></div>
+        <div class="mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="empty">No contacts match this list.</div>`}</div>
       </section>
     </div>`;
 }
 function personRow(c){const s=scoreContact(c);return `<tr>
-  <td><div class="contact-cell">${avatar(c)}<div><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small>${renderTagChips(c.tags)}</div></div></td>
+  <td><a class="contact-cell contact-cell-link" href="#/contact/${c.id}">${avatar(c)}<div><strong>${esc(fullName(c))}</strong><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small>${renderTagChips(c.tags)}</div></a>${state.smartList==="cleanup"?cleanupBadges(c):""}</td>
   <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
   <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
-  <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td>${contactQuickActions(c)}</td></tr>`}
+  <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td>${contactQuickActions(c)}${state.smartList==="cleanup"?`<button class="quick cleanup-fix" data-action="open-cleanup" data-id="${c.id}">Fix</button>`:""}</td></tr>`}
+
+
+function mobilePersonCard(c){
+  const s=scoreContact(c),issues=cleanupIssues(c);
+  return `<article class="mobile-contact-card">
+    <a class="mobile-contact-main" href="#/contact/${c.id}">
+      ${avatar(c)}
+      <div class="mobile-contact-copy">
+        <div class="mobile-contact-title"><strong>${esc(fullName(c))}</strong><span class="score ${scoreClass(s.score)}">${s.score}</span></div>
+        <span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span>
+        <small>${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"} • ${c.followUp?`Next ${dateLabel(c.followUp)}`:"No next step"}</small>
+        ${renderTagChips(c.tags)}
+      </div>
+    </a>
+    ${state.smartList==="cleanup"&&issues.length?cleanupBadges(c):""}
+    <div class="mobile-contact-actions">
+      ${contactQuickActions(c,true)}
+      ${state.smartList==="cleanup"?`<button class="primary-btn compact" data-action="open-cleanup" data-id="${c.id}">Fix record</button>`:`<a class="ghost-btn compact" href="#/contact/${c.id}">Open</a>`}
+    </div>
+  </article>`
+}
 
 function threads(){
   const map=new Map();
@@ -1536,6 +1909,7 @@ function renderSettings(){
   document.getElementById("view").innerHTML=
     pageHead("Data and preferences","Settings","Manage agent details, backups, and browser storage.") +
     `<div class="settings-grid">
+      ${cloudSettingsHtml()}
       <section class="setting-card"><h3>Agent profile</h3><p>Used in the daily dashboard and future message templates.</p><div class="field"><label>Agent name</label><input id="settingAgentName" value="${esc(db.settings.agentName||"")}"></div><div class="field" style="margin-top:7px"><label>Email</label><input id="settingAgentEmail" value="${esc(db.settings.agentEmail||"")}"></div><div class="field" style="margin-top:7px"><label>Phone</label><input id="settingAgentPhone" value="${esc(db.settings.agentPhone||"")}"></div><button class="primary-btn compact" style="margin-top:9px" data-action="save-settings">Save</button></section>
       <section class="setting-card"><h3>Export backup</h3><p>Download all contacts, communications, tasks, behavior, and plans.</p><button class="primary-btn compact" data-action="export-json">Export JSON</button><button class="ghost-btn compact" data-action="export-csv">Export people CSV</button></section>
       <section class="setting-card"><h3>Import backup</h3><p>Restore a JSON backup created by this CRM.</p><input id="importFile" type="file" accept=".json"><button class="ghost-btn compact" style="margin-top:9px" data-action="import-json">Import</button></section>
@@ -1546,9 +1920,9 @@ function renderSettings(){
         <div class="field" style="margin-top:8px"><label>Core markets</label><textarea id="settingCoreMarkets">${esc(db.settings.coreMarkets||"")}</textarea></div>
         <button class="primary-btn compact" style="margin-top:9px" data-action="save-goals">Save goals</button>
       </section>
-      <section class="setting-card"><h3>Data protection</h3><p>Your CRM is stored in this browser and mirrored into a second browser database.</p><div class="warning"><strong>Important:</strong> clearing all site data can still erase both copies. Download JSON backups weekly.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
-      <section class="setting-card"><h3>Full-potential upgrade</h3><p>A secure login and cloud database are the next real upgrade—not another cosmetic dashboard.</p><div class="cloud-roadmap"><span>✓ Seller and buyer pipelines</span><span>✓ Communication workflow</span><span>✓ Browser recovery mirror</span><span>○ Secure login</span><span>○ Cloud database</span><span>○ Phone and email sync</span></div></section>
-      <section class="setting-card"><h3>Reset</h3><p>Delete all CRM data stored in this browser.</p><button class="danger-btn compact" data-action="clear-data">Clear everything</button></section>
+      <section class="setting-card"><h3>Data protection</h3><p>The cloud is the shared source of truth. This browser also keeps a local recovery copy for offline use.</p><div class="warning"><strong>Still recommended:</strong> download a JSON backup monthly. Free cloud plans do not replace your own exports.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
+      <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
+      <section class="setting-card"><h3>Device cache</h3><p>Clear only this device’s local cache. Your signed-in cloud data will download again.</p><button class="danger-btn compact" data-action="clear-data">Clear device cache</button></section>
     </div>`;
 }
 
@@ -1658,6 +2032,63 @@ function saveContact(){
   }
   save();closeModal();toast("Person saved",fullName(c));location.hash=`#/contact/${c.id}`
 }
+
+function savePendingTouch(payload){
+  sessionStorage.setItem("holtonPendingTouch",JSON.stringify(payload))
+}
+function pendingTouch(){
+  try{return JSON.parse(sessionStorage.getItem("holtonPendingTouch")||"null")}catch{return null}
+}
+function clearPendingTouch(){sessionStorage.removeItem("holtonPendingTouch")}
+function quickLaunch(channel,id){
+  const c=contact(id);if(!c)return;
+  const destination=channel==="Email"?c.email:c.phone;
+  if(!destination){toast(`No ${channel==="Email"?"email":"phone number"}`,`Add one to ${fullName(c)} first.`);return}
+  savePendingTouch({contactId:id,channel,startedAt:NOW()});
+  if(channel==="Call")location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`;
+  if(channel==="Text")location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}`;
+  if(channel==="Email")location.href=`mailto:${c.email}?subject=${encodeURIComponent("Holton Homes follow-up")}`;
+  setTimeout(()=>showPendingTouchPrompt(),900)
+}
+function showPendingTouchPrompt(){
+  const pending=pendingTouch();
+  if(!pending||document.getElementById("modalBackdrop")?.classList.contains("open"))return;
+  const c=contact(pending.contactId);if(!c){clearPendingTouch();return}
+  postTouchModal(c.id,pending.channel)
+}
+function postTouchModal(contactId,channel){
+  const c=contact(contactId);if(!c)return;
+  const outcomes=channel==="Call"
+    ?["Connected","Left Voicemail","No Answer","Appointment Set","Follow-Up Needed"]
+    :channel==="Text"
+      ?["Sent","Replied","No Reply Yet","Appointment Set","Follow-Up Needed"]
+      :["Sent","Replied","No Reply Yet","Appointment Set","Follow-Up Needed"];
+  modal(`Log ${channel.toLowerCase()} with ${fullName(c)}`,`<div class="post-touch">
+    <div class="post-touch-person">${avatar(c)}<div><strong>${esc(fullName(c))}</strong><span>${esc(channel==="Email"?c.email:c.phone)}</span></div></div>
+    <div class="form-grid">
+      <div class="field"><label>Outcome</label><select id="postTouchOutcome">${outcomes.map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Next follow-up</label><input id="postTouchFollowUp" type="date" value="${addDays(TODAY(),channel==="Call"?2:3)}"></div>
+      <div class="field full"><label>Notes</label><textarea id="postTouchNotes" placeholder="What happened? Motivation, objections, questions, and next step..."></textarea></div>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="dismiss-pending-touch">Not completed</button><button class="primary-btn" data-action="save-pending-touch" data-id="${contactId}" data-channel="${channel}">Save ${channel.toLowerCase()}</button>`)
+}
+function savePendingTouchLog(contactId,channel){
+  const c=contact(contactId);if(!c)return;
+  const outcome=document.getElementById("postTouchOutcome").value,
+    followUp=document.getElementById("postTouchFollowUp").value,
+    body=document.getElementById("postTouchNotes").value.trim();
+  db.communications.unshift({
+    id:uid(),contactId,channel,direction:"outbound",outcome,body,date:NOW(),
+    unread:false,threadStatus:"open",createdAt:NOW()
+  });
+  c.lastCommunication=TODAY();c.updatedAt=TODAY();if(followUp)c.followUp=followUp;
+  if(outcome==="Appointment Set")c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";
+  if(["Left Voicemail","No Answer","No Reply Yet","Follow-Up Needed"].includes(outcome)&&followUp&&!db.tasks.some(t=>t.contactId===contactId&&t.status!=="Done"&&t.due===followUp)){
+    db.tasks.unshift({id:uid(),contactId,title:`Follow up with ${fullName(c)}`,type:channel,due:followUp,status:"Open",priority:c.heat==="Hot"?"High":"Normal",planRunId:"",createdAt:TODAY()})
+  }
+  clearPendingTouch();save();closeModal();toast(`${channel} logged`,fullName(c));route()
+}
+
 function communicationModal(contactId="",channel="Call"){
   const c=contact(contactId);
   modal(`${channel} ${c?fullName(c):"activity"}`,`<div class="channel-tabs">${["Call","Text","Email","Note"].map(x=>`<button class="channel-tab ${channel===x?"active":""}" data-action="switch-channel" data-id="${x}" data-contact="${contactId}">${x}</button>`).join("")}</div>
@@ -1938,6 +2369,22 @@ document.addEventListener("click",event=>{
   }
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
+  if(action==="cloud-sign-in")cloudSignIn();
+  if(action==="cloud-sign-up")cloudSignUp();
+  if(action==="cloud-reset-password")cloudResetPassword();
+  if(action==="cloud-sign-out")cloudSignOut();
+  if(action==="cloud-open-login")showAuthScreen();
+  if(action==="cloud-sync-now")pushCloudState({force:true}).then(ok=>ok&&toast("Cloud synced",`${db.contacts.length} contacts saved.`));
+  if(action==="cloud-pull-now")pullCloudState({force:true,announce:true});
+  if(action==="cloud-use-remote"){if(pendingCloudRow){applyCloudRow(pendingCloudRow,{announce:true});pendingCloudRow=null;closeModal()}}
+  if(action==="cloud-use-local"){pendingCloudRow=null;cloudReady=true;closeModal();pushCloudState({force:true}).then(()=>toast("Device copy uploaded","This device is now the cloud copy."))}
+  if(action==="cloud-merge"){if(pendingCloudRow){db=mergeStates(db,pendingCloudRow.state);pendingCloudRow=null;cloudReady=true;closeModal();save();toast("CRM copies merged",`${db.contacts.length} contacts are now in the combined database.`)}}
+  if(action==="quick-launch")quickLaunch(channel,id);
+  if(action==="save-pending-touch")savePendingTouchLog(id,channel);
+  if(action==="dismiss-pending-touch"){clearPendingTouch();closeModal()}
+  if(action==="open-cleanup")cleanupModal(id);
+  if(action==="save-cleanup")saveCleanup(id);
+  if(action==="snooze-cleanup")snoozeCleanup(id);
   if(action==="open-contact")openContactModal(id||"");
   if(action==="open-contact-type"){
     openContactModal("");
@@ -2042,12 +2489,14 @@ document.addEventListener("click",event=>{
       })
     }else toast("Not supported","This browser does not support persistent-storage requests.")
   }
-  if(action==="clear-data"&&confirm("Delete ALL clients, tasks, activity, and browser recovery copies from this device? Download a backup first. This cannot be undone.")){
-    db=normalize({});
+  if(action==="clear-data"&&confirm("Clear the CRM cache on this device? Your cloud database will not be deleted.")){
     localStorage.removeItem(STORAGE_KEY);
     try{indexedDB.deleteDatabase("HoltonHomesCRMBackup")}catch(error){}
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(db));
-    route();toast("CRM cleared","All browser data and the recovery copy were removed.")
+    db=normalize({});
+    persistLocalSnapshot();
+    if(cloudUser)pullCloudState({force:true,announce:true});
+    else route();
+    toast("Device cache cleared",cloudUser?"Your cloud copy is downloading again.":"Sign in to restore cloud data.")
   }
 });
 document.addEventListener("change",event=>{
@@ -2068,6 +2517,9 @@ document.addEventListener("input",event=>{
   }
 });
 document.addEventListener("keydown",event=>{
+  if(event.key==="Enter"&&["cloudAuthEmail","cloudAuthPassword"].includes(event.target.id)){
+    event.preventDefault();cloudSignIn();return
+  }
   if(event.key==="Enter"&&event.target.id==="newTagValue"){
     event.preventDefault();
     const saveButton=document.querySelector('[data-action="save-tag"]');
@@ -2083,8 +2535,18 @@ document.getElementById("globalAddPerson")?.addEventListener("click",event=>{
   event.stopPropagation();
   openContactModal("");
 });
+
+window.addEventListener("focus",()=>{
+  setTimeout(showPendingTouchPrompt,250);
+  if(cloudReady)setTimeout(()=>pullCloudState({announce:false}),700)
+});
+window.addEventListener("online",()=>{if(cloudUser){setCloudStatus("Syncing…","Connection restored");scheduleCloudSave(100)}});
+window.addEventListener("offline",()=>setCloudStatus("Offline — saved locally","Changes will upload when your connection returns"));
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible")setTimeout(showPendingTouchPrompt,250)
+});
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);
-renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);
+renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);initCloud();
 })();

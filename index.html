@@ -10,6 +10,24 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+
+<div class="cloud-auth-screen" id="cloudAuthScreen">
+  <section class="cloud-auth-card">
+    <div class="cloud-auth-brand"><span class="brand-mark">HH</span><div><strong>Holton Homes</strong><small>Cloud CRM</small></div></div>
+    <h1>One CRM on every device.</h1>
+    <p>Sign in with the same account on your computer and phone. Your contacts, spouses, properties, tasks, notes, and plans will stay together.</p>
+    <div class="field"><label>Email</label><input id="cloudAuthEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>
+    <div class="field"><label>Password</label><input id="cloudAuthPassword" type="password" autocomplete="current-password" placeholder="At least 6 characters"></div>
+    <div class="cloud-auth-actions">
+      <button class="primary-btn" data-action="cloud-sign-in">Sign in</button>
+      <button class="ghost-btn" data-action="cloud-sign-up">Create CRM login</button>
+    </div>
+    <button class="text-button" data-action="cloud-reset-password">Forgot password?</button>
+    <div class="cloud-auth-status" id="cloudAuthStatus"></div>
+    <small class="cloud-auth-note">Use the same login on your phone and computer. Your Supabase publishable key is public-safe; client records are protected by login and Row Level Security.</small>
+  </section>
+</div>
+
 <div id="app">
   <aside class="sidebar">
     <a class="brand" href="#/today">
@@ -20,11 +38,11 @@
     <nav class="primary-nav" id="primaryNav">
       <a href="#/today" data-route="today"><span class="nav-icon">⌂</span><span>Today</span><b id="navTodayCount"></b></a>
       <a href="#/inbox" data-route="inbox"><span class="nav-icon">▣</span><span>Inbox</span><b id="navInboxCount"></b></a>
-      <a href="#/people" data-route="people"><span class="nav-icon">☰</span><span>Leads & Contacts</span></a>
-      <a href="#/call-queue" data-route="call-queue"><span class="nav-icon">☎</span><span>Call Queue</span><b id="navCallCount"></b></a>
+      <a href="#/people" data-route="people"><span class="nav-icon">☰</span><span data-short="Leads">Leads & Contacts</span></a>
+      <a href="#/call-queue" data-route="call-queue"><span class="nav-icon">☎</span><span data-short="Calls">Call Queue</span><b id="navCallCount"></b></a>
       <a href="#/pipeline" data-route="pipeline"><span class="nav-icon">◆</span><span>Pipeline</span></a>
       <a href="#/tasks" data-route="tasks"><span class="nav-icon">✓</span><span>Tasks</span><b id="navTaskCount"></b></a>
-      <a href="#/automations" data-route="automations"><span class="nav-icon">⚡</span><span>Automations</span></a>
+      <a href="#/automations" data-route="automations"><span class="nav-icon">⚡</span><span data-short="Plans">Automations</span></a>
       <a href="#/activity" data-route="activity"><span class="nav-icon">◉</span><span>Activity</span></a>
       <a href="#/reports" data-route="reports"><span class="nav-icon">↗</span><span>Reports</span></a>
     </nav>
@@ -32,7 +50,7 @@
     <div class="sidebar-bottom">
       <button class="sidebar-link" data-action="open-pip"><span class="pip-mini" aria-hidden="true"></span><span>Pip Coach</span><b id="pipNavCount"></b></button>
       <a class="sidebar-link" href="#/settings" data-route="settings"><span class="nav-icon">⚙</span><span>Settings</span></a>
-      <div class="data-note">Saved in this browser. Export backups from Settings.</div>
+      <div class="data-note" id="cloudSidebarStatus">Sign in to sync</div>
     </div>
   </aside>
 
@@ -43,7 +61,7 @@
         <input id="globalSearch" placeholder="Search people, phone, email, property, or tag">
         <div class="search-results" id="globalSearchResults"></div>
       </div>
-      <div class="top-actions"><button class="backup-top-btn" data-action="export-json">⇩ Backup</button>
+      <div class="top-actions"><button class="cloud-sync-pill" id="cloudSyncButton" data-action="cloud-sync-now"><span id="cloudSyncDot">●</span><span id="cloudSyncLabel">Sign in to sync</span></button><button class="backup-top-btn" data-action="export-json">⇩ Backup</button>
         <button class="ghost-btn" data-action="open-communication" data-channel="Note">＋ Log touch</button>
         <button class="primary-btn" id="globalAddPerson" type="button">＋ New contact</button>
       </div>
@@ -75,6 +93,8 @@
 
 <div class="toast" id="toast"><strong id="toastTitle"></strong><span id="toastText"></span></div>
 
+<script src="./cloud-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
