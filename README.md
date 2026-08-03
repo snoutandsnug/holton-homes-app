@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v15
+# Holton Homes Relationship CRM v17
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v15 contact workspace
+## v17 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -40,7 +40,7 @@ This is still a static browser application:
 - Collapsible right sidebar and actionable empty states.
 
 
-## v15 — built for Holton Homes
+## v17 — built for Holton Homes
 - Readable typography and larger controls across the entire CRM.
 - Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
 - Seller share, daily conversation, and market-area goals.
@@ -54,7 +54,7 @@ This is still a static browser application:
 Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.
 
 
-## v15
+## v17
 - Fixed the global top-bar Add Person button with a dedicated direct event listener.
 - Added Realtor and Lender relationship types.
 - Added company, role, license/NMLS, service area, specialties, and referral-note fields.
@@ -63,14 +63,14 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 - Added Add Realtor and Add Lender shortcuts to the Holton Homes daily dashboard.
 
 
-## v15
+## v17
 - Every visible contact name is now the direct profile link.
 - Initials/avatar icons are decorative and no longer act as navigation controls.
 - Name links are consistent across People, Today, Inbox, Pipeline, Tasks, Activity, and search.
 - Added stronger hover and keyboard-focus styling so it is obvious that the real name is clickable.
 
 
-## v15 — Holton Automation Studio
+## v17 — Holton Automation Studio
 
 ### Automation engine
 - Deterministic rule engine with active/disabled controls.
@@ -97,3 +97,43 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 
 ### Static-app limitation
 Scheduled rules and plan steps process when the CRM is open, reopened, or its data changes. True server-side execution while every device is offline requires the future secure cloud backend.
+
+
+## v17 — Household and spouse relationships
+- Dedicated Household & Decision Makers section on every contact profile.
+- Add spouse, partner, co-owner, parent, adult child, sibling, or another household member.
+- Store phone, email, anniversary, birthday, decision-maker status, and household notes.
+- Call, text, or email a spouse directly while keeping the activity in the primary household timeline.
+- Promote a household member into their own full CRM contact when they need independent tasks, automations, and communication history.
+- Link promoted household members back to the original record.
+- Contact summaries now mention spouses and decision makers.
+
+
+## v17 — Realtor Daily OS and structured property records
+
+### Daily lead command center
+- New and untouched leads
+- Follow-ups due now
+- Appointments in the next seven days
+- Transaction deadlines in the next seven days
+- Direct call, text, profile, and task actions
+
+### Property and opportunity records
+- Multiple properties per contact
+- Primary property designation
+- Full street, unit, city, state, ZIP, and county
+- Property type, beds, baths, square feet, acreage, year built
+- Occupancy and ownership
+- Estimated value, mortgage balance, equity, list price, and expected sale price
+- Motivation, condition, target date, appointment date, and notes
+- Map access, editing, removal, and primary-property switching
+- Seller intake creates or updates the primary property automatically
+
+### Lead protection
+- Lead intake completeness checklist
+- Seller, buyer, sphere, and partner-specific completeness criteria
+- Untouched Lead and Appointments This Week Smart Lists
+- Property data included in search and CSV exports
+- Listing appointments automatically create CRM appointment tasks
+
+The spouse/household features and Automation Studio remain included.

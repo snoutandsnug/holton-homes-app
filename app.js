@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v15";
-const LEGACY_KEYS = ["holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v17";
+const LEGACY_KEYS = ["holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
@@ -205,6 +205,264 @@ let automationBusy=false,automationTimer=null;
 function uid(){return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
 function fullName(c){return [c.firstName,c.lastName].filter(Boolean).join(" ").trim() || c.name || "Unnamed Contact"}
+
+function propertiesForContact(contactId){
+  return (db.properties||[]).filter(p=>p.contactId===contactId)
+}
+function propertyAddress(p){
+  if(!p)return "";
+  const line=[p.street,p.unit].filter(Boolean).join(" ");
+  const locality=[p.city,p.state,p.zip].filter(Boolean).join(" ");
+  return [line,locality].filter(Boolean).join(", ")
+}
+function primaryProperty(c){
+  const items=propertiesForContact(c.id);
+  return items.find(p=>p.primary)||items[0]||null
+}
+function propertyDisplay(c){
+  const p=primaryProperty(c);
+  return propertyAddress(p)||c.property||c.buyerDetails?.areas||c.sphereDetails?.neighborhood||""
+}
+function propertyEquity(p){
+  return Math.max(0,Number(p?.estimatedValue||0)-Number(p?.mortgageBalance||0))
+}
+function ensureStructuredProperties(){
+  db.properties=db.properties||[];
+  db.contacts.forEach(c=>{
+    if(propertiesForContact(c.id).length||!c.property||!["Seller","Past Client"].includes(c.type))return;
+    db.properties.push({
+      id:uid(),contactId:c.id,role:c.type==="Seller"?"Seller Property":"Past Client Home",
+      status:c.stage==="Closed"?"Closed":"Prospect",primary:true,street:c.property,unit:"",city:"",
+      state:"OH",zip:"",county:"",propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",
+      yearBuilt:"",occupancy:"Unknown",ownership:"Unknown",
+      estimatedValue:Number(c.sellerDetails?.estimatedValue||0),
+      mortgageBalance:Number(c.sellerDetails?.mortgageBalance||0),listPrice:0,expectedSalePrice:0,
+      targetDate:"",appointmentDate:"",condition:c.sellerDetails?.condition||"",
+      motivation:c.sellerDetails?.motivation||"",notes:"",createdAt:c.createdAt||TODAY(),updatedAt:TODAY()
+    })
+  })
+}
+function propertyFacts(p){
+  return [
+    p.propertyType,
+    p.beds?`${p.beds} bd`:"",
+    p.baths?`${p.baths} ba`:"",
+    p.sqft?`${Number(p.sqft).toLocaleString()} sf`:"",
+    p.acres?`${p.acres} ac`:"",
+    p.yearBuilt?`Built ${p.yearBuilt}`:""
+  ].filter(Boolean).join(" • ")
+}
+function propertyCardsHtml(c){
+  const properties=propertiesForContact(c.id);
+  if(!properties.length){
+    return `<div class="property-empty"><div><strong>No structured property record yet.</strong><span>Add the address and property facts now so pricing, appointments, equity, and transaction plans stay connected.</span></div><button class="primary-btn compact" data-action="open-property" data-id="${c.id}">＋ Add property</button></div>`
+  }
+  return `<div class="property-cards">${properties.map(p=>{
+    const address=propertyAddress(p)||"Address not completed",equity=propertyEquity(p);
+    return `<article class="property-card ${p.primary?"primary":""}">
+      <div class="property-card-head"><div><span>${esc(p.role)}</span><strong>${esc(address)}</strong><small>${esc(propertyFacts(p)||p.occupancy||"Property details incomplete")}</small></div><span class="badge ${["Active","Under Contract","Closed"].includes(p.status)?"good":"warn"}">${esc(p.status)}</span></div>
+      <div class="property-money">
+        <div><label>Est. value</label><b>${p.estimatedValue?money(p.estimatedValue):"Unknown"}</b></div>
+        <div><label>Mortgage</label><b>${p.mortgageBalance?money(p.mortgageBalance):"Unknown"}</b></div>
+        <div><label>Est. equity</label><b>${p.estimatedValue?money(equity):"Unknown"}</b></div>
+      </div>
+      <div class="property-meta">${p.motivation?`<span><b>Motivation:</b> ${esc(p.motivation)}</span>`:""}${p.targetDate?`<span><b>Target:</b> ${dateLabel(p.targetDate)}</span>`:""}${p.appointmentDate?`<span><b>Appointment:</b> ${dateLabel(p.appointmentDate)}</span>`:""}</div>
+      <div class="property-actions">
+        ${address!=="Address not completed"?`<a class="quick" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}">Map</a>`:""}
+        <button class="quick" data-action="open-property" data-id="${c.id}" data-property="${p.id}">Edit</button>
+        ${!p.primary?`<button class="quick" data-action="make-primary-property" data-id="${c.id}" data-property="${p.id}">Make primary</button>`:""}
+        <button class="quick" data-action="delete-property" data-id="${c.id}" data-property="${p.id}">Remove</button>
+      </div>
+    </article>`
+  }).join("")}<button class="ghost-btn compact full-width" data-action="open-property" data-id="${c.id}">＋ Add another property</button></div>`
+}
+function propertyModal(contactId,propertyId=""){
+  const c=contact(contactId);if(!c)return;
+  const p=(db.properties||[]).find(x=>x.id===propertyId)||{
+    id:"",contactId,role:c.type==="Buyer"?"Buyer Interest":c.type==="Past Client"?"Past Client Home":"Seller Property",
+    status:"Prospect",primary:propertiesForContact(contactId).length===0,street:"",unit:"",city:"",state:"OH",
+    zip:"",county:"",propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",yearBuilt:"",
+    occupancy:"Unknown",ownership:"Unknown",estimatedValue:"",mortgageBalance:"",listPrice:"",
+    expectedSalePrice:"",targetDate:"",appointmentDate:"",condition:"",motivation:"",notes:""
+  };
+  modal(p.id?`Edit ${propertyAddress(p)||"property"}`:"Add property or opportunity",`<div class="form-grid">
+    <input type="hidden" id="propertyContactId" value="${esc(contactId)}">
+    <input type="hidden" id="propertyId" value="${esc(p.id||"")}">
+    <div class="field"><label>Role</label><select id="propertyRole">${["Seller Property","Buyer Interest","Past Client Home","Referral Property","Investment Property","Other"].map(x=>`<option ${p.role===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="propertyStatus">${["Prospect","Valuation","Listing Appointment","Coming Soon","Active","Under Contract","Closed","Not Moving"].map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field full section-label">Property address</div>
+    <div class="field full"><label>Street address</label><input id="propertyStreet" value="${esc(p.street||"")}"></div>
+    <div class="field"><label>Unit</label><input id="propertyUnit" value="${esc(p.unit||"")}"></div>
+    <div class="field"><label>City</label><input id="propertyCity" value="${esc(p.city||"")}"></div>
+    <div class="field"><label>State</label><input id="propertyState" value="${esc(p.state||"OH")}"></div>
+    <div class="field"><label>ZIP</label><input id="propertyZip" value="${esc(p.zip||"")}"></div>
+    <div class="field"><label>County</label><input id="propertyCounty" value="${esc(p.county||"")}"></div>
+    <div class="field full section-label">Property facts</div>
+    <div class="field"><label>Property type</label><select id="propertyType">${["Single Family","Farm","Acreage / Land","Condo","Townhome","Multi-Family","Manufactured","Commercial","Other"].map(x=>`<option ${p.propertyType===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Occupancy</label><select id="propertyOccupancy">${["Unknown","Owner Occupied","Tenant Occupied","Vacant","Second Home"].map(x=>`<option ${p.occupancy===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Ownership</label><select id="propertyOwnership">${["Unknown","Sole","Joint","Trust","Estate","LLC","Other"].map(x=>`<option ${p.ownership===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Beds</label><input id="propertyBeds" type="number" step=".5" value="${esc(p.beds||"")}"></div>
+    <div class="field"><label>Baths</label><input id="propertyBaths" type="number" step=".5" value="${esc(p.baths||"")}"></div>
+    <div class="field"><label>Square feet</label><input id="propertySqft" type="number" value="${esc(p.sqft||"")}"></div>
+    <div class="field"><label>Acres</label><input id="propertyAcres" type="number" step=".01" value="${esc(p.acres||"")}"></div>
+    <div class="field"><label>Year built</label><input id="propertyYear" type="number" value="${esc(p.yearBuilt||"")}"></div>
+    <div class="field full section-label">Opportunity & money</div>
+    <div class="field"><label>Estimated value</label><input id="propertyEstimatedValue" type="number" value="${esc(p.estimatedValue||"")}"></div>
+    <div class="field"><label>Mortgage balance</label><input id="propertyMortgageBalance" type="number" value="${esc(p.mortgageBalance||"")}"></div>
+    <div class="field"><label>List price</label><input id="propertyListPrice" type="number" value="${esc(p.listPrice||"")}"></div>
+    <div class="field"><label>Expected sale price</label><input id="propertyExpectedSalePrice" type="number" value="${esc(p.expectedSalePrice||"")}"></div>
+    <div class="field"><label>Target move/list date</label><input id="propertyTargetDate" type="date" value="${esc(p.targetDate||"")}"></div>
+    <div class="field"><label>Listing/showing appointment</label><input id="propertyAppointmentDate" type="date" value="${esc(p.appointmentDate||"")}"></div>
+    <div class="field full"><label>Condition</label><input id="propertyCondition" value="${esc(p.condition||"")}" placeholder="Updated, deferred maintenance, roof concern..."></div>
+    <div class="field full"><label>Motivation</label><input id="propertyMotivation" value="${esc(p.motivation||"")}" placeholder="Downsizing, inherited property, relocation, more land..."></div>
+    <div class="field full"><label>Property notes</label><textarea id="propertyNotes">${esc(p.notes||"")}</textarea></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-property">Save property</button>`)
+}
+function saveProperty(){
+  const contactId=document.getElementById("propertyContactId").value,c=contact(contactId);
+  if(!c)return;
+  const id=document.getElementById("propertyId").value||uid(),old=(db.properties||[]).find(p=>p.id===id);
+  const p={
+    id,contactId,role:document.getElementById("propertyRole").value,status:document.getElementById("propertyStatus").value,
+    primary:old?.primary??propertiesForContact(contactId).length===0,
+    street:document.getElementById("propertyStreet").value.trim(),unit:document.getElementById("propertyUnit").value.trim(),
+    city:document.getElementById("propertyCity").value.trim(),state:document.getElementById("propertyState").value.trim()||"OH",
+    zip:document.getElementById("propertyZip").value.trim(),county:document.getElementById("propertyCounty").value.trim(),
+    propertyType:document.getElementById("propertyType").value,beds:document.getElementById("propertyBeds").value,
+    baths:document.getElementById("propertyBaths").value,sqft:document.getElementById("propertySqft").value,
+    acres:document.getElementById("propertyAcres").value,yearBuilt:document.getElementById("propertyYear").value,
+    occupancy:document.getElementById("propertyOccupancy").value,ownership:document.getElementById("propertyOwnership").value,
+    estimatedValue:Number(document.getElementById("propertyEstimatedValue").value||0),
+    mortgageBalance:Number(document.getElementById("propertyMortgageBalance").value||0),
+    listPrice:Number(document.getElementById("propertyListPrice").value||0),
+    expectedSalePrice:Number(document.getElementById("propertyExpectedSalePrice").value||0),
+    targetDate:document.getElementById("propertyTargetDate").value,
+    appointmentDate:document.getElementById("propertyAppointmentDate").value,
+    condition:document.getElementById("propertyCondition").value.trim(),
+    motivation:document.getElementById("propertyMotivation").value.trim(),
+    notes:document.getElementById("propertyNotes").value.trim(),
+    createdAt:old?.createdAt||TODAY(),updatedAt:TODAY()
+  };
+  const i=db.properties.findIndex(x=>x.id===id);if(i>=0)db.properties[i]=p;else db.properties.push(p);
+  if(p.primary){
+    db.properties.filter(x=>x.contactId===contactId&&x.id!==p.id).forEach(x=>x.primary=false);
+    c.property=propertyAddress(p);
+    if(c.type==="Seller"){
+      c.sellerDetails={...c.sellerDetails,estimatedValue:p.estimatedValue||c.sellerDetails?.estimatedValue||"",mortgageBalance:p.mortgageBalance||c.sellerDetails?.mortgageBalance||"",condition:p.condition||c.sellerDetails?.condition||"",motivation:p.motivation||c.sellerDetails?.motivation||""}
+    }
+  }
+  if(p.appointmentDate&&!db.tasks.some(t=>t.contactId===contactId&&t.type==="Appointment"&&t.due===p.appointmentDate&&t.status!=="Done")){
+    db.tasks.unshift({id:uid(),contactId,title:`${p.role==="Seller Property"?"Listing":"Property"} appointment — ${propertyAddress(p)||fullName(c)}`,type:"Appointment",due:p.appointmentDate,status:"Open",priority:"High",planRunId:"",completedAt:"",createdAt:TODAY()})
+  }
+  c.updatedAt=TODAY();save();closeModal();toast("Property saved",propertyAddress(p)||p.role);renderContact(contactId)
+}
+function deleteProperty(contactId,propertyId){
+  const c=contact(contactId),p=(db.properties||[]).find(x=>x.id===propertyId);if(!c||!p)return;
+  if(!confirm(`Remove ${propertyAddress(p)||"this property"} from ${fullName(c)}?`))return;
+  db.properties=db.properties.filter(x=>x.id!==propertyId);
+  const remaining=propertiesForContact(contactId);
+  if(p.primary&&remaining.length)remaining[0].primary=true;
+  c.property=propertyDisplay(c);c.updatedAt=TODAY();save();toast("Property removed",propertyAddress(p));renderContact(contactId)
+}
+function makePrimaryProperty(contactId,propertyId){
+  const c=contact(contactId),p=(db.properties||[]).find(x=>x.id===propertyId);if(!c||!p)return;
+  db.properties.filter(x=>x.contactId===contactId).forEach(x=>x.primary=x.id===propertyId);
+  c.property=propertyAddress(p);c.updatedAt=TODAY();save();toast("Primary property updated",propertyAddress(p));renderContact(contactId)
+}
+function leadIntakeItems(c){
+  const p=primaryProperty(c),items=[
+    {label:"Valid phone or email",done:hasPhone(c)||hasEmail(c)},
+    {label:"Lead source",done:Boolean(c.source&&c.source!=="Other")},
+    {label:"Timeframe",done:Boolean(c.timeframe&&c.timeframe!=="Unknown")},
+    {label:"Next follow-up",done:Boolean(c.followUp)},
+    {label:"Decision makers / household",done:(c.household||[]).some(m=>m.decisionMaker)||Boolean(c.sellerDetails?.decisionMakers)}
+  ];
+  if(c.type==="Seller"){
+    items.push(
+      {label:"Full property address",done:Boolean(p?.street&&p?.city&&p?.zip)},
+      {label:"Seller motivation",done:Boolean(p?.motivation||c.sellerDetails?.motivation)},
+      {label:"Estimated value or pricing context",done:Boolean(p?.estimatedValue)},
+      {label:"Mortgage / equity context",done:Boolean(p?.mortgageBalance)}
+    )
+  }else if(c.type==="Buyer"){
+    items.push(
+      {label:"Target areas",done:Boolean(c.buyerDetails?.areas||c.property)},
+      {label:"Budget or desired payment",done:Boolean(c.buyerDetails?.budget||c.buyerDetails?.desiredPayment)},
+      {label:"Preapproval / lender status",done:Boolean(c.buyerDetails?.preapproval&&c.buyerDetails.preapproval!=="Unknown")}
+    )
+  }else if(["Realtor","Lender"].includes(c.type)){
+    items.push({label:"Company",done:Boolean(c.professionalDetails?.company)},{label:"Service area / specialty",done:Boolean(c.professionalDetails?.serviceArea||c.professionalDetails?.specialties)})
+  }else{
+    items.push({label:"Relationship context",done:Boolean(c.sphereDetails?.relationship)},{label:"Homeowner / neighborhood",done:Boolean(c.sphereDetails?.homeowner!=="Unknown"||c.sphereDetails?.neighborhood)})
+  }
+  return items
+}
+function leadIntakeHtml(c){
+  const items=leadIntakeItems(c),done=items.filter(x=>x.done).length,pct=Math.round(done/items.length*100);
+  return `<div class="intake-score"><div><strong>${pct}%</strong><span>lead record complete</span></div><div class="intake-track"><i style="width:${pct}%"></i></div></div>
+    <div class="intake-checklist">${items.map(item=>`<div class="${item.done?"done":"missing"}"><span>${item.done?"✓":"!"}</span><b>${esc(item.label)}</b></div>`).join("")}</div>
+    ${pct<100?`<button class="ghost-btn compact full-width" data-action="open-contact" data-id="${c.id}">Complete lead intake</button>`:""}`
+}
+function syncPrimaryPropertyFromSellerForm(c){
+  if(c.type!=="Seller")return;
+  const street=document.getElementById("sellerPropertyStreet")?.value.trim()||"";
+  const city=document.getElementById("sellerPropertyCity")?.value.trim()||"";
+  const state=document.getElementById("sellerPropertyState")?.value.trim()||"OH";
+  const zip=document.getElementById("sellerPropertyZip")?.value.trim()||"";
+  const county=document.getElementById("sellerPropertyCounty")?.value.trim()||"";
+  if(!street&&!city&&!zip)return;
+  const current=primaryProperty(c),id=current?.id||uid();
+  const p={
+    id,contactId:c.id,role:"Seller Property",status:current?.status||"Prospect",primary:true,
+    street,unit:document.getElementById("sellerPropertyUnit")?.value.trim()||"",
+    city,state,zip,county,propertyType:document.getElementById("sellerPropertyType")?.value||"Single Family",
+    beds:document.getElementById("sellerPropertyBeds")?.value||"",baths:document.getElementById("sellerPropertyBaths")?.value||"",
+    sqft:document.getElementById("sellerPropertySqft")?.value||"",acres:document.getElementById("sellerPropertyAcres")?.value||"",
+    yearBuilt:document.getElementById("sellerPropertyYear")?.value||"",occupancy:document.getElementById("sellerPropertyOccupancy")?.value||"Unknown",
+    ownership:document.getElementById("sellerPropertyOwnership")?.value||"Unknown",
+    estimatedValue:Number(document.getElementById("sellerEstimatedValue")?.value||0),
+    mortgageBalance:Number(document.getElementById("sellerMortgageBalance")?.value||0),
+    listPrice:current?.listPrice||0,expectedSalePrice:current?.expectedSalePrice||0,
+    targetDate:document.getElementById("sellerTargetDate")?.value||"",appointmentDate:document.getElementById("sellerAppointmentDate")?.value||"",
+    condition:document.getElementById("sellerCondition")?.value.trim()||"",
+    motivation:document.getElementById("sellerMotivation")?.value.trim()||"",notes:current?.notes||"",
+    createdAt:current?.createdAt||TODAY(),updatedAt:TODAY()
+  };
+  const i=db.properties.findIndex(x=>x.id===id);if(i>=0)db.properties[i]=p;else db.properties.push(p);
+  db.properties.filter(x=>x.contactId===c.id&&x.id!==id).forEach(x=>x.primary=false);
+  c.property=propertyAddress(p)
+}
+function untouchedLeads(){
+  return db.contacts.filter(c=>isOpen(c)&&["Seller","Buyer"].includes(c.type)&&!c.lastCommunication&&daysSince(c.createdAt)<=14)
+    .sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)))
+}
+function upcomingTasksByType(type,days=7){
+  const end=addDays(TODAY(),days);
+  return db.tasks.filter(t=>t.status!=="Done"&&t.type===type&&t.due>=TODAY()&&t.due<=end).sort((a,b)=>a.due.localeCompare(b.due))
+}
+function dailyLane(title,subtitle,items,kind){
+  return `<section class="daily-lane"><div class="daily-lane-head"><div><h3>${esc(title)}</h3><span>${esc(subtitle)}</span></div><b>${items.length}</b></div>
+    <div class="daily-lane-body">${items.length?items.slice(0,5).map(item=>{
+      const c=item.contactId?contact(item.contactId):item;
+      if(!c)return "";
+      const detail=item.contactId?`${item.type} • ${dateLabel(item.due)}`:`${c.type} • ${c.stage}${c.followUp?` • ${dateLabel(c.followUp)}`:""}`;
+      return `<div class="daily-lead-row">${avatar(c)}<div><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a><small>${esc(detail)}</small></div>${kind==="lead"?contactQuickActions(c):`<button class="quick" data-action="complete-task-button" data-id="${item.id}">Done</button>`}</div>`
+    }).join(""):`<div class="lane-empty">Nothing waiting here.</div>`}</div></section>`
+}
+function dailyCommandHtml(){
+  const untouched=untouchedLeads(),followups=dueContacts().sort((a,b)=>(b.heat==="Hot")-(a.heat==="Hot")||String(a.followUp).localeCompare(String(b.followUp))),
+    appointments=upcomingTasksByType("Appointment",7),deadlines=upcomingTasksByType("Transaction",7);
+  return `<section class="daily-command">
+    <div class="daily-command-head"><div><div class="eyebrow">LEAD COMMAND CENTER</div><h2>What a Realtor actually needs today</h2><p>Respond, follow up, attend appointments, and protect contract deadlines before doing anything else.</p></div><a class="primary-btn compact" href="#/people">Open lead database</a></div>
+    <div class="daily-lanes">
+      ${dailyLane("New & untouched","No real communication logged",untouched,"lead")}
+      ${dailyLane("Follow up now","Today and overdue",followups,"lead")}
+      ${dailyLane("Appointments","Next seven days",appointments,"task")}
+      ${dailyLane("Deadlines","Transaction tasks due soon",deadlines,"task")}
+    </div>
+  </section>`
+}
+
 function renderTagChips(tags=[],contactId=""){
   if(!tags.length)return `<span class="tag-empty">No tags</span>`;
   return `<div class="tag-chips">${tags.map(tag=>`<button class="tag-chip" data-action="filter-tag" data-tag="${esc(tag)}" title="Show everyone tagged ${esc(tag)}"><span>${esc(tag)}</span>${contactId?`<b data-action="remove-tag" data-id="${contactId}" data-tag="${esc(tag)}" title="Remove tag">×</b>`:""}</button>`).join("")}</div>`
@@ -229,6 +487,7 @@ function task(id){return db.tasks.find(t=>t.id===id)}
 function hasPhone(c){return Boolean((c?.phone||"").replace(/\D/g,""))}
 function hasEmail(c){return Boolean(c?.email && c.email.includes("@"))}
 function save(evaluate=true){
+  ensureStructuredProperties();
   db.settings.lastSavedAt=NOW();
   const payload=JSON.stringify(db);
   localStorage.setItem(STORAGE_KEY,payload);
@@ -293,7 +552,19 @@ function normalize(raw){
       timeframe:p.timeframe||"Unknown",followUp:p.followUp||"",lastCommunication:p.lastCommunication||p.lastContact||"",
       source:p.source||"Sphere",gci:Number(p.gci||0),property:p.property||"",tags:Array.isArray(p.tags)?p.tags:[],
       notes:p.notes||"",createdAt:p.createdAt||TODAY(),updatedAt:p.updatedAt||TODAY(),
-      household:Array.isArray(p.household)?p.household:[],
+      household:Array.isArray(p.household)?p.household.map(member=>({
+        id:member.id||uid(),
+        relationship:member.relationship||member.type||"Spouse / Partner",
+        firstName:member.firstName||String(member.name||"").trim().split(/\s+/)[0]||"",
+        lastName:member.lastName||String(member.name||"").trim().split(/\s+/).slice(1).join(" ")||"",
+        phone:member.phone||"",
+        email:member.email||"",
+        decisionMaker:member.decisionMaker!==false,
+        anniversary:member.anniversary||"",
+        birthday:member.birthday||"",
+        notes:member.notes||"",
+        linkedContactId:member.linkedContactId||""
+      })):[],
       preferences:p.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
       sellerDetails:p.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""},
       buyerDetails:p.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""},
@@ -302,6 +573,32 @@ function normalize(raw){
       alertSettings:p.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},
       behaviors:Array.isArray(p.behaviors)?p.behaviors:[]
     }
+  });
+  const properties=(Array.isArray(raw.properties)?raw.properties:[]).map(p=>({
+    id:p.id||uid(),contactId:p.contactId||"",role:p.role||"Seller Property",status:p.status||"Prospect",
+    primary:p.primary!==false,street:p.street||"",unit:p.unit||"",city:p.city||"",state:p.state||"OH",
+    zip:p.zip||"",county:p.county||"",propertyType:p.propertyType||"Single Family",
+    beds:p.beds||"",baths:p.baths||"",sqft:p.sqft||"",acres:p.acres||"",yearBuilt:p.yearBuilt||"",
+    occupancy:p.occupancy||"Unknown",ownership:p.ownership||"Unknown",
+    estimatedValue:Number(p.estimatedValue||0),mortgageBalance:Number(p.mortgageBalance||0),
+    listPrice:Number(p.listPrice||0),expectedSalePrice:Number(p.expectedSalePrice||0),
+    targetDate:p.targetDate||"",appointmentDate:p.appointmentDate||"",condition:p.condition||"",
+    motivation:p.motivation||"",notes:p.notes||"",createdAt:p.createdAt||TODAY(),updatedAt:p.updatedAt||TODAY()
+  }));
+  contacts.forEach(c=>{
+    if(properties.some(p=>p.contactId===c.id))return;
+    if(!c.property||!["Seller","Past Client"].includes(c.type))return;
+    properties.push({
+      id:uid(),contactId:c.id,role:c.type==="Seller"?"Seller Property":"Past Client Home",
+      status:c.stage==="Closed"?"Closed":"Prospect",primary:true,street:c.property,unit:"",city:"",
+      state:"OH",zip:"",county:"",propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",
+      yearBuilt:"",occupancy:"Unknown",ownership:"Unknown",
+      estimatedValue:Number(c.sellerDetails?.estimatedValue||0),
+      mortgageBalance:Number(c.sellerDetails?.mortgageBalance||0),listPrice:0,expectedSalePrice:0,
+      targetDate:"",appointmentDate:"",condition:c.sellerDetails?.condition||"",
+      motivation:c.sellerDetails?.motivation||"",notes:"Migrated from the earlier contact property field.",
+      createdAt:c.createdAt||TODAY(),updatedAt:TODAY()
+    })
   });
   const communications=(raw.communications||raw.activities||[]).map(a=>({
     id:a.id||uid(),contactId:a.contactId||a.personId||"",channel:a.channel||a.type||"Note",
@@ -315,7 +612,7 @@ function normalize(raw){
   const automationQueue=Array.isArray(raw.automationQueue)?raw.automationQueue:[];
   const automationLogs=Array.isArray(raw.automationLogs)?raw.automationLogs:[];
   const automationHistory=Array.isArray(raw.automationHistory)?raw.automationHistory:[];
-  return {contacts,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",...(raw.settings||{})}};
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -330,7 +627,7 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],settings:{}});
 }
 
 function route(){
@@ -428,7 +725,9 @@ function renderToday(){
     pageHead("Daily operating system",`Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${db.settings.agentName||"Jacob"}`,"Work the right relationships before marketing or admin.",`<button class="ghost-btn" data-action="seed-demo">Load sample data</button><button class="primary-btn" data-action="open-contact">＋ Add person</button>`) +
     `<section class="focus-card"><div><label>ONE THING NOW</label><h2>${esc(next.title)}</h2><p>${esc(next.detail)}</p></div><a class="primary-btn" href="${next.route}">${esc(next.action)} →</a></section>
     ${holtonPlanHtml()}
+    ${dailyCommandHtml()}
     <section class="metric-grid">
+      <div class="metric"><label>Untouched leads</label><strong>${untouchedLeads().length}</strong><small>New leads with no communication</small></div>
       <div class="metric"><label>Follow-ups due</label><strong>${due.length}</strong><small>Today and overdue</small></div>
       <div class="metric"><label>Unread messages</label><strong>${unread.length}</strong><small>Inbox conversations</small></div>
       <div class="metric"><label>Hot sellers</label><strong>${sellers.filter(c=>c.heat==="Hot").length}</strong><small>Listing opportunities</small></div>
@@ -471,6 +770,8 @@ function smartLists(){
   return [
     {id:"all",name:"All People",items:db.contacts},
     {id:"new",name:"New Leads",items:open.filter(c=>c.stage==="New"||c.stage==="Attempted Contact")},
+    {id:"untouched",name:"Untouched Leads",items:untouchedLeads()},
+    {id:"appointments",name:"Appointments This Week",items:[...new Set(upcomingTasksByType("Appointment",7).map(t=>contact(t.contactId)).filter(Boolean))]},
     {id:"due",name:"Follow-Up Due",items:dueContacts()},
     {id:"hot-sellers",name:"Hot Sellers",items:open.filter(c=>c.type==="Seller"&&c.heat==="Hot")},
     {id:"active-buyers",name:"Active Buyers",items:open.filter(c=>c.type==="Buyer"&&!["New","Attempted Contact","Contacted","Nurture"].includes(c.stage))},
@@ -483,7 +784,7 @@ function filteredPeople(){
   const list=smartLists().find(x=>x.id===state.smartList)?.items||db.contacts;
   const q=state.peopleQuery.toLowerCase();
   return list.filter(c=>{
-    const blob=[fullName(c),c.phone,c.email,c.property,c.source,...c.tags].join(" ").toLowerCase();
+    const blob=[fullName(c),c.phone,c.email,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();
     return (!q||blob.includes(q))&&(!state.peopleType||c.type===state.peopleType)&&(!state.peopleStage||c.stage===state.peopleStage)&&(!state.peopleHeat||c.heat===state.peopleHeat)
   }).sort((a,b)=>(a.followUp||"9999").localeCompare(b.followUp||"9999"))
 }
@@ -571,10 +872,133 @@ function nextActionFor(c,tasks){
   if(c.followUp)return {title:`Complete scheduled follow-up with ${fullName(c)}`,due:c.followUp,channel:hasPhone(c)?"Call":"Email",taskId:""};
   return {title:"Create the next meaningful touch",due:TODAY(),channel:hasPhone(c)?"Call":"Email",taskId:""};
 }
+
+function householdName(member){
+  return [member.firstName,member.lastName].filter(Boolean).join(" ").trim()||"Unnamed household member"
+}
+function spouseMember(c){
+  return (c.household||[]).find(member=>["Spouse","Partner","Spouse / Partner"].includes(member.relationship))
+}
+function householdHtml(c){
+  const members=c.household||[];
+  if(!members.length){
+    return `<div class="compact-empty household-empty"><div><strong>No spouse or household members added.</strong><span>Add the people who share decisions, finances, or the property.</span></div><button class="ghost-btn compact" data-action="open-household" data-id="${c.id}">＋ Add spouse</button></div>`;
+  }
+  return `<div class="household-list">${members.map(member=>{
+    const linked=member.linkedContactId?contact(member.linkedContactId):null;
+    return `<article class="household-member">
+      <div class="household-avatar" aria-hidden="true">${esc((member.firstName?.[0]||"?")+(member.lastName?.[0]||""))}</div>
+      <div class="household-copy">
+        <div class="household-name-row">
+          <strong>${linked?`<a class="person-name-link" href="#/contact/${linked.id}">${esc(householdName(member))}</a>`:esc(householdName(member))}</strong>
+          <span class="badge">${esc(member.relationship||"Household")}</span>
+          ${member.decisionMaker?`<span class="badge good">Decision maker</span>`:""}
+        </div>
+        <small>${esc(member.phone||"No phone")}${member.email?` • ${esc(member.email)}`:" • No email"}</small>
+        ${member.notes?`<p>${esc(member.notes)}</p>`:""}
+      </div>
+      <div class="household-actions">
+        ${member.phone?`<button class="quick call" data-action="household-communicate" data-channel="Call" data-contact="${c.id}" data-member="${member.id}">☎</button><button class="quick text" data-action="household-communicate" data-channel="Text" data-contact="${c.id}" data-member="${member.id}">✉</button>`:""}
+        ${member.email?`<button class="quick email" data-action="household-communicate" data-channel="Email" data-contact="${c.id}" data-member="${member.id}">@</button>`:""}
+        <button class="quick" data-action="open-household" data-id="${c.id}" data-member="${member.id}">Edit</button>
+        ${linked?`<a class="quick" href="#/contact/${linked.id}">Open</a>`:`<button class="quick" data-action="promote-household" data-id="${c.id}" data-member="${member.id}">Make contact</button>`}
+      </div>
+    </article>`
+  }).join("")}<button class="ghost-btn compact full-width" data-action="open-household" data-id="${c.id}">＋ Add household member</button></div>`
+}
+function householdModal(contactId,memberId=""){
+  const c=contact(contactId);
+  if(!c)return;
+  const member=(c.household||[]).find(m=>m.id===memberId)||{
+    id:"",relationship:"Spouse / Partner",firstName:"",lastName:"",phone:"",email:"",
+    decisionMaker:true,anniversary:"",birthday:"",notes:"",linkedContactId:""
+  };
+  modal(member.id?`Edit ${householdName(member)}`:`Add spouse or household member`,`<div class="form-grid">
+    <input type="hidden" id="householdContactId" value="${esc(c.id)}">
+    <input type="hidden" id="householdMemberId" value="${esc(member.id||"")}">
+    <div class="field"><label>Relationship</label><select id="householdRelationship">${["Spouse / Partner","Spouse","Partner","Parent","Adult Child","Child","Sibling","Co-owner","Other"].map(x=>`<option ${member.relationship===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Decision maker</label><select id="householdDecisionMaker"><option value="true" ${member.decisionMaker?"selected":""}>Yes</option><option value="false" ${!member.decisionMaker?"selected":""}>No</option></select></div>
+    <div class="field"><label>First name</label><input id="householdFirstName" value="${esc(member.firstName||"")}"></div>
+    <div class="field"><label>Last name</label><input id="householdLastName" value="${esc(member.lastName||"")}"></div>
+    <div class="field"><label>Phone</label><input id="householdPhone" type="tel" value="${esc(member.phone||"")}"></div>
+    <div class="field"><label>Email</label><input id="householdEmail" type="email" value="${esc(member.email||"")}"></div>
+    <div class="field"><label>Anniversary</label><input id="householdAnniversary" type="date" value="${esc(member.anniversary||"")}"></div>
+    <div class="field"><label>Birthday</label><input id="householdBirthday" type="date" value="${esc(member.birthday||"")}"></div>
+    <div class="field full"><label>Notes</label><textarea id="householdNotes" placeholder="Role in the decision, communication preferences, ownership details...">${esc(member.notes||"")}</textarea></div>
+    <div class="field full"><div class="warning">Adding a spouse here keeps the household together. Use “Make contact” later when they need their own timeline, tasks, automations, or lead status.</div></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${member.id?`<button class="danger-btn" data-action="delete-household" data-id="${c.id}" data-member="${member.id}">Remove</button>`:""}<button class="primary-btn" data-action="save-household">Save household member</button>`)
+}
+function saveHousehold(){
+  const contactId=document.getElementById("householdContactId").value,c=contact(contactId);
+  if(!c)return;
+  const memberId=document.getElementById("householdMemberId").value||uid(),
+    firstName=document.getElementById("householdFirstName").value.trim(),
+    lastName=document.getElementById("householdLastName").value.trim();
+  if(!firstName){alert("Add at least a first name.");return}
+  const old=(c.household||[]).find(m=>m.id===memberId);
+  const member={
+    id:memberId,
+    relationship:document.getElementById("householdRelationship").value,
+    firstName,lastName,
+    phone:document.getElementById("householdPhone").value.trim(),
+    email:document.getElementById("householdEmail").value.trim(),
+    decisionMaker:document.getElementById("householdDecisionMaker").value==="true",
+    anniversary:document.getElementById("householdAnniversary").value,
+    birthday:document.getElementById("householdBirthday").value,
+    notes:document.getElementById("householdNotes").value.trim(),
+    linkedContactId:old?.linkedContactId||""
+  };
+  const i=(c.household||[]).findIndex(m=>m.id===memberId);
+  if(i>=0)c.household[i]=member;else c.household.push(member);
+  c.updatedAt=TODAY();
+  save();closeModal();toast("Household updated",`${householdName(member)} added to ${fullName(c)}`);renderContact(c.id)
+}
+function deleteHousehold(contactId,memberId){
+  const c=contact(contactId),member=(c?.household||[]).find(m=>m.id===memberId);
+  if(!c||!member)return;
+  if(!confirm(`Remove ${householdName(member)} from this household?`))return;
+  c.household=c.household.filter(m=>m.id!==memberId);
+  c.updatedAt=TODAY();save();closeModal();toast("Household member removed",householdName(member));renderContact(c.id)
+}
+function promoteHouseholdToContact(contactId,memberId){
+  const c=contact(contactId),member=(c?.household||[]).find(m=>m.id===memberId);
+  if(!c||!member)return;
+  if(member.linkedContactId&&contact(member.linkedContactId)){location.hash=`#/contact/${member.linkedContactId}`;return}
+  const newContact={
+    id:uid(),firstName:member.firstName,lastName:member.lastName,name:householdName(member),
+    phone:member.phone,email:member.email,type:c.type,stage:c.stage,heat:c.heat,timeframe:c.timeframe,
+    followUp:c.followUp,lastCommunication:"",source:c.source,gci:0,property:c.property,
+    tags:[...new Set([...(c.tags||[]),"Household"])],notes:`Household member of ${fullName(c)}.${member.notes?` ${member.notes}`:""}`,
+    createdAt:TODAY(),updatedAt:TODAY(),household:[],preferences:{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
+    sellerDetails:{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""},
+    buyerDetails:{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""},
+    sphereDetails:{relationship:"",birthday:member.birthday||"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""},
+    professionalDetails:{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""},
+    alertSettings:{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},
+    behaviors:[]
+  };
+  db.contacts.unshift(newContact);
+  member.linkedContactId=newContact.id;
+  c.updatedAt=TODAY();
+  db.communications.unshift({id:uid(),contactId:c.id,channel:"Note",direction:"outbound",outcome:"Household linked",body:`${householdName(member)} was promoted to their own CRM contact.`,date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});
+  save();toast("Contact created",householdName(member));location.hash=`#/contact/${newContact.id}`
+}
+function householdCommunicate(contactId,memberId,channel){
+  const c=contact(contactId),member=(c?.household||[]).find(m=>m.id===memberId);
+  if(!c||!member)return;
+  const subject=`Holton Homes follow-up`;
+  if(channel==="Call"&&member.phone)location.href=`tel:${member.phone.replace(/[^\d+]/g,"")}`;
+  if(channel==="Text"&&member.phone)location.href=`sms:${member.phone.replace(/[^\d+]/g,"")}`;
+  if(channel==="Email"&&member.email)location.href=`mailto:${member.email}?subject=${encodeURIComponent(subject)}`;
+  db.communications.unshift({id:uid(),contactId:c.id,channel,direction:"outbound",outcome:`Household: ${householdName(member)}`,body:`Launched ${channel.toLowerCase()} to ${householdName(member)}.`,date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});
+  c.lastCommunication=TODAY();c.updatedAt=TODAY();save();toast(`${channel} launched`,householdName(member));renderContact(c.id)
+}
+
 function typeSpecificHtml(c){
   if(c.type==="Seller"){
     const d=c.sellerDetails||{};
-    return `${detail("Property",c.property||"Not set")}${detail("Estimated value",d.estimatedValue?money(d.estimatedValue):"Unknown")}${detail("Motivation",d.motivation||"Unknown")}${detail("Mortgage balance",d.mortgageBalance?money(d.mortgageBalance):"Unknown")}${detail("Condition",d.condition||"Unknown")}${detail("Decision makers",d.decisionMakers||"Unknown")}`;
+    const p=primaryProperty(c);
+    return `${detail("Primary property",propertyDisplay(c)||"Not set")}${detail("Estimated value",p?.estimatedValue?money(p.estimatedValue):d.estimatedValue?money(d.estimatedValue):"Unknown")}${detail("Estimated equity",p?.estimatedValue?money(propertyEquity(p)):"Unknown")}${detail("Motivation",p?.motivation||d.motivation||"Unknown")}${detail("Mortgage balance",p?.mortgageBalance?money(p.mortgageBalance):d.mortgageBalance?money(d.mortgageBalance):"Unknown")}${detail("Condition",p?.condition||d.condition||"Unknown")}${detail("Decision makers",d.decisionMakers||"Unknown")}`;
   }
   if(c.type==="Buyer"){
     const d=c.buyerDetails||{};
@@ -652,7 +1076,7 @@ function renderContact(id){
       <main class="contact-main">
         <section class="what-matters">
           <div><div class="eyebrow">WHAT MATTERS</div><p>${esc(summary)}</p></div>
-          <div class="score-block"><span class="score ${scoreClass(s.score)}">${s.score}</span><div><strong>${scoreLabel(s.score)} score</strong><small>${improvements.length?`Improve it: ${esc(improvements.join(" • "))}`:"Strong relationship data and activity."}</small></div></div>
+          ${(c.household||[]).length&&!c.household.some(member=>member.decisionMaker)?`<div class="decision-warning">Confirm who makes the final decision.</div>`:""}<div class="score-block"><span class="score ${scoreClass(s.score)}">${s.score}</span><div><strong>${scoreLabel(s.score)} score</strong><small>${improvements.length?`Improve it: ${esc(improvements.join(" • "))}`:"Strong relationship data and activity."}</small></div></div>
         </section>
 
         ${activityComposer(c)}
@@ -668,7 +1092,13 @@ function renderContact(id){
           ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Projected GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
         </div></details>
 
+        <details class="compact-panel" open><summary>Lead intake & data health <span>${leadIntakeItems(c).filter(x=>x.done).length}/${leadIntakeItems(c).length}</span></summary><div class="compact-body">${leadIntakeHtml(c)}</div></details>
+
+        <details class="compact-panel" open><summary>Properties & opportunities <span>${propertiesForContact(c.id).length}</span></summary><div class="compact-body property-panel-body">${propertyCardsHtml(c)}</div></details>
+
         <details class="compact-panel" open><summary>${c.type==="Seller"?"Seller opportunity":c.type==="Buyer"?"Buyer criteria":c.type==="Realtor"?"Realtor partner":c.type==="Lender"?"Lending partner":"Sphere relationship"} <span>${esc(c.type)}</span></summary><div class="compact-body detail-grid">${typeSpecificHtml(c)}</div></details>
+
+        <details class="compact-panel" open><summary>Household & decision makers <span>${(c.household||[]).length}</span></summary><div class="compact-body household-panel-body">${householdHtml(c)}</div></details>
 
         <details class="compact-panel" open><summary>Upcoming tasks <span>${tasks.length}</span></summary><div class="compact-body">
           ${tasks.length?tasks.slice(0,5).map(t=>`<div class="sidebar-task"><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)} • ${dateLabel(t.due)}</small></div></div>`).join(""):`<div class="compact-empty"><span>No open tasks.</span><button class="ghost-btn compact" data-action="open-task" data-id="${c.id}">＋ Add task</button></div>`}
@@ -699,7 +1129,9 @@ function contactSummary(c,s){
   else pieces.push(`${first} is a ${c.heat.toLowerCase()} ${c.type.toLowerCase()} contact currently in ${c.stage}.`);
   if(c.timeframe&&c.timeframe!=="Unknown")pieces.push(`Timing: ${c.timeframe.toLowerCase()}.`);
   else pieces.push("Timing is still unknown.");
-  if(c.property)pieces.push(`${c.type==="Buyer"?"Target":"Property"}: ${c.property}.`);
+  if(propertyDisplay(c))pieces.push(`${c.type==="Buyer"?"Target":"Property"}: ${propertyDisplay(c)}.`);
+  const spouse=spouseMember(c);
+  if(spouse)pieces.push(`${householdName(spouse)} is listed as ${spouse.relationship.toLowerCase()}${spouse.decisionMaker?" and a decision maker":""}.`);
   const high=(c.behaviors||[]).filter(b=>["Requested Showing","Home Valuation","Repeated Property View","Saved Property"].includes(b.type)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
   if(high)pieces.push(`Recent signal: ${high.type.toLowerCase()}${high.property?` — ${high.property}`:""}.`);
   pieces.push(c.followUp?`Next follow-up: ${dateLabel(c.followUp)}.`:"No next follow-up is scheduled.");
@@ -750,7 +1182,7 @@ function personalizeTemplate(text,c){
     first_name:c?.firstName||"",
     last_name:c?.lastName||"",
     full_name:c?fullName(c):"",
-    property:c?.property||"your property",
+    property:c?propertyDisplay(c)||"your property":"your property",
     agent_name:db.settings.agentName||"Jacob",
     agent_email:db.settings.agentEmail||"",
     agent_phone:db.settings.agentPhone||"",
@@ -1143,13 +1575,30 @@ function contactOptions(selected=""){return `<option value="">Choose person</opt
 
 function contactSpecificForm(c,type){
   if(type==="Seller"){
-    const d=c.sellerDetails||{};
-    return `<div class="field full section-label">Seller opportunity</div>
-      <div class="field"><label>Motivation</label><input id="sellerMotivation" value="${esc(d.motivation||"")}"></div>
-      <div class="field"><label>Estimated value</label><input id="sellerEstimatedValue" type="number" value="${esc(d.estimatedValue||"")}"></div>
-      <div class="field"><label>Mortgage balance</label><input id="sellerMortgageBalance" type="number" value="${esc(d.mortgageBalance||"")}"></div>
-      <div class="field"><label>Condition</label><input id="sellerCondition" value="${esc(d.condition||"")}"></div>
-      <div class="field full"><label>Decision makers</label><input id="sellerDecisionMakers" value="${esc(d.decisionMakers||"")}"></div>`;
+    const d=c.sellerDetails||{},p=primaryProperty(c)||{};
+    return `<div class="field full section-label">Seller lead intake</div>
+      <div class="field full"><label>Street address</label><input id="sellerPropertyStreet" value="${esc(p.street||(!p.city?c.property||"":""))}"></div>
+      <div class="field"><label>Unit</label><input id="sellerPropertyUnit" value="${esc(p.unit||"")}"></div>
+      <div class="field"><label>City</label><input id="sellerPropertyCity" value="${esc(p.city||"")}"></div>
+      <div class="field"><label>State</label><input id="sellerPropertyState" value="${esc(p.state||"OH")}"></div>
+      <div class="field"><label>ZIP</label><input id="sellerPropertyZip" value="${esc(p.zip||"")}"></div>
+      <div class="field"><label>County</label><input id="sellerPropertyCounty" value="${esc(p.county||"")}"></div>
+      <div class="field"><label>Property type</label><select id="sellerPropertyType">${["Single Family","Farm","Acreage / Land","Condo","Townhome","Multi-Family","Manufactured","Commercial","Other"].map(x=>`<option ${(p.propertyType||"Single Family")===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Occupancy</label><select id="sellerPropertyOccupancy">${["Unknown","Owner Occupied","Tenant Occupied","Vacant","Second Home"].map(x=>`<option ${(p.occupancy||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Ownership</label><select id="sellerPropertyOwnership">${["Unknown","Sole","Joint","Trust","Estate","LLC","Other"].map(x=>`<option ${(p.ownership||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Beds</label><input id="sellerPropertyBeds" type="number" step=".5" value="${esc(p.beds||"")}"></div>
+      <div class="field"><label>Baths</label><input id="sellerPropertyBaths" type="number" step=".5" value="${esc(p.baths||"")}"></div>
+      <div class="field"><label>Square feet</label><input id="sellerPropertySqft" type="number" value="${esc(p.sqft||"")}"></div>
+      <div class="field"><label>Acres</label><input id="sellerPropertyAcres" type="number" step=".01" value="${esc(p.acres||"")}"></div>
+      <div class="field"><label>Year built</label><input id="sellerPropertyYear" type="number" value="${esc(p.yearBuilt||"")}"></div>
+      <div class="field full section-label">Motivation, money, and appointment</div>
+      <div class="field"><label>Motivation</label><input id="sellerMotivation" value="${esc(p.motivation||d.motivation||"")}"></div>
+      <div class="field"><label>Estimated value</label><input id="sellerEstimatedValue" type="number" value="${esc(p.estimatedValue||d.estimatedValue||"")}"></div>
+      <div class="field"><label>Mortgage balance</label><input id="sellerMortgageBalance" type="number" value="${esc(p.mortgageBalance||d.mortgageBalance||"")}"></div>
+      <div class="field"><label>Condition</label><input id="sellerCondition" value="${esc(p.condition||d.condition||"")}"></div>
+      <div class="field"><label>Target move/list date</label><input id="sellerTargetDate" type="date" value="${esc(p.targetDate||"")}"></div>
+      <div class="field"><label>Listing appointment</label><input id="sellerAppointmentDate" type="date" value="${esc(p.appointmentDate||"")}"></div>
+      <div class="field full"><label>Decision makers</label><input id="sellerDecisionMakers" value="${esc(d.decisionMakers||"")}" placeholder="Add spouse/partner in the household section after saving"></div>`;
   }
   if(type==="Buyer"){
     const d=c.buyerDetails||{};
@@ -1196,7 +1645,6 @@ function openContactModal(id=""){
     <div class="field"><label>Timeframe</label><select id="contactTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${(c.timeframe||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Next follow-up</label><input id="contactFollowUp" type="date" value="${esc(c.followUp||TODAY())}"></div>
     <div class="field"><label>Source</label><select id="contactSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>
-    <div class="field"><label>Property / target area</label><input id="contactProperty" value="${esc(c.property||"")}"></div>
     <div class="field"><label>Projected GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
     <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="Type tags separated by commas: farm, referral partner, hot lead"><small class="field-help">Tags appear as clickable bubbles throughout the CRM.</small></div>
     <div id="contactSpecificFields" class="field full specific-fields-grid">${contactSpecificForm(c,type)}</div>
@@ -1207,14 +1655,24 @@ function saveContact(){
   const id=document.getElementById("contactId").value||uid(),firstName=document.getElementById("contactFirst").value.trim(),lastName=document.getElementById("contactLast").value.trim();
   if(!firstName||!lastName){alert("First and last name are required.");return}
   const old=contact(id),type=document.getElementById("contactType").value,stage=document.getElementById("contactStage").value,followUp=document.getElementById("contactFollowUp").value;
+  const propertyValue=type==="Buyer"?(document.getElementById("buyerAreas")?.value.trim()||old?.property||""):
+    ["Sphere","Past Client"].includes(type)?(document.getElementById("sphereNeighborhood")?.value.trim()||old?.property||""):
+    ["Realtor","Lender"].includes(type)?(document.getElementById("professionalServiceArea")?.value.trim()||old?.property||""):
+    old?.property||"";
   if(["Seller","Buyer"].includes(type)&&!["Closed","Lost"].includes(stage)&&!followUp){alert("Every open seller or buyer needs a next follow-up date.");return}
-  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,gci:Number(document.getElementById("contactGci").value||0),property:document.getElementById("contactProperty").value.trim(),tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
+  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,gci:Number(document.getElementById("contactGci").value||0),property:propertyValue,tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
   sellerDetails:type==="Seller"?{motivation:document.getElementById("sellerMotivation")?.value.trim()||"",estimatedValue:document.getElementById("sellerEstimatedValue")?.value||"",mortgageBalance:document.getElementById("sellerMortgageBalance")?.value||"",condition:document.getElementById("sellerCondition")?.value.trim()||"",decisionMakers:document.getElementById("sellerDecisionMakers")?.value.trim()||""}:(old?.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""}),
   buyerDetails:type==="Buyer"?{preapproval:document.getElementById("buyerPreapproval")?.value||"Unknown",lender:document.getElementById("buyerLender")?.value.trim()||"",budget:document.getElementById("buyerBudget")?.value||"",desiredPayment:document.getElementById("buyerDesiredPayment")?.value||"",areas:document.getElementById("buyerAreas")?.value.trim()||"",beds:document.getElementById("buyerBeds")?.value||"",baths:document.getElementById("buyerBaths")?.value||"",leaseExpiration:document.getElementById("buyerLeaseExpiration")?.value||""}:(old?.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""}),
   sphereDetails:["Sphere","Past Client"].includes(type)?{relationship:document.getElementById("sphereRelationship")?.value.trim()||"",homeowner:document.getElementById("sphereHomeowner")?.value||"Unknown",neighborhood:document.getElementById("sphereNeighborhood")?.value.trim()||"",birthday:document.getElementById("sphereBirthday")?.value||"",likelyOpportunity:document.getElementById("sphereLikelyOpportunity")?.value.trim()||""}:(old?.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""}),
   professionalDetails:["Realtor","Lender"].includes(type)?{company:document.getElementById("professionalCompany")?.value.trim()||"",role:document.getElementById("professionalRole")?.value.trim()||type,licenseNumber:document.getElementById("professionalLicenseNumber")?.value.trim()||"",serviceArea:document.getElementById("professionalServiceArea")?.value.trim()||"",specialties:document.getElementById("professionalSpecialties")?.value.trim()||"",referralNotes:document.getElementById("professionalReferralNotes")?.value.trim()||""}:(old?.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""}),
   alertSettings:old?.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},behaviors:old?.behaviors||[]};
-  const i=db.contacts.findIndex(x=>x.id===id);if(i>=0)db.contacts[i]=c;else db.contacts.unshift(c);save();closeModal();toast("Person saved",fullName(c));location.hash=`#/contact/${c.id}`
+  const i=db.contacts.findIndex(x=>x.id===id);if(i>=0)db.contacts[i]=c;else db.contacts.unshift(c);
+  syncPrimaryPropertyFromSellerForm(c);
+  const primary=primaryProperty(c);
+  if(primary?.appointmentDate&&!db.tasks.some(t=>t.contactId===c.id&&t.type==="Appointment"&&t.due===primary.appointmentDate&&t.status!=="Done")){
+    db.tasks.unshift({id:uid(),contactId:c.id,title:`Listing appointment — ${propertyAddress(primary)||fullName(c)}`,type:"Appointment",due:primary.appointmentDate,status:"Open",priority:"High",planRunId:"",completedAt:"",createdAt:TODAY()})
+  }
+  save();closeModal();toast("Person saved",fullName(c));location.hash=`#/contact/${c.id}`
 }
 function communicationModal(contactId="",channel="Call"){
   const c=contact(contactId);
@@ -1475,7 +1933,11 @@ function askPip(){
 
 function toast(title,text){const el=document.getElementById("toast");document.getElementById("toastTitle").textContent=title;document.getElementById("toastText").textContent=text;el.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove("show"),2400)}
 function download(name,type,text){const blob=new Blob([text],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
-function exportCsv(){const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Projected GCI","Property","Tags","Notes"],...db.contacts.map(c=>[c.firstName,c.lastName,c.phone,c.email,c.type,c.stage,c.heat,c.timeframe,c.followUp,c.lastCommunication,c.source,c.gci,c.property,c.tags.join("; "),c.notes])];download(`holton-homes-people-${TODAY()}.csv`,"text/csv",rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"))}
+function exportCsv(){
+  const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Timeframe","Next Follow-Up","Last Communication","Source","Projected GCI","Primary Property","City","State","ZIP","County","Property Type","Beds","Baths","Square Feet","Acres","Estimated Value","Mortgage Balance","Estimated Equity","Motivation","Tags","Notes"],
+    ...db.contacts.map(c=>{const p=primaryProperty(c);return [c.firstName,c.lastName,c.phone,c.email,c.type,c.stage,c.heat,c.timeframe,c.followUp,c.lastCommunication,c.source,c.gci,propertyAddress(p)||c.property,p?.city||"",p?.state||"",p?.zip||"",p?.county||"",p?.propertyType||"",p?.beds||"",p?.baths||"",p?.sqft||"",p?.acres||"",p?.estimatedValue||"",p?.mortgageBalance||"",p?.estimatedValue?propertyEquity(p):"",p?.motivation||c.sellerDetails?.motivation||"",c.tags.join("; "),c.notes]})];
+  download(`holton-homes-people-${TODAY()}.csv`,"text/csv",rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n"))
+}
 function seedDemo(){
   if(db.contacts.length&&!confirm("Add sample records to your current CRM?"))return;
   const seller={id:uid(),firstName:"Ashley",lastName:"Bennett",name:"Ashley Bennett",phone:"513-555-0134",email:"ashley@example.com",type:"Seller",stage:"Listing Appointment",heat:"Hot",timeframe:"Now — 0–3 months",followUp:TODAY(),lastCommunication:addDays(TODAY(),-2),source:"Referral",gci:16200,property:"Williamsburg, OH",tags:["pricing","seller"],notes:"Inherited the home and wants a clean timeline.",createdAt:addDays(TODAY(),-12),updatedAt:TODAY(),household:[],preferences:{},alertSettings:{propertyAlert:false,marketSnapshot:true,criteria:"Williamsburg competing listings",frequency:"Weekly",lastSent:""},behaviors:[{id:uid(),type:"Home Valuation",date:addDays(TODAY(),-1),property:"Williamsburg, OH"}]};
@@ -1516,6 +1978,15 @@ document.addEventListener("click",event=>{
   if(action==="launch-channel")launchChannel(channel,id);
   if(action==="open-profile")location.hash=`#/contact/${id}`;
   if(action==="name-link")return;
+  if(action==="open-property")propertyModal(id,el.dataset.property||"");
+  if(action==="save-property")saveProperty();
+  if(action==="delete-property")deleteProperty(id,el.dataset.property||"");
+  if(action==="make-primary-property")makePrimaryProperty(id,el.dataset.property||"");
+  if(action==="open-household")householdModal(id,el.dataset.member||"");
+  if(action==="save-household")saveHousehold();
+  if(action==="delete-household")deleteHousehold(id,el.dataset.member||"");
+  if(action==="promote-household")promoteHouseholdToContact(id,el.dataset.member||"");
+  if(action==="household-communicate")householdCommunicate(el.dataset.contact||"",el.dataset.member||"",channel||"Call");
   if(action==="open-tag")openTagModal(id);
   if(action==="choose-tag"){const input=document.getElementById("newTagValue");if(input)input.value=el.dataset.tag||""}
   if(action==="save-tag"){const input=document.getElementById("newTagValue");if(addTagToContact(id,input?.value||"")){closeModal();toast("Tag added",normalizeTag(input.value));route()}}
@@ -1608,7 +2079,7 @@ document.addEventListener("input",event=>{
   if(event.target.id==="globalSearch"){
     const q=event.target.value.toLowerCase().trim(),box=document.getElementById("globalSearchResults");
     if(!q){box.classList.remove("open");box.innerHTML="";return}
-    const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,c.property,...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
+    const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
     box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong class="person-name-link">${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
   }
 });
