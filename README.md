@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v20
+# Holton Homes Relationship CRM v21
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v20 contact workspace
+## v21 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -40,7 +40,7 @@ This is still a static browser application:
 - Collapsible right sidebar and actionable empty states.
 
 
-## v20 — built for Holton Homes
+## v21 — built for Holton Homes
 - Readable typography and larger controls across the entire CRM.
 - Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
 - Seller share, daily conversation, and market-area goals.
@@ -54,7 +54,7 @@ This is still a static browser application:
 Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.
 
 
-## v20
+## v21
 - Fixed the global top-bar Add Person button with a dedicated direct event listener.
 - Added Realtor and Lender relationship types.
 - Added company, role, license/NMLS, service area, specialties, and referral-note fields.
@@ -63,14 +63,14 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 - Added Add Realtor and Add Lender shortcuts to the Holton Homes daily dashboard.
 
 
-## v20
+## v21
 - Every visible contact name is now the direct profile link.
 - Initials/avatar icons are decorative and no longer act as navigation controls.
 - Name links are consistent across People, Today, Inbox, Pipeline, Tasks, Activity, and search.
 - Added stronger hover and keyboard-focus styling so it is obvious that the real name is clickable.
 
 
-## v20 — Holton Automation Studio
+## v21 — Holton Automation Studio
 
 ### Automation engine
 - Deterministic rule engine with active/disabled controls.
@@ -99,7 +99,7 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 Scheduled rules and plan steps process when the CRM is open, reopened, or its data changes. True server-side execution while every device is offline requires the future secure cloud backend.
 
 
-## v20 — Household and spouse relationships
+## v21 — Household and spouse relationships
 - Dedicated Household & Decision Makers section on every contact profile.
 - Add spouse, partner, co-owner, parent, adult child, sibling, or another household member.
 - Store phone, email, anniversary, birthday, decision-maker status, and household notes.
@@ -109,7 +109,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 - Contact summaries now mention spouses and decision makers.
 
 
-## v20 — Realtor Daily OS and structured property records
+## v21 — Realtor Daily OS and structured property records
 
 ### Daily lead command center
 - New and untouched leads
@@ -139,7 +139,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 The spouse/household features and Automation Studio remain included.
 
 
-## v20 — Holton Homes, not a CRM demo
+## v21 — Holton Homes, not a CRM demo
 
 - Removed "What a Realtor actually needs today" and similar explanatory copy.
 - Renamed People to Leads & Contacts.
@@ -153,7 +153,7 @@ The spouse/household features and Automation Studio remain included.
 - Kept households, properties, automations, pipelines, backups, and all v17 data.
 
 
-## v20 — Mobile working build
+## v21 — Mobile working build
 
 ### Phone usability
 - Desktop sidebar becomes a fixed, horizontally scrollable bottom navigation.
@@ -182,7 +182,7 @@ The spouse/household features and Automation Studio remain included.
 This remains a browser-based bridge. The native phone/SMS apps perform communication; true two-way in-app communication requires the cloud and phone-provider phase.
 
 
-## v20 — Cloud sync foundation
+## v21 — Cloud sync foundation
 
 - Supabase email/password authentication.
 - One private cloud CRM state per authenticated user.
@@ -198,3 +198,33 @@ This remains a browser-based bridge. The native phone/SMS apps perform communica
 - Clear Device Cache no longer deletes cloud records.
 
 Run `SUPABASE_SETUP.sql` before trying to sign in.
+
+
+## v21 — Daily Operating CRM
+
+### Work Today
+- One priority queue combines replies, untouched leads, due tasks, follow-ups, appointments, transaction deadlines, active-listing updates, stale hot leads, and missing next steps.
+- Queue items explain why they are present.
+- Call, text, log, complete, or snooze without losing context.
+- Snoozes and completed-work history sync through Supabase.
+
+### Smart Lists
+- Organized into Database, Work Now, Seller Growth, Buyer Growth, Relationships, and Protect the Database.
+- Each list has live criteria and a visible reason on every contact.
+- Added seller valuations, seller updates, future sellers, buyer stale, past-client, partner, duplicate, and deadline lists.
+
+### Call Queue
+- Remembers the current contact across refreshes and synced devices.
+- Previous, skip, call, text, note, and profile actions.
+- Returning from a call records the outcome, completes the related call task, and advances to the next person.
+
+### Free productivity and safety
+- Reusable personalized text and email templates.
+- Custom template editor.
+- Duplicate detection by phone or email.
+- Safe duplicate merge.
+- Recently Deleted with restore.
+- Expanded seller pipeline stages.
+- Stage changes automatically create useful valuation, listing-prep, launch, offer, and transaction tasks.
+
+No paid phone provider is required for these features. Native phone, SMS, and email apps still perform the communication.
