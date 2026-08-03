@@ -1,24 +1,206 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v13";
-const LEGACY_KEYS = ["holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v15";
+const LEGACY_KEYS = ["holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed","Lost"];
 const buyerStages = ["New","Attempted Contact","Contacted","Nurture","Buyer Consultation","Pre-Approved","Touring Homes","Offer Submitted","Under Contract","Closed","Lost"];
 const sources = ["Sphere","Referral","Social Media","Website","Open House","Farm / Homestead Brand","Cold Outreach","Sign Call","Past Client","Other"];
 const behaviorTypes = ["Viewed Property","Saved Property","Repeated Property View","Requested Showing","Home Valuation","Opened Email","Clicked Property Alert","Searched Website"];
-const plans = [
-  {id:"seller10",name:"New Seller — 10 Day",category:"Seller",description:"Fast personal follow-up for a new homeowner inquiry.",pauseOnReply:true,steps:[[0,"Call new seller lead","Call"],[0,"Send personal introduction","Text"],[1,"Second call attempt","Call"],[3,"Send seller roadmap","Email"],[7,"Market and motivation check-in","Call"],[10,"Book appointment or move to nurture","Follow Up"]]},
-  {id:"futureSeller",name:"Future Seller — 90 Day",category:"Seller",description:"Consistent value without chasing.",pauseOnReply:true,steps:[[0,"Send seller planning guide","Email"],[14,"Check timing and motivation","Call"],[30,"Send market update","Email"],[60,"Personal seller check-in","Call"],[90,"Refresh value conversation","Follow Up"]]},
-  {id:"buyer10",name:"New Buyer — 10 Day",category:"Buyer",description:"Move a buyer toward consultation and financing.",pauseOnReply:true,steps:[[0,"Call new buyer","Call"],[0,"Send introduction text","Text"],[2,"Send buyer roadmap","Email"],[5,"Book buyer consultation","Follow Up"],[10,"Move to nurture or active search","Follow Up"]]},
-  {id:"openHouse",name:"Open House Follow-Up",category:"Buyer",description:"Immediate follow-up for visitors and neighbors.",pauseOnReply:true,steps:[[0,"Send open-house thank-you","Text"],[1,"Call about feedback","Call"],[3,"Send similar-home options","Email"],[7,"Consultation follow-up","Call"]]},
-  {id:"pastClient",name:"Past Client Relationship",category:"Past Client",description:"Reviews, referrals, and long-term equity conversations.",pauseOnReply:false,steps:[[0,"Send closing thank-you","Text"],[14,"Check in after move","Call"],[30,"Request review","Follow Up"],[90,"Send equity update","Email"],[180,"Relationship check-in","Call"],[365,"Home anniversary","Call"]]}
+const defaultPlans = [
+  {
+    id:"seller-speed",name:"Seller Speed-to-Lead",category:"Seller",
+    description:"A personal, appointment-focused sequence for a new homeowner inquiry.",
+    pauseOnReply:true,goalStages:["Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed"],
+    steps:[
+      {id:"ss1",day:0,type:"Call",title:"Call the new seller within five minutes",body:"Learn motivation, property, timing, decision makers, and what prompted the inquiry."},
+      {id:"ss2",day:0,type:"Text",title:"Send a personal introduction",body:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I saw your real estate inquiry and wanted to personally reach out. What has you thinking about a move?"},
+      {id:"ss3",day:1,type:"Call",title:"Second seller call attempt",body:"Reference the first message and ask one simple timing question."},
+      {id:"ss4",day:2,type:"Email",title:"Send the Holton Homes seller roadmap",subject:"A simple plan for selling {{property}}",body:"Hi {{first_name}},\n\nI put together a simple next-step plan for homeowners considering a sale. The first step is understanding your goals, timing, and the current market around {{property}}.\n\n— {{agent_name}}"},
+      {id:"ss5",day:4,type:"Call",title:"Pricing and motivation check-in",body:"Ask what outcome would make selling worthwhile."},
+      {id:"ss6",day:7,type:"Follow Up",title:"Book the listing consultation or move to nurture",body:"Confirm the next clear commitment."}
+    ]
+  },
+  {
+    id:"future-seller",name:"Future Seller — 90 Day",category:"Seller",
+    description:"Useful seller touches for homeowners who are not ready yet.",
+    pauseOnReply:true,goalStages:["Listing Appointment","Listing Agreement Signed","Active Listing","Under Contract","Closed"],
+    steps:[
+      {id:"fs1",day:0,type:"Email",title:"Send seller planning guide",subject:"Planning ahead for your future sale",body:"Hi {{first_name}},\n\nHere is a simple planning checklist so you can prepare without rushing. I’ll keep an eye on {{property}} and the surrounding market.\n\n— {{agent_name}}"},
+      {id:"fs2",day:14,type:"Call",title:"Confirm timing and motivation",body:"Ask what would need to happen before a move becomes realistic."},
+      {id:"fs3",day:30,type:"Email",title:"Send a useful market update",subject:"What is changing around {{property}}",body:"Hi {{first_name}},\n\nA quick update on the market around {{property}} and what it may mean for your plans."},
+      {id:"fs4",day:60,type:"Call",title:"Personal seller check-in",body:"Reconnect personally before discussing real estate."},
+      {id:"fs5",day:90,type:"Follow Up",title:"Refresh the value and timing conversation",body:"Decide whether to book, continue nurture, or close the loop."}
+    ]
+  },
+  {
+    id:"listing-prep",name:"Listing Appointment Prep",category:"Seller",
+    description:"Everything Jacob needs before and after a listing appointment.",
+    pauseOnReply:false,goalStages:["Listing Agreement Signed","Active Listing","Under Contract","Closed"],
+    steps:[
+      {id:"lp1",day:0,type:"Task",title:"Confirm appointment and all decision makers",body:"Verify address, time, attendees, motivation, and timing."},
+      {id:"lp2",day:0,type:"Task",title:"Prepare CMA and pricing range",body:"Review active, pending, sold, and failed listings."},
+      {id:"lp3",day:0,type:"Task",title:"Prepare seller net sheet and marketing plan",body:"Make the financial outcome simple and visual."},
+      {id:"lp4",day:1,type:"Call",title:"Listing appointment follow-up",body:"Answer objections and ask directly for the listing."},
+      {id:"lp5",day:2,type:"Email",title:"Send appointment recap",subject:"Your Holton Homes selling plan",body:"Hi {{first_name}},\n\nHere is the plan we discussed for {{property}}, including positioning, timing, and the next decision.\n\n— {{agent_name}}"}
+    ]
+  },
+  {
+    id:"active-listing",name:"Active Listing Care",category:"Seller",
+    description:"A predictable seller communication rhythm from launch through contract.",
+    pauseOnReply:false,goalStages:["Under Contract","Closed"],
+    steps:[
+      {id:"al1",day:0,type:"Task",title:"Verify listing launch checklist",body:"Photos, remarks, disclosures, showing instructions, signage, and syndication."},
+      {id:"al2",day:2,type:"Call",title:"First seller activity update",body:"Share traffic, feedback, online attention, and next recommendation."},
+      {id:"al3",day:7,type:"Email",title:"Weekly seller report",subject:"Weekly update for {{property}}",body:"Hi {{first_name}},\n\nHere is this week’s activity, buyer feedback, market competition, and my recommendation for {{property}}."},
+      {id:"al4",day:8,type:"Task",title:"Review pricing and competition",body:"Compare new listings, pendings, reductions, and buyer feedback."},
+      {id:"al5",day:14,type:"Call",title:"Seller strategy conversation",body:"Make a clear recommendation rather than only reporting statistics."}
+    ]
+  },
+  {
+    id:"buyer-speed",name:"Buyer Speed-to-Lead",category:"Buyer",
+    description:"Move a new buyer toward financing and a consultation quickly.",
+    pauseOnReply:true,goalStages:["Buyer Consultation","Pre-Approved","Touring Homes","Offer Submitted","Under Contract","Closed"],
+    steps:[
+      {id:"bs1",day:0,type:"Call",title:"Call the new buyer",body:"Learn desired payment, financing, area, timing, and decision makers."},
+      {id:"bs2",day:0,type:"Text",title:"Send a personal buyer introduction",body:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I saw your home-search inquiry. What monthly payment and area would feel comfortable for you?"},
+      {id:"bs3",day:1,type:"Call",title:"Second buyer call attempt",body:"Lead with monthly payment and financing clarity."},
+      {id:"bs4",day:2,type:"Email",title:"Send buyer roadmap",subject:"Your simple home-buying plan",body:"Hi {{first_name}},\n\nThe fastest way to make this simple is to confirm payment, financing, and your must-haves before we tour homes.\n\n— {{agent_name}}"},
+      {id:"bs5",day:5,type:"Follow Up",title:"Book the buyer consultation",body:"Set a specific appointment or move to nurture."}
+    ]
+  },
+  {
+    id:"open-house",name:"Open House Conversion",category:"Buyer",
+    description:"Separate serious buyers, future sellers, neighbors, and referral opportunities.",
+    pauseOnReply:true,goalStages:["Buyer Consultation","Listing Appointment","Pre-Approved","Touring Homes","Under Contract","Closed"],
+    steps:[
+      {id:"oh1",day:0,type:"Text",title:"Send open-house thank-you",body:"Hi {{first_name}}, thanks for stopping by today. What did you like most—and what would you change? — {{agent_name}}"},
+      {id:"oh2",day:1,type:"Call",title:"Call for honest property feedback",body:"Identify buyer status, representation, financing, and possible home to sell."},
+      {id:"oh3",day:3,type:"Email",title:"Send useful next options",subject:"A few next options after the open house",body:"Hi {{first_name}},\n\nBased on what you shared, here are the next options I would consider."},
+      {id:"oh4",day:7,type:"Follow Up",title:"Book consultation or classify relationship",body:"Buyer, seller, neighbor, nurture, referral partner, or close out."}
+    ]
+  },
+  {
+    id:"contract-close",name:"Contract-to-Close Command Plan",category:"Transaction",
+    description:"Real transaction tasks instead of forcing a separate transaction system.",
+    pauseOnReply:false,goalStages:["Closed"],
+    steps:[
+      {id:"cc1",day:0,type:"Task",title:"Verify signed contract and critical dates",body:"Earnest money, inspections, financing, appraisal, title, possession, and closing."},
+      {id:"cc2",day:1,type:"Task",title:"Confirm lender, title, and cooperating agent contacts",body:"Make sure every party has the contract and timeline."},
+      {id:"cc3",day:3,type:"Call",title:"Client expectations call",body:"Explain the next milestone, risks, and what you need from them."},
+      {id:"cc4",day:7,type:"Task",title:"Inspection and due-diligence checkpoint",body:"Track reports, responses, repairs, and deadlines."},
+      {id:"cc5",day:14,type:"Task",title:"Appraisal and financing checkpoint",body:"Confirm appraisal status, underwriting, conditions, and clear-to-close path."},
+      {id:"cc6",day:21,type:"Task",title:"Title and closing preparation",body:"Review title, settlement figures, utilities, insurance, and possession."},
+      {id:"cc7",day:27,type:"Task",title:"Schedule final walkthrough",body:"Confirm property condition and agreed repairs."},
+      {id:"cc8",day:30,type:"Call",title:"Closing-day client call",body:"Confirm logistics and celebrate the milestone."},
+      {id:"cc9",day:31,type:"Set Stage",title:"Closed",body:"Closed"}
+    ]
+  },
+  {
+    id:"past-client",name:"Past Client Relationship",category:"Past Client",
+    description:"Reviews, referrals, equity conversations, and human check-ins.",
+    pauseOnReply:false,goalStages:[],
+    steps:[
+      {id:"pc1",day:0,type:"Text",title:"Send personal closing thank-you",body:"Hi {{first_name}}, thank you for trusting me. I’m grateful I got to help, and I’m still here after closing. — {{agent_name}}"},
+      {id:"pc2",day:14,type:"Call",title:"Two-week move-in check",body:"Ask how the move and home are going."},
+      {id:"pc3",day:30,type:"Follow Up",title:"Request a review",body:"Make the request personal and easy."},
+      {id:"pc4",day:90,type:"Email",title:"Send equity and market check-in",subject:"A quick check on your home and market",body:"Hi {{first_name}},\n\nI wanted to share a quick market and equity check-in and see how everything is going."},
+      {id:"pc5",day:180,type:"Call",title:"Relationship check-in",body:"Call as a person, not a campaign."},
+      {id:"pc6",day:365,type:"Call",title:"Home anniversary call",body:"Celebrate and ask how the home is serving them."}
+    ]
+  },
+  {
+    id:"partner-welcome",name:"Referral Partner Welcome",category:"Partner",
+    description:"Build a useful working relationship with Realtors and lenders.",
+    pauseOnReply:true,goalStages:[],
+    steps:[
+      {id:"rp1",day:0,type:"Call",title:"Partner introduction call",body:"Learn service area, specialties, communication standards, and ideal referrals."},
+      {id:"rp2",day:0,type:"Email",title:"Send Holton Homes partner introduction",subject:"Holton Homes referral partnership",body:"Hi {{first_name}},\n\nI would like to learn how you work, who you serve best, and where we may be able to help each other.\n\n— {{agent_name}}"},
+      {id:"rp3",day:7,type:"Follow Up",title:"Define a concrete partner next step",body:"Coffee, lender program review, co-marketing idea, open house, or referral process."},
+      {id:"rp4",day:30,type:"Call",title:"Partner relationship check-in",body:"Share something useful before asking for anything."}
+    ]
+  }
+];
+
+const defaultAutomationRules = [
+  {
+    id:"rule-new-seller",name:"New seller → speed-to-lead",description:"Starts the seller plan for a new seller record.",
+    trigger:"Contact Created",active:true,runMode:"once",
+    filters:{type:"Seller",stage:"New",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"seller-speed"}]
+  },
+  {
+    id:"rule-new-buyer",name:"New buyer → speed-to-lead",description:"Starts the buyer plan for a new buyer record.",
+    trigger:"Contact Created",active:true,runMode:"once",
+    filters:{type:"Buyer",stage:"New",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"buyer-speed"}]
+  },
+  {
+    id:"rule-high-intent",name:"High-intent behavior → call today",description:"Turns valuation, showing, repeated-view, and saved-property activity into a same-day response.",
+    trigger:"Behavior",active:true,runMode:"changed",
+    filters:{type:"",stage:"",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:"High Intent"},
+    actions:[
+      {type:"Set Heat",value:"Hot"},
+      {type:"Add Tag",value:"High Intent"},
+      {type:"Create Task",value:"Call high-intent lead today",extra:"Call"}
+    ]
+  },
+  {
+    id:"rule-listing-appointment",name:"Listing appointment → prep plan",description:"Prepares the CMA, net sheet, and follow-up automatically.",
+    trigger:"Stage Match",active:true,runMode:"once",
+    filters:{type:"Seller",stage:"Listing Appointment",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"listing-prep"}]
+  },
+  {
+    id:"rule-active-listing",name:"Active listing → seller care",description:"Creates a predictable seller-update rhythm.",
+    trigger:"Stage Match",active:true,runMode:"once",
+    filters:{type:"Seller",stage:"Active Listing",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"active-listing"}]
+  },
+  {
+    id:"rule-under-contract",name:"Under contract → closing command plan",description:"Creates transaction milestones without another app.",
+    trigger:"Stage Match",active:true,runMode:"once",
+    filters:{type:"",stage:"Under Contract",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"contract-close"}]
+  },
+  {
+    id:"rule-stale-hot",name:"Hot lead silent 3 days → rescue",description:"Prevents a high-value relationship from disappearing.",
+    trigger:"Stale",active:true,runMode:"daily",
+    filters:{type:"",stage:"",heat:"Hot",source:"",tag:"",noContactDays:"3",minScore:"",behaviorType:""},
+    actions:[
+      {type:"Create Task",value:"Rescue hot lead: call today",extra:"Call"},
+      {type:"Set Follow-Up",value:"0"}
+    ]
+  },
+  {
+    id:"rule-inbound-reply",name:"Inbound reply → stop automation and respond",description:"Pauses active plans and creates a human response task.",
+    trigger:"Inbound Reply",active:true,runMode:"daily",
+    filters:{type:"",stage:"",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[
+      {type:"Pause Plans",value:""},
+      {type:"Create Task",value:"Respond personally to inbound message",extra:"Follow Up"}
+    ]
+  },
+  {
+    id:"rule-partner",name:"New Realtor or lender → partner plan",description:"Builds a referral relationship without treating partners like leads.",
+    trigger:"Contact Created",active:true,runMode:"once",
+    filters:{types:["Realtor","Lender"],type:"",stage:"New",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},
+    actions:[{type:"Start Plan",value:"partner-welcome"}]
+  },
+  {
+    id:"rule-past-client",name:"Past client silent 90 days → relationship touch",description:"Protects referrals and repeat business.",
+    trigger:"Stale",active:true,runMode:"monthly",
+    filters:{type:"Past Client",stage:"",heat:"",source:"",tag:"",noContactDays:"90",minScore:"",behaviorType:""},
+    actions:[{type:"Create Task",value:"Personal past-client check-in",extra:"Call"}]
+  }
 ];
 
 let db = loadDatabase();
-let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",callIndex:0,pendingTaskId:""};
+let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",callIndex:0,pendingTaskId:"",automationTab:"overview"};
+let automationBusy=false,automationTimer=null;
+
 
 function uid(){return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
@@ -46,13 +228,14 @@ function contact(id){return db.contacts.find(c=>c.id===id)}
 function task(id){return db.tasks.find(t=>t.id===id)}
 function hasPhone(c){return Boolean((c?.phone||"").replace(/\D/g,""))}
 function hasEmail(c){return Boolean(c?.email && c.email.includes("@"))}
-function save(){
+function save(evaluate=true){
   db.settings.lastSavedAt=NOW();
   const payload=JSON.stringify(db);
   localStorage.setItem(STORAGE_KEY,payload);
   mirrorToIndexedDb(payload);
   renderNav();
   renderPip();
+  if(evaluate)scheduleAutomationEvaluation();
 }
 function openBackupDb(){
   return new Promise((resolve,reject)=>{
@@ -126,7 +309,13 @@ function normalize(raw){
     unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",createdAt:a.createdAt||NOW()
   }));
   const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
-  return {contacts,communications,tasks,planRuns:raw.planRuns||[],settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",...(raw.settings||{})}};
+  const planRuns=(raw.planRuns||[]).map(r=>({...r,id:r.id||uid(),status:r.status||"Active",startedAt:r.startedAt||TODAY(),stepStates:r.stepStates||{},sourceRuleId:r.sourceRuleId||"",completedAt:r.completedAt||""}));
+  const automationRules=Array.isArray(raw.automationRules)?raw.automationRules:defaultAutomationRules.map(rule=>JSON.parse(JSON.stringify(rule)));
+  const actionPlans=Array.isArray(raw.actionPlans)?raw.actionPlans:[];
+  const automationQueue=Array.isArray(raw.automationQueue)?raw.automationQueue:[];
+  const automationLogs=Array.isArray(raw.automationLogs)?raw.automationLogs:[];
+  const automationHistory=Array.isArray(raw.automationHistory)?raw.automationHistory:[];
+  return {contacts,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -141,7 +330,7 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],communications:[],tasks:[],planRuns:[],settings:{}});
+  return normalize({contacts:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],settings:{}});
 }
 
 function route(){
@@ -160,7 +349,7 @@ function renderNav(){
 }
 function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.textContent=n||"";el.style.display=n?"grid":"none"}
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
-function avatar(c){return `<span class="avatar">${esc(initials(c))}</span>`}
+function avatar(c){return `<span class="avatar" aria-hidden="true">${esc(initials(c))}</span>`}
 function contactQuickActions(c,labels=false){return `<div class="row-actions">
 <button class="quick call" data-action="communicate" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎${labels?" Call":""}</button>
 <button class="quick text" data-action="communicate" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉${labels?" Text":""}</button>
@@ -262,7 +451,7 @@ function renderToday(){
     </div>`;
 }
 function queueRow(c){
-  const s=scoreContact(c);return `<div class="queue-row">${avatar(c)}<div><strong><a href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.type)} • ${esc(c.stage)} • ${c.followUp?`Follow up ${dateLabel(c.followUp)}`:"No next step"} • Score ${s.score}</small></div>${contactQuickActions(c)}</div>`
+  const s=scoreContact(c);return `<div class="queue-row">${avatar(c)}<div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.type)} • ${esc(c.stage)} • ${c.followUp?`Follow up ${dateLabel(c.followUp)}`:"No next step"} • Score ${s.score}</small></div>${contactQuickActions(c)}</div>`
 }
 function behaviorAlerts(){
   const alerts=[];
@@ -274,7 +463,7 @@ function behaviorAlerts(){
 }
 function behaviorAlertsHtml(limit=10){
   const alerts=behaviorAlerts().slice(0,limit);
-  return alerts.length?`<div class="queue">${alerts.map(({c,b})=>`<div class="queue-row"><span class="avatar">◉</span><div><strong><a href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(b.type)}${b.property?` • ${esc(b.property)}`:""} • ${dateLabel(b.date)}</small></div><button class="quick call" data-action="communicate" data-channel="Call" data-id="${c.id}">Call</button></div>`).join("")}</div>`:`<div class="empty">No high-intent website activity logged yet.</div>`
+  return alerts.length?`<div class="queue">${alerts.map(({c,b})=>`<div class="queue-row"><span class="avatar">◉</span><div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(b.type)}${b.property?` • ${esc(b.property)}`:""} • ${dateLabel(b.date)}</small></div><button class="quick call" data-action="communicate" data-channel="Call" data-id="${c.id}">Call</button></div>`).join("")}</div>`:`<div class="empty">No high-intent website activity logged yet.</div>`
 }
 
 function smartLists(){
@@ -318,7 +507,7 @@ function renderPeople(){
     </div>`;
 }
 function personRow(c){const s=scoreContact(c);return `<tr>
-  <td><div class="contact-cell">${avatar(c)}<div><button data-action="open-profile" data-id="${c.id}">${esc(fullName(c))}</button><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small>${renderTagChips(c.tags)}</div></div></td>
+  <td><div class="contact-cell">${avatar(c)}<div><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a><small>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:" • No email"}</small>${renderTagChips(c.tags)}</div></div></td>
   <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
   <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
   <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td>${contactQuickActions(c)}</td></tr>`}
@@ -346,13 +535,13 @@ function renderInbox(){
     pageHead("Conversation command center","Inbox","Calls, texts, emails, and notes in one relationship-focused workflow.",`<button class="ghost-btn" data-action="inbox-zero">Mark all read</button>`) +
     `<div class="inbox-layout">
       <aside class="inbox-folders">${[["open","Open",threads().filter(t=>t.status!=="closed").length],["unread","Unread",threads().filter(t=>t.unread).length],["all","All",threads().length],["closed","Closed",threads().filter(t=>t.status==="closed").length]].map(([id,label,count])=>`<button class="folder-btn ${state.inboxFolder===id?"active":""}" data-action="inbox-folder" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}</aside>
-      <section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong>${esc(fullName(t.contact))}</strong><time>${dateTimeLabel(t.last.date)}</time></div><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p></article>`).join(""):`<div class="empty">Inbox zero. No conversations here.</div>`}</section>
+      <section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong><a class="person-name-link" href="#/contact/${t.contact.id}" data-action="name-link">${esc(fullName(t.contact))}</a></strong><time>${dateTimeLabel(t.last.date)}</time></div><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p></article>`).join(""):`<div class="empty">Inbox zero. No conversations here.</div>`}</section>
       ${active?conversationHtml(active):`<section class="conversation"><div class="empty">Select a conversation.</div></section>`}
     </div>`;
 }
 function conversationHtml(thread){
   thread.messages.forEach(m=>m.unread=false);save();
-  return `<section class="conversation"><div class="conversation-head"><div><strong><a href="#/contact/${thread.contact.id}">${esc(fullName(thread.contact))}</a></strong><small style="display:block;color:var(--muted);font-size:8px">${esc(thread.contact.stage)} • ${esc(thread.contact.phone||thread.contact.email)}</small></div><div class="row-actions">${contactQuickActions(thread.contact)}<button class="quick" data-action="toggle-thread" data-id="${thread.contact.id}">${thread.status==="closed"?"Reopen":"Close"}</button></div></div>
+  return `<section class="conversation"><div class="conversation-head"><div><strong><a class="person-name-link" href="#/contact/${thread.contact.id}">${esc(fullName(thread.contact))}</a></strong><small style="display:block;color:var(--muted);font-size:8px">${esc(thread.contact.stage)} • ${esc(thread.contact.phone||thread.contact.email)}</small></div><div class="row-actions">${contactQuickActions(thread.contact)}<button class="quick" data-action="toggle-thread" data-id="${thread.contact.id}">${thread.status==="closed"?"Reopen":"Close"}</button></div></div>
   <div class="messages">${thread.messages.map(m=>`<div class="message ${m.direction==="outbound"?"outbound":""}"><b>${esc(m.channel)}${m.outcome?` • ${esc(m.outcome)}`:""}</b><div>${esc(m.body||"No details")}</div><small>${dateTimeLabel(m.date)}</small></div>`).join("")}</div>
   <div class="composer"><textarea id="inboxReply" placeholder="Write a text reply or relationship note..."></textarea><div class="composer-row"><select id="inboxChannel"><option>Text</option><option>Email</option><option>Note</option></select><button class="primary-btn compact" data-action="send-inbox-reply" data-id="${thread.contact.id}">Launch & log</button></div></div></section>`
 }
@@ -492,7 +681,7 @@ function renderContact(id){
         </div></details>
 
         <details class="compact-panel"><summary>Action plans <span>${runs.length}</span></summary><div class="compact-body">
-          ${runs.length?runs.map(run=>{const p=plans.find(x=>x.id===run.planId);return `<div class="side-activity"><div><strong>${esc(p?.name||"Plan")}</strong><small>Started ${dateLabel(run.startedAt)}</small></div><span class="badge ${run.status==="Active"?"good":"warn"}">${esc(run.status)}</span></div>`}).join(""):`<div class="compact-empty"><span>No active action plan.</span><button class="ghost-btn compact" data-action="apply-plan" data-id="${c.id}">Apply plan</button></div>`}
+          ${runs.length?runs.map(run=>{const p=planById(run.planId);return `<div class="side-activity"><div><strong>${esc(p?.name||"Plan")}</strong><small>Started ${dateLabel(run.startedAt)}</small></div><span class="badge ${run.status==="Active"?"good":"warn"}">${esc(run.status)}</span></div>`}).join(""):`<div class="compact-empty"><span>No active action plan.</span><button class="ghost-btn compact" data-action="apply-plan" data-id="${c.id}">Apply plan</button></div>`}
         </div></details>
 
         <details class="compact-panel"><summary>Relationship notes <span>${c.notes?"Saved":"Empty"}</span></summary><div class="compact-body notes-copy">${esc(c.notes||"No relationship notes yet.")}</div></details>
@@ -534,7 +723,7 @@ function renderCallQueue(){
   const queue=callQueue();if(state.callIndex>=queue.length)state.callIndex=0;const active=queue[state.callIndex];
   document.getElementById("view").innerHTML=
     pageHead("Lofty-inspired dialing workflow","Call Queue","Work due calls, capture an outcome, and schedule the callback before moving on.",`<button class="ghost-btn" data-action="create-call-tasks">Create from follow-ups</button>`) +
-    `<div class="grid two"><section class="card">${queue.length?queue.map((x,i)=>`<div class="queue-row ${i===state.callIndex?"active":""}">${avatar(x.c)}<div><strong><a href="#/contact/${x.c.id}">${esc(fullName(x.c))}</a></strong><small>${esc(x.c.type)} • ${esc(x.c.stage)} • ${x.task?esc(x.task.title):"Follow-up due"} • Score ${scoreContact(x.c).score}</small></div><button class="ghost-btn compact" data-action="select-call" data-index="${i}">Select</button></div>`).join(""):`<div class="empty">No calls due. Add a call task or follow-up date.</div>`}</section>
+    `<div class="grid two"><section class="card">${queue.length?queue.map((x,i)=>`<div class="queue-row ${i===state.callIndex?"active":""}">${avatar(x.c)}<div><strong><a class="person-name-link" href="#/contact/${x.c.id}">${esc(fullName(x.c))}</a></strong><small>${esc(x.c.type)} • ${esc(x.c.stage)} • ${x.task?esc(x.task.title):"Follow-up due"} • Score ${scoreContact(x.c).score}</small></div><button class="ghost-btn compact" data-action="select-call" data-index="${i}">Select</button></div>`).join(""):`<div class="empty">No calls due. Add a call task or follow-up date.</div>`}</section>
     <section class="card card-pad">${active?`<div class="card-head"><div><h2>Call ${esc(fullName(active.c))}</h2><small>${esc(active.c.phone)} • ${esc(active.c.stage)}</small></div><span class="score ${scoreClass(scoreContact(active.c).score)}">${scoreContact(active.c).score}</span></div>
       <div class="summary">${esc(contactSummary(active.c,scoreContact(active.c)))}</div>
       <div class="profile-actions" style="margin-top:10px"><button class="quick call" data-action="communicate" data-channel="Call" data-id="${active.c.id}">☎ Launch call</button><button class="quick text" data-action="communicate" data-channel="Text" data-id="${active.c.id}">✉ Text instead</button><a class="quick" href="#/contact/${active.c.id}">Open profile</a></div>
@@ -546,22 +735,361 @@ function renderPipeline(){
   const contacts=db.contacts.filter(c=>c.type===state.pipelineType&&!["Lost"].includes(c.stage));
   document.getElementById("view").innerHTML=
     pageHead("Lead-to-close visibility","Pipeline","Drag cards between stages. Seller and buyer workflows stay separate.",`<button class="${state.pipelineType==="Seller"?"primary-btn":"ghost-btn"}" data-action="pipeline-type" data-id="Seller">Seller</button><button class="${state.pipelineType==="Buyer"?"primary-btn":"ghost-btn"}" data-action="pipeline-type" data-id="Buyer">Buyer</button>`) +
-    `<div class="kanban-wrap"><div class="kanban">${stages.map(stage=>{const items=contacts.filter(c=>c.stage===stage);return `<section class="kanban-column" data-stage="${esc(stage)}"><div class="kanban-head"><span>${esc(stage)}</span><b>${items.length}</b></div>${items.map(c=>`<article class="deal-card" draggable="true" data-contact="${c.id}"><strong><a href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.property||"No property")} • ${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"}</small><div class="deal-meta"><span>${money(c.gci)}</span><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></div></article>`).join("")}</section>`}).join("")}</div></div>`;
+    `<div class="kanban-wrap"><div class="kanban">${stages.map(stage=>{const items=contacts.filter(c=>c.stage===stage);return `<section class="kanban-column" data-stage="${esc(stage)}"><div class="kanban-head"><span>${esc(stage)}</span><b>${items.length}</b></div>${items.map(c=>`<article class="deal-card" draggable="true" data-contact="${c.id}"><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.property||"No property")} • ${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"}</small><div class="deal-meta"><span>${money(c.gci)}</span><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></div></article>`).join("")}</section>`}).join("")}</div></div>`;
 }
 
+
+function allPlans(){
+  const map=new Map(defaultPlans.map(p=>[p.id,p]));
+  (db.actionPlans||[]).forEach(p=>map.set(p.id,p));
+  return [...map.values()]
+}
+function planById(id){return allPlans().find(p=>p.id===id)}
+function personalizeTemplate(text,c){
+  const values={
+    first_name:c?.firstName||"",
+    last_name:c?.lastName||"",
+    full_name:c?fullName(c):"",
+    property:c?.property||"your property",
+    agent_name:db.settings.agentName||"Jacob",
+    agent_email:db.settings.agentEmail||"",
+    agent_phone:db.settings.agentPhone||"",
+    company:"Holton Homes"
+  };
+  return String(text||"").replace(/\{\{(\w+)\}\}/g,(match,key)=>values[key]??match)
+}
+function automationLog({kind="Rule",name="",contactId="",status="Completed",detail="",sourceId=""}){
+  db.automationLogs.unshift({id:uid(),kind,name,contactId,status,detail,sourceId,date:NOW()});
+  db.automationLogs=db.automationLogs.slice(0,1000)
+}
+function scheduleAutomationEvaluation(){
+  clearTimeout(automationTimer);
+  automationTimer=setTimeout(()=>processAutomationEngine(),120)
+}
+function contactFingerprint(c){
+  const lastBehavior=(c.behaviors||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  const lastInbound=db.communications.filter(m=>m.contactId===c.id&&m.direction==="inbound").sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  return [c.stage,c.heat,c.followUp,c.lastCommunication,c.updatedAt,(c.tags||[]).slice().sort().join(","),lastBehavior?.type,lastBehavior?.date,lastInbound?.date].join("|")
+}
+function ruleHistoryKey(rule,c,manual=false){
+  if(manual)return `${rule.id}:${c.id}:manual:${Date.now()}`;
+  if(rule.runMode==="daily")return `${rule.id}:${c.id}:${TODAY()}`;
+  if(rule.runMode==="monthly")return `${rule.id}:${c.id}:${TODAY().slice(0,7)}`;
+  if(rule.runMode==="changed")return `${rule.id}:${c.id}:${contactFingerprint(c)}`;
+  return `${rule.id}:${c.id}:once`
+}
+function recentBehavior(c,type,days=7){
+  const high=["Saved Property","Repeated Property View","Requested Showing","Home Valuation","Clicked Property Alert"];
+  return (c.behaviors||[]).some(b=>{
+    const typeMatch=type==="High Intent"?high.includes(b.type):!type||b.type===type;
+    return typeMatch&&daysSince(b.date)<=days
+  })
+}
+function triggerMatches(rule,c){
+  if(rule.trigger==="Manual")return false;
+  if(rule.trigger==="Contact Created")return daysSince(c.createdAt)===0;
+  if(rule.trigger==="Behavior")return recentBehavior(c,rule.filters?.behaviorType||"High Intent",7);
+  if(rule.trigger==="Inbound Reply")return db.communications.some(m=>m.contactId===c.id&&m.direction==="inbound"&&String(m.date).slice(0,10)===TODAY());
+  if(rule.trigger==="Task Completed")return db.tasks.some(t=>t.contactId===c.id&&t.completedAt===TODAY());
+  if(rule.trigger==="Follow-Up Due")return Boolean(c.followUp&&c.followUp<=TODAY());
+  if(rule.trigger==="Stale")return true;
+  if(rule.trigger==="Stage Match")return true;
+  if(rule.trigger==="Always")return true;
+  return true
+}
+function matchesAutomationFilters(rule,c){
+  const f=rule.filters||{};
+  if(Array.isArray(f.types)&&f.types.length&&!f.types.includes(c.type))return false;
+  if(f.type&&c.type!==f.type)return false;
+  if(f.stage&&c.stage!==f.stage)return false;
+  if(f.heat&&c.heat!==f.heat)return false;
+  if(f.source&&c.source!==f.source)return false;
+  if(f.tag&&!c.tags.some(t=>t.toLowerCase()===String(f.tag).toLowerCase()))return false;
+  if(f.noContactDays!==""&&f.noContactDays!=null&&daysSince(c.lastCommunication)<Number(f.noContactDays))return false;
+  if(f.minScore!==""&&f.minScore!=null&&scoreContact(c).score<Number(f.minScore))return false;
+  if(f.behaviorType&&!recentBehavior(c,f.behaviorType,7))return false;
+  return true
+}
+function matchingContactsForRule(rule,includeTrigger=true){
+  return db.contacts.filter(c=>matchesAutomationFilters(rule,c)&&(!includeTrigger||triggerMatches(rule,c)))
+}
+function addTagDirect(c,value){
+  const clean=normalizeTag(value);
+  if(clean&&!c.tags.some(t=>t.toLowerCase()===clean.toLowerCase()))c.tags.push(clean)
+}
+function createAutomationTask(c,title,type="Follow Up",due=TODAY(),planRunId="",sourceKey=""){
+  if(db.tasks.some(t=>t.contactId===c.id&&t.status!=="Done"&&t.title===title&&t.due===due))return null;
+  const task={id:uid(),contactId:c.id,title,type,due,status:"Open",priority:type==="Call"||c.heat==="Hot"?"High":"Normal",planRunId,sourceKey,completedAt:"",createdAt:TODAY()};
+  db.tasks.unshift(task);return task
+}
+function queueAutomationMessage(c,channel,title,body,subject="",source="",sourceId="",due=TODAY()){
+  const key=`${source}:${sourceId}:${c.id}:${channel}`;
+  const existing=db.automationQueue.find(q=>q.dedupeKey===key&&["Needs Review","Ready"].includes(q.status));
+  if(existing)return existing;
+  const item={id:uid(),contactId:c.id,channel,title:personalizeTemplate(title,c),subject:personalizeTemplate(subject,c),body:personalizeTemplate(body,c),status:"Needs Review",createdAt:NOW(),due,source,sourceId,dedupeKey:key,sentAt:"",skipReason:""};
+  db.automationQueue.unshift(item);
+  createAutomationTask(c,`Review & send ${channel.toLowerCase()}: ${item.title}`,channel,due,"",`queue:${item.id}`);
+  return item
+}
+function startPlanForContact(contactId,planId,start=TODAY(),sourceRuleId=""){
+  const c=contact(contactId),p=planById(planId);
+  if(!c||!p)return {ok:false,reason:"Missing contact or plan"};
+  const existing=db.planRuns.find(r=>r.contactId===contactId&&r.planId===planId&&r.status==="Active");
+  if(existing)return {ok:false,reason:"Plan already active",run:existing};
+  const run={id:uid(),contactId,planId,status:"Active",startedAt:start,stepStates:{},sourceRuleId,completedAt:"",pausedAt:"",pauseReason:""};
+  db.planRuns.unshift(run);
+  automationLog({kind:"Plan",name:p.name,contactId,status:"Started",detail:sourceRuleId?"Started by automation rule.":"Started manually.",sourceId:run.id});
+  return {ok:true,run}
+}
+function executeAutomationAction(rule,c,action){
+  const type=action.type,value=action.value||"",extra=action.extra||"";
+  if(type==="Start Plan")return startPlanForContact(c.id,value,TODAY(),rule.id).ok?`Started ${planById(value)?.name||value}`:`Plan not started`;
+  if(type==="Create Task"){createAutomationTask(c,personalizeTemplate(value,c),extra||"Follow Up",TODAY(),"",`rule:${rule.id}`);return `Created task: ${value}`}
+  if(type==="Add Tag"){addTagDirect(c,value);return `Added tag ${value}`}
+  if(type==="Remove Tag"){c.tags=c.tags.filter(t=>t.toLowerCase()!==String(value).toLowerCase());return `Removed tag ${value}`}
+  if(type==="Set Heat"){c.heat=value;return `Set heat to ${value}`}
+  if(type==="Set Stage"){c.stage=value;return `Set stage to ${value}`}
+  if(type==="Set Follow-Up"){c.followUp=addDays(TODAY(),Number(value||0));return `Set follow-up ${dateLabel(c.followUp)}`}
+  if(type==="Add Note"){db.communications.unshift({id:uid(),contactId:c.id,channel:"Note",direction:"outbound",outcome:"Automation",body:personalizeTemplate(value,c),date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});return "Added note"}
+  if(type==="Pause Plans"){pauseReplyPlans(c.id,"Paused by automation");return "Paused active plans"}
+  if(type==="Queue Text"){queueAutomationMessage(c,"Text",extra||"Automation text",value,"","Rule",rule.id,TODAY());return "Queued text for review"}
+  if(type==="Queue Email"){queueAutomationMessage(c,"Email",extra||"Automation email",value,action.subject||extra,"Rule",rule.id,TODAY());return "Queued email for review"}
+  return `Skipped unknown action ${type}`
+}
+function runAutomationRule(rule,c,{manual=false}={}){
+  const key=ruleHistoryKey(rule,c,manual);
+  if(!manual&&db.automationHistory.includes(key))return false;
+  const details=[];
+  (rule.actions||[]).forEach(action=>details.push(executeAutomationAction(rule,c,action)));
+  db.automationHistory.push(key);
+  db.automationHistory=db.automationHistory.slice(-5000);
+  c.updatedAt=TODAY();
+  automationLog({kind:"Rule",name:rule.name,contactId:c.id,status:"Completed",detail:details.join(" • "),sourceId:rule.id});
+  return true
+}
+function executePlanStep(run,p,c,step){
+  const stateForStep=run.stepStates[step.id];
+  if(stateForStep?.status)return false;
+  const due=addDays(run.startedAt,Number(step.day||0));
+  if(due>TODAY())return false;
+  let status="Completed",detail="";
+  if(["Task","Call","Follow Up","Appointment"].includes(step.type)){
+    const t=createAutomationTask(c,personalizeTemplate(step.title,c),step.type,due,run.id,`plan:${run.id}:${step.id}`);
+    detail=t?`Created ${step.type.toLowerCase()} task`:"Task already exists"
+  }else if(step.type==="Text"||step.type==="Email"){
+    const item=queueAutomationMessage(c,step.type,step.title,step.body||"",step.subject||"",`Plan`,`${run.id}:${step.id}`,due);
+    status="Queued";detail=`Queued ${step.type.toLowerCase()} for human review`;
+    run.stepStates[step.id]={status,executedAt:NOW(),queueId:item.id,detail};return true
+  }else if(step.type==="Add Tag"){addTagDirect(c,step.body||step.title);detail="Tag added"}
+  else if(step.type==="Remove Tag"){c.tags=c.tags.filter(t=>t.toLowerCase()!==String(step.body||step.title).toLowerCase());detail="Tag removed"}
+  else if(step.type==="Set Stage"){c.stage=step.body||step.title;detail=`Stage set to ${c.stage}`}
+  else if(step.type==="Set Heat"){c.heat=step.body||step.title;detail=`Heat set to ${c.heat}`}
+  else if(step.type==="Set Follow-Up"){c.followUp=addDays(TODAY(),Number(step.body||0));detail=`Follow-up set to ${dateLabel(c.followUp)}`}
+  else if(step.type==="Note"){db.communications.unshift({id:uid(),contactId:c.id,channel:"Note",direction:"outbound",outcome:"Action Plan",body:personalizeTemplate(step.body||step.title,c),date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});detail="Note added"}
+  else {status="Skipped";detail=`Unsupported step type: ${step.type}`}
+  run.stepStates[step.id]={status,executedAt:NOW(),detail};
+  automationLog({kind:"Plan Step",name:`${p.name}: ${step.title}`,contactId:c.id,status,detail,sourceId:run.id});
+  return true
+}
+function processPlanRuns(){
+  let changed=false;
+  db.planRuns.forEach(run=>{
+    if(run.status!=="Active")return;
+    const c=contact(run.contactId),p=planById(run.planId);
+    if(!c||!p){run.status="Failed";run.pauseReason="Missing contact or plan";changed=true;return}
+    if((p.goalStages||[]).includes(c.stage)){
+      run.status="Completed — goal reached";run.completedAt=NOW();
+      automationLog({kind:"Plan",name:p.name,contactId:c.id,status:"Completed",detail:`Stopped because ${c.stage} reached the plan goal.`,sourceId:run.id});
+      changed=true;return
+    }
+    (p.steps||[]).forEach(step=>{if(executePlanStep(run,p,c,step))changed=true});
+    const finished=(p.steps||[]).every(step=>run.stepStates[step.id]?.status);
+    if(finished){run.status="Completed";run.completedAt=NOW();automationLog({kind:"Plan",name:p.name,contactId:c.id,status:"Completed",detail:"All plan steps were created or queued.",sourceId:run.id});changed=true}
+  });
+  return changed
+}
+function processAutomationRules(){
+  let changed=false,runs=0;
+  (db.automationRules||[]).filter(rule=>rule.active).forEach(rule=>{
+    matchingContactsForRule(rule,true).forEach(c=>{
+      if(runs>=100)return;
+      if(runAutomationRule(rule,c)){changed=true;runs++}
+    })
+  });
+  return changed
+}
+function processAutomationEngine({manual=false}={}){
+  if(automationBusy)return;
+  automationBusy=true;
+  try{
+    const planChanged=processPlanRuns();
+    const ruleChanged=processAutomationRules();
+    if(planChanged||ruleChanged){
+      save(false);
+      if(state.route==="automations")renderAutomations()
+    }else if(manual){
+      automationLog({kind:"Engine",name:"Manual automation check",status:"Completed",detail:"No new matching actions were found."});
+      save(false);
+      if(state.route==="automations")renderAutomations()
+    }
+  }catch(error){
+    console.error(error);
+    automationLog({kind:"Engine",name:"Automation engine",status:"Failed",detail:error.message||String(error)});
+    save(false)
+  }finally{automationBusy=false}
+}
+function automationConditionSummary(rule){
+  const f=rule.filters||{},parts=[];
+  if(Array.isArray(f.types)&&f.types.length)parts.push(`type is ${f.types.join(" or ")}`);
+  if(f.type)parts.push(`type is ${f.type}`);
+  if(f.stage)parts.push(`stage is ${f.stage}`);
+  if(f.heat)parts.push(`heat is ${f.heat}`);
+  if(f.source)parts.push(`source is ${f.source}`);
+  if(f.tag)parts.push(`tagged ${f.tag}`);
+  if(f.noContactDays!=="")parts.push(`no communication for ${f.noContactDays}+ days`);
+  if(f.minScore!=="")parts.push(`score ≥ ${f.minScore}`);
+  if(f.behaviorType)parts.push(`${f.behaviorType} behavior`);
+  return parts.length?parts.join(" AND "):"All contacts matching the trigger"
+}
+function automationActionSummary(rule){
+  return (rule.actions||[]).map(a=>`${a.type}${a.value?`: ${planById(a.value)?.name||a.value}`:""}`).join(" → ")
+}
+function planProgress(run){
+  const p=planById(run.planId);if(!p)return {done:0,total:0,pct:0};
+  const done=(p.steps||[]).filter(s=>run.stepStates?.[s.id]?.status).length,total=(p.steps||[]).length;
+  return {done,total,pct:total?Math.round(done/total*100):0}
+}
+function automationHealth(){
+  const waiting=db.automationQueue.filter(q=>q.status==="Needs Review");
+  return {
+    missingChannels:waiting.filter(q=>{const c=contact(q.contactId);return q.channel==="Text"?!hasPhone(c):!hasEmail(c)}).length,
+    failedLogs:db.automationLogs.filter(l=>l.status==="Failed"&&daysSince(l.date)<=30).length,
+    duplicateRuns:db.planRuns.filter((run,i,arr)=>run.status==="Active"&&arr.findIndex(r=>r.contactId===run.contactId&&r.planId===run.planId&&r.status==="Active")!==i).length
+  }
+}
+function automationOverviewHtml(){
+  const rules=db.automationRules||[],activeRules=rules.filter(r=>r.active).length,activeRuns=db.planRuns.filter(r=>r.status==="Active").length,waiting=db.automationQueue.filter(q=>q.status==="Needs Review").length,completed30=db.automationLogs.filter(l=>l.status==="Completed"&&daysSince(l.date)<=30).length,health=automationHealth();
+  const recent=db.automationLogs.slice(0,8);
+  return `<section class="automation-metrics">
+    <div class="automation-metric"><label>Active rules</label><strong>${activeRules}</strong><small>${rules.length-activeRules} disabled</small></div>
+    <div class="automation-metric"><label>Running plans</label><strong>${activeRuns}</strong><small>${db.planRuns.filter(r=>String(r.status).startsWith("Paused")).length} paused</small></div>
+    <div class="automation-metric"><label>Approval queue</label><strong>${waiting}</strong><small>Nothing sends blindly</small></div>
+    <div class="automation-metric"><label>Completed in 30 days</label><strong>${completed30}</strong><small>Rules and plan steps</small></div>
+  </section>
+  <section class="automation-hero">
+    <div><span>HOLTON AUTOMATION STANDARD</span><h2>Automate the reminder. Keep the relationship human.</h2><p>Every rule explains why it matched. Every message waits for review. Replies and real conversations pause nurture. Listing and contract workflows live beside lead follow-up.</p></div>
+    <button class="primary-btn" data-action="run-engine">Run engine now</button>
+  </section>
+  <div class="grid two">
+    <section class="card card-pad"><div class="card-head"><div><h2>What this fixes</h2><small>Built from common CRM friction—not feature collecting.</small></div></div>
+      <div class="fix-grid">
+        <div class="fix-card"><b>Preview first</b><span>See exactly who matches before a rule runs.</span></div>
+        <div class="fix-card"><b>Explain every run</b><span>Logs show the rule, person, action, result, and reason.</span></div>
+        <div class="fix-card"><b>Human approval queue</b><span>Batch texts and emails are personalized drafts, never blind blasts.</span></div>
+        <div class="fix-card"><b>Notes count as work</b><span>Face-to-face and manual notes can pause plans and update the relationship.</span></div>
+        <div class="fix-card"><b>Transaction plans</b><span>Inspection, appraisal, title, walkthrough, and closing live in the CRM.</span></div>
+        <div class="fix-card"><b>Goal-aware plans</b><span>A plan stops when the contact reaches its actual conversion goal.</span></div>
+      </div>
+    </section>
+    <section class="card card-pad"><div class="card-head"><div><h2>Automation health</h2><small>Problems are visible instead of silently failing.</small></div></div>
+      <div class="health-list">
+        <div><span>Missing phone/email for queued messages</span><b class="${health.missingChannels?"health-bad":"health-good"}">${health.missingChannels}</b></div>
+        <div><span>Failed runs in the last 30 days</span><b class="${health.failedLogs?"health-bad":"health-good"}">${health.failedLogs}</b></div>
+        <div><span>Duplicate active plans</span><b class="${health.duplicateRuns?"health-bad":"health-good"}">${health.duplicateRuns}</b></div>
+        <div><span>Rules ready to run</span><b class="health-good">${activeRules}</b></div>
+      </div>
+    </section>
+  </div>
+  <section class="card card-pad" style="margin-top:12px"><div class="card-head"><div><h2>Recent automation activity</h2><small>A deterministic audit trail—not a mystery AI score.</small></div><button class="ghost-btn compact" data-action="automation-tab" data-id="logs">View all logs</button></div>${automationLogsTable(recent)}</section>`
+}
+function automationRulesHtml(){
+  const rules=db.automationRules||[];
+  return `<section class="automation-toolbar"><div><strong>${rules.length} rules</strong><span>Rules run on app open, data changes, or a manual engine check.</span></div><button class="primary-btn" data-action="open-rule-builder">＋ New rule</button></section>
+  <section class="rule-list">${rules.map(rule=>{
+    const matches=matchingContactsForRule(rule,true);
+    return `<article class="rule-card ${rule.active?"active":"disabled"}">
+      <div class="rule-status"><button class="automation-toggle ${rule.active?"on":""}" data-action="toggle-rule" data-id="${rule.id}" aria-label="Toggle ${esc(rule.name)}"><span></span></button></div>
+      <div class="rule-main"><div class="rule-title"><span class="trigger-pill">${esc(rule.trigger)}</span><h3>${esc(rule.name)}</h3></div><p>${esc(rule.description||"")}</p>
+        <div class="rule-flow"><div><label>WHEN</label><strong>${esc(rule.trigger)}</strong></div><i>→</i><div><label>IF</label><strong>${esc(automationConditionSummary(rule))}</strong></div><i>→</i><div><label>THEN</label><strong>${esc(automationActionSummary(rule))}</strong></div></div>
+      </div>
+      <div class="rule-side"><b>${matches.length}</b><span>match now</span><div class="rule-actions"><button class="quick" data-action="preview-rule" data-id="${rule.id}">Preview</button><button class="quick" data-action="run-rule" data-id="${rule.id}">Run</button><button class="quick" data-action="open-rule-builder" data-id="${rule.id}">Edit</button><button class="quick" data-action="duplicate-rule" data-id="${rule.id}">Duplicate</button></div></div>
+    </article>`
+  }).join("")}</section>`
+}
+function planStepLabel(step){return `Day ${step.day} • ${step.type}`}
+function automationPlansHtml(){
+  const plans=allPlans();
+  return `<section class="automation-toolbar"><div><strong>${plans.length} action plans</strong><span>Tasks execute automatically; texts and emails enter the approval queue.</span></div><button class="primary-btn" data-action="open-plan-builder">＋ New action plan</button></section>
+    <div class="advanced-plan-grid">${plans.map(p=>{
+      const runs=db.planRuns.filter(r=>r.planId===p.id),active=runs.filter(r=>r.status==="Active").length;
+      return `<article class="advanced-plan-card">
+        <div class="advanced-plan-head"><span class="badge ${p.category==="Seller"?"seller":p.category==="Buyer"?"buyer":""}">${esc(p.category)}</span><span>${active} active</span></div>
+        <h3>${esc(p.name)}</h3><p>${esc(p.description||"")}</p>
+        <div class="plan-guardrails"><span>${p.pauseOnReply?"✓ Pauses on reply":"○ Continues after reply"}</span><span>${(p.goalStages||[]).length?`✓ Stops at ${esc(p.goalStages[0])}`:"○ No conversion stop"}</span></div>
+        <div class="plan-sequence">${(p.steps||[]).slice(0,6).map(step=>`<div><b>${esc(planStepLabel(step))}</b><span>${esc(step.title)}</span></div>`).join("")}${(p.steps||[]).length>6?`<small>＋ ${(p.steps||[]).length-6} more steps</small>`:""}</div>
+        <div class="plan-card-actions"><button class="primary-btn compact" data-action="apply-plan" data-plan="${p.id}">Apply</button><button class="ghost-btn compact" data-action="open-plan-builder" data-id="${p.id}">Edit</button><button class="ghost-btn compact" data-action="duplicate-plan" data-id="${p.id}">Duplicate</button></div>
+      </article>`
+    }).join("")}</div>
+    <section class="card card-pad" style="margin-top:12px"><div class="card-head"><div><h2>Running plans</h2><small>Progress, pauses, and goals are visible.</small></div></div>${db.planRuns.length?db.planRuns.map(run=>{
+      const c=contact(run.contactId),p=planById(run.planId),progress=planProgress(run);
+      return `<div class="plan-run-row"><div><strong>${esc(p?.name||"Missing plan")} — ${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Deleted contact"}</strong><small>${esc(run.status)} • Started ${dateLabel(run.startedAt)}${run.pauseReason?` • ${esc(run.pauseReason)}`:""}</small></div><div class="run-progress"><span><i style="width:${progress.pct}%"></i></span><b>${progress.done}/${progress.total}</b></div><button class="quick" data-action="toggle-plan-run" data-id="${run.id}">${run.status==="Active"?"Pause":"Resume"}</button></div>`
+    }).join(""):`<div class="empty">No plans have been applied yet.</div>`}</section>`
+}
+function automationQueueHtml(){
+  const queue=[...db.automationQueue].sort((a,b)=>(a.status==="Needs Review"?0:1)-(b.status==="Needs Review"?0:1)||String(b.createdAt).localeCompare(String(a.createdAt)));
+  return `<section class="automation-toolbar"><div><strong>${queue.filter(q=>q.status==="Needs Review").length} messages need review</strong><span>Personalized drafts solve batch-work pain without risking robotic spam.</span></div><div><button class="ghost-btn" data-action="build-batch-queue">Build batch queue</button><button class="primary-btn" data-action="process-next-queue">Process next</button></div></section>
+    <section class="queue-board">${queue.length?queue.map(item=>{
+      const c=contact(item.contactId),missing=item.channel==="Text"?!hasPhone(c):!hasEmail(c);
+      return `<article class="approval-item ${item.status.toLowerCase().replaceAll(" ","-")}">
+        <div class="approval-channel ${item.channel.toLowerCase()}">${item.channel==="Text"?"✉":"@"}</div>
+        <div class="approval-copy"><div><strong>${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Deleted contact"} — ${esc(item.title)}</strong><span class="badge ${item.status==="Needs Review"?"warn":item.status==="Sent"?"good":""}">${esc(item.status)}</span></div><p>${esc(item.body)}</p><small>${esc(item.source)} • Due ${dateLabel(item.due)}${missing?" • Missing contact channel":""}</small></div>
+        <div class="approval-actions"><button class="quick" data-action="open-queue-item" data-id="${item.id}">Review</button>${item.status==="Needs Review"?`<button class="quick" data-action="skip-queue-item" data-id="${item.id}">Skip</button>`:""}</div>
+      </article>`
+    }).join(""):`<div class="empty">The approval queue is clear.</div>`}</section>`
+}
+function automationLogsTable(logs=db.automationLogs){
+  return logs.length?`<div class="automation-log-table"><div class="log-head"><span>Time</span><span>Automation</span><span>Person</span><span>Result</span><span>Details</span></div>${logs.map(log=>{
+    const c=contact(log.contactId);
+    return `<div class="log-row"><time>${dateTimeLabel(log.date)}</time><div><b>${esc(log.name)}</b><small>${esc(log.kind)}</small></div><span>${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"—"}</span><span class="badge ${log.status==="Failed"?"hot":log.status==="Completed"||log.status==="Started"?"good":"warn"}">${esc(log.status)}</span><p>${esc(log.detail||"")}</p></div>`
+  }).join("")}</div>`:`<div class="empty">No automation activity yet.</div>`
+}
+function automationLogsHtml(){
+  return `<section class="automation-toolbar"><div><strong>Audit trail</strong><span>Every run is explainable and reversible through the contact record.</span></div><button class="ghost-btn" data-action="clear-automation-logs">Clear logs</button></section>${automationLogsTable(db.automationLogs)}`
+}
 function renderTasks(){
-  let tasks=[...db.tasks];if(state.taskFilter==="open")tasks=tasks.filter(t=>t.status!=="Done");if(state.taskFilter==="overdue")tasks=tasks.filter(t=>t.status!=="Done"&&t.due<TODAY());if(state.taskFilter==="today")tasks=tasks.filter(t=>t.status!=="Done"&&t.due===TODAY());if(state.taskFilter==="upcoming")tasks=tasks.filter(t=>t.status!=="Done"&&t.due>TODAY());if(state.taskFilter==="done")tasks=tasks.filter(t=>t.status==="Done");tasks.sort((a,b)=>a.due.localeCompare(b.due));
+  let tasks=[...db.tasks];
+  if(state.taskFilter==="open")tasks=tasks.filter(t=>t.status!=="Done");
+  if(state.taskFilter==="overdue")tasks=tasks.filter(t=>t.status!=="Done"&&t.due<TODAY());
+  if(state.taskFilter==="today")tasks=tasks.filter(t=>t.status!=="Done"&&t.due===TODAY());
+  if(state.taskFilter==="upcoming")tasks=tasks.filter(t=>t.status!=="Done"&&t.due>TODAY());
+  if(state.taskFilter==="done")tasks=tasks.filter(t=>t.status==="Done");
+  tasks.sort((a,b)=>a.due.localeCompare(b.due));
   document.getElementById("view").innerHTML=
     pageHead("Specific commitments","Tasks","Use tasks for promises and transaction deadlines; use Smart Lists for general follow-up.",`<button class="primary-btn" data-action="open-task">＋ Add task</button>`) +
     `<div class="toolbar">${["open","overdue","today","upcoming","done"].map(x=>`<button class="${state.taskFilter===x?"primary-btn":"ghost-btn"} compact" data-action="task-filter" data-id="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join("")}</div>
-    <section class="card">${tasks.length?tasks.map(t=>{const c=contact(t.contactId);return `<div class="task-row ${t.status==="Done"?"done":""}"><input type="checkbox" ${t.status==="Done"?"checked":""} data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` • <a href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}</small></div><span class="task-date ${t.status!=="Done"&&t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}</span><button class="quick" data-action="delete-task" data-id="${t.id}">×</button></div>`}).join(""):`<div class="empty">No tasks in this view.</div>`}</section>`;
+    <section class="card">${tasks.length?tasks.map(t=>{const c=contact(t.contactId);return `<div class="task-row ${t.status==="Done"?"done":""}"><input type="checkbox" ${t.status==="Done"?"checked":""} data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` • <a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}${t.planRunId?" • Action plan":""}</small></div><span class="task-date ${t.status!=="Done"&&t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}</span><button class="quick" data-action="delete-task" data-id="${t.id}">×</button></div>`}).join(""):`<div class="empty">No tasks in this view.</div>`}</section>`;
 }
 
 function renderAutomations(){
+  const tabs=[["overview","Overview"],["rules","Rules"],["plans","Action Plans"],["queue","Approval Queue"],["logs","Logs"]];
+  const body=
+    state.automationTab==="rules"?automationRulesHtml():
+    state.automationTab==="plans"?automationPlansHtml():
+    state.automationTab==="queue"?automationQueueHtml():
+    state.automationTab==="logs"?automationLogsHtml():
+    automationOverviewHtml();
   document.getElementById("view").innerHTML=
-    pageHead("Consistent nurturing","Automations","Action plans create tasks and draft touches; reply-based plans pause when a lead responds.",`<button class="ghost-btn" data-action="apply-plan">Apply plan</button>`) +
-    `<div class="plan-grid">${plans.map(p=>`<article class="plan-card"><span class="badge ${p.category==="Seller"?"seller":p.category==="Buyer"?"buyer":""}">${esc(p.category)}</span><h3>${esc(p.name)}</h3><p>${esc(p.description)}</p><ol>${p.steps.map(s=>`<li>Day ${s[0]} — ${esc(s[1])}</li>`).join("")}</ol><button class="primary-btn compact" data-action="apply-plan" data-plan="${p.id}">Apply to person</button></article>`).join("")}</div>
-    <section class="card card-pad" style="margin-top:10px"><div class="card-head"><div><h2>Running plans</h2><small>Inbound replies automatically pause plans marked pause-on-reply.</small></div></div>${db.planRuns.length?db.planRuns.map(run=>{const c=contact(run.contactId),p=plans.find(x=>x.id===run.planId);return `<div class="run-row"><div><strong>${esc(p?.name||"Plan")} — ${c?`<a href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Deleted contact"}</strong><small>Started ${dateLabel(run.startedAt)}</small></div><span class="badge ${run.status==="Active"?"good":"warn"}">${esc(run.status)}</span><button class="quick" data-action="toggle-plan-run" data-id="${run.id}">${run.status==="Active"?"Pause":"Resume"}</button></div>`}).join(""):`<div class="empty">No plans are running.</div>`}</section>`;
+    backupWarningHtml()+
+    pageHead(
+      "Holton operating system",
+      "Automation Studio",
+      "A transparent rule engine, action-plan builder, approval queue, and transaction workflow built for a solo listing-focused agent.",
+      `<button class="ghost-btn" data-action="run-engine">Run engine</button><button class="primary-btn" data-action="open-rule-builder">＋ New rule</button>`
+    )+
+    `<nav class="automation-tabs">${tabs.map(([id,label])=>{
+      const waiting=id==="queue"?db.automationQueue.filter(q=>q.status==="Needs Review").length:0;
+      return `<button class="${state.automationTab===id?"active":""}" data-action="automation-tab" data-id="${id}">${label}${waiting?` <b>${waiting}</b>`:""}</button>`
+    }).join("")}</nav>${body}`;
 }
 
 function renderActivity(){
@@ -571,7 +1099,7 @@ function renderActivity(){
   entries.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById("view").innerHTML=
     pageHead("Communication and intent","Activity","A single timeline across calls, texts, emails, notes, and website behavior.",`<button class="primary-btn" data-action="open-communication" data-channel="Note">＋ Log activity</button>`) +
-    `<section class="card"><div class="timeline" style="padding:0 12px">${entries.length?entries.map(e=>`<div class="timeline-item"><span class="timeline-icon">${e.kind==="Call"?"☎":e.kind==="Text"?"✉":e.kind==="Email"?"@":e.kind==="Behavior"?"◉":"✎"}</span><div><strong>${e.contact?`<a href="#/contact/${e.contact.id}">${esc(fullName(e.contact))}</a> — `:""}${esc(e.title)}</strong><p>${esc(e.detail||"No details")}</p></div><time>${dateTimeLabel(e.date)}</time></div>`).join(""):`<div class="empty">No activity yet.</div>`}</div></section>`;
+    `<section class="card"><div class="timeline" style="padding:0 12px">${entries.length?entries.map(e=>`<div class="timeline-item"><span class="timeline-icon">${e.kind==="Call"?"☎":e.kind==="Text"?"✉":e.kind==="Email"?"@":e.kind==="Behavior"?"◉":"✎"}</span><div><strong>${e.contact?`<a class="person-name-link" href="#/contact/${e.contact.id}">${esc(fullName(e.contact))}</a> — `:""}${esc(e.title)}</strong><p>${esc(e.detail||"No details")}</p></div><time>${dateTimeLabel(e.date)}</time></div>`).join(""):`<div class="empty">No activity yet.</div>`}</div></section>`;
 }
 
 function renderReports(){
@@ -708,7 +1236,7 @@ function saveCommunication(){
   const direction=document.getElementById("commDirection")?.value||"outbound",outcome=document.getElementById("commOutcome")?.value||"",body=document.getElementById("commBody").value.trim(),followUp=document.getElementById("commFollowUp").value;
   db.communications.unshift({id:uid(),contactId,channel,direction,outcome,body,date:NOW(),unread:direction==="inbound",threadStatus:"open",createdAt:NOW()});
   c.lastCommunication=TODAY();if(followUp)c.followUp=followUp;c.updatedAt=TODAY();
-  if(direction==="inbound")pauseReplyPlans(contactId);
+  if(direction==="inbound"||(channel==="Note"&&["Connected","Appointment Set","Completed"].includes(outcome)))pauseReplyPlans(contactId,"Paused — real conversation logged");
   if(outcome==="Appointment Set")c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";
   if(["No Answer","Left Voicemail","Follow-Up Needed"].includes(outcome)&&followUp)db.tasks.unshift({id:uid(),contactId,title:`Callback: ${fullName(c)}`,type:"Call",due:followUp,status:"Open",priority:"High",planRunId:"",createdAt:TODAY()});
   if(state.pendingTaskId){const pending=task(state.pendingTaskId);if(pending){pending.status="Done";pending.completedAt=TODAY()}state.pendingTaskId=""}
@@ -736,7 +1264,7 @@ function saveInlineActivity(id){
   if(!body&&channel==="Note"){alert("Add a note.");return}
   db.communications.unshift({id:uid(),contactId:id,channel,direction,outcome,body,date:NOW(),unread:direction==="inbound",threadStatus:"open",createdAt:NOW()});
   c.lastCommunication=TODAY();if(followUp)c.followUp=followUp;c.updatedAt=TODAY();
-  if(direction==="inbound")pauseReplyPlans(id);
+  if(direction==="inbound"||(channel==="Note"&&["Connected","Appointment Set","Completed"].includes(outcome)))pauseReplyPlans(id,"Paused — real conversation logged");
   if(outcome==="Appointment Set")c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";
   if(["No Answer","Left Voicemail","Follow-Up Needed"].includes(outcome)&&followUp&&!db.tasks.some(t=>t.contactId===id&&t.status!=="Done"&&t.due===followUp&&t.type==="Call"))db.tasks.unshift({id:uid(),contactId:id,title:`Callback: ${fullName(c)}`,type:"Call",due:followUp,status:"Open",priority:"High",planRunId:"",createdAt:TODAY()});
   save();toast("Activity logged",`${channel} with ${fullName(c)}`);renderContact(id);
@@ -776,10 +1304,151 @@ function alertsModal(id){
 }
 function saveAlerts(id){const c=contact(id);c.alertSettings={...c.alertSettings,propertyAlert:document.getElementById("alertProperty").value==="true",marketSnapshot:document.getElementById("alertMarket").value==="true",frequency:document.getElementById("alertFrequency").value,criteria:document.getElementById("alertCriteria").value.trim()};save();closeModal();toast("Alert settings saved",fullName(c));route()}
 function planModal(contactId="",planId=""){
-  modal("Apply action plan",`<div class="form-grid"><div class="field"><label>Person</label><select id="planContact">${contactOptions(contactId)}</select></div><div class="field"><label>Plan</label><select id="planId">${plans.map(p=>`<option value="${p.id}" ${p.id===planId?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div><div class="field"><label>Start date</label><input id="planStart" type="date" value="${TODAY()}"></div></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-plan-run">Apply plan</button>`)
+  modal("Apply action plan",`<div class="form-grid"><div class="field"><label>Person</label><select id="planContact">${contactOptions(contactId)}</select></div><div class="field"><label>Plan</label><select id="planId">${allPlans().map(p=>`<option value="${p.id}" ${p.id===planId?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div><div class="field"><label>Start date</label><input id="planStart" type="date" value="${TODAY()}"></div><div class="field full"><div class="warning">Tasks are created when due. Texts and emails enter the Approval Queue for review before launching.</div></div></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-plan-run">Apply plan</button>`)
 }
-function savePlanRun(){const contactId=document.getElementById("planContact").value,planId=document.getElementById("planId").value,start=document.getElementById("planStart").value||TODAY(),p=plans.find(x=>x.id===planId),c=contact(contactId);if(!p||!c){alert("Choose a person and plan.");return}const runId=uid();db.planRuns.unshift({id:runId,contactId,planId,status:"Active",startedAt:start});p.steps.forEach(step=>db.tasks.push({id:uid(),contactId,title:step[1],type:step[2],due:addDays(start,step[0]),status:"Open",priority:"Normal",planRunId:runId,createdAt:TODAY()}));save();closeModal();toast("Plan applied",`${p.name} • ${fullName(c)}`);route()}
-function pauseReplyPlans(contactId){db.planRuns.filter(r=>r.contactId===contactId&&r.status==="Active").forEach(r=>{const p=plans.find(x=>x.id===r.planId);if(p?.pauseOnReply)r.status="Paused — replied"})}
+function savePlanRun(){
+  const contactId=document.getElementById("planContact").value,planId=document.getElementById("planId").value,start=document.getElementById("planStart").value||TODAY(),p=planById(planId),c=contact(contactId);
+  if(!p||!c){alert("Choose a person and plan.");return}
+  const result=startPlanForContact(contactId,planId,start,"");
+  if(!result.ok){alert(result.reason);return}
+  processAutomationEngine();
+  save(false);closeModal();toast("Plan applied",`${p.name} • ${fullName(c)}`);route()
+}
+function pauseReplyPlans(contactId,reason="Paused — replied"){
+  db.planRuns.filter(r=>r.contactId===contactId&&r.status==="Active").forEach(r=>{
+    const p=planById(r.planId);
+    if(p?.pauseOnReply){r.status=reason;r.pausedAt=NOW();r.pauseReason=reason;automationLog({kind:"Plan",name:p.name,contactId,status:"Paused",detail:reason,sourceId:r.id})}
+  })
+}
+function planBuilderModal(planId="",duplicate=false){
+  const original=planById(planId),p=original?JSON.parse(JSON.stringify(original)):{id:"",name:"",category:"Seller",description:"",pauseOnReply:true,goalStages:[],steps:[]};
+  if(duplicate){p.id="";p.name=`Copy of ${p.name}`}
+  const lines=(p.steps||[]).map(s=>`${s.day} | ${s.type} | ${s.title} | ${s.subject||""} | ${(s.body||"").replaceAll("\n"," ↵ ")}`).join("\n");
+  modal(p.id?"Edit action plan":"Create action plan",`<div class="form-grid">
+    <input type="hidden" id="builderPlanOriginalId" value="${esc(p.id||"")}">
+    <div class="field"><label>Plan name</label><input id="builderPlanName" value="${esc(p.name||"")}"></div>
+    <div class="field"><label>Category</label><select id="builderPlanCategory">${["Seller","Buyer","Past Client","Partner","Transaction","Custom"].map(x=>`<option ${p.category===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field full"><label>Description</label><input id="builderPlanDescription" value="${esc(p.description||"")}"></div>
+    <div class="field"><label>Pause when a real reply is logged</label><select id="builderPlanPause"><option value="true" ${p.pauseOnReply?"selected":""}>Yes</option><option value="false" ${!p.pauseOnReply?"selected":""}>No</option></select></div>
+    <div class="field"><label>Stop when stage reaches</label><input id="builderPlanGoals" value="${esc((p.goalStages||[]).join(", "))}" placeholder="Listing Appointment, Closed"></div>
+    <div class="field full"><label>Plan steps</label><textarea id="builderPlanSteps" class="code-textarea" placeholder="0 | Call | Call the lead | | Learn motivation and timing">${esc(lines)}</textarea><small class="field-help">One step per line: day | type | title | email subject | message/value. Types: Task, Call, Text, Email, Follow Up, Appointment, Add Tag, Remove Tag, Set Stage, Set Heat, Set Follow-Up, Note.</small></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-plan-builder">Save action plan</button>`)
+}
+function parsePlanSteps(text){
+  return String(text||"").split(/\n+/).map((line,index)=>{
+    const parts=line.split("|").map(x=>x.trim());
+    if(parts.length<3||!parts[2])return null;
+    return {id:`step-${uid()}`,day:Math.max(0,Number(parts[0]||0)),type:parts[1]||"Task",title:parts[2],subject:parts[3]||"",body:(parts.slice(4).join(" | ")||"").replaceAll(" ↵ ","\n")}
+  }).filter(Boolean).sort((a,b)=>a.day-b.day)
+}
+function savePlanBuilder(){
+  const originalId=document.getElementById("builderPlanOriginalId").value,name=document.getElementById("builderPlanName").value.trim();
+  if(!name){alert("Name the action plan.");return}
+  const steps=parsePlanSteps(document.getElementById("builderPlanSteps").value);
+  if(!steps.length){alert("Add at least one valid plan step.");return}
+  const id=originalId||`custom-plan-${uid()}`,plan={id,name,category:document.getElementById("builderPlanCategory").value,description:document.getElementById("builderPlanDescription").value.trim(),pauseOnReply:document.getElementById("builderPlanPause").value==="true",goalStages:document.getElementById("builderPlanGoals").value.split(",").map(x=>x.trim()).filter(Boolean),steps};
+  const i=db.actionPlans.findIndex(x=>x.id===id);if(i>=0)db.actionPlans[i]=plan;else db.actionPlans.push(plan);
+  save();closeModal();state.automationTab="plans";renderAutomations();toast("Action plan saved",name)
+}
+function ruleBuilderModal(ruleId="",duplicate=false){
+  const original=(db.automationRules||[]).find(r=>r.id===ruleId);
+  const r=original?JSON.parse(JSON.stringify(original)):{id:"",name:"",description:"",trigger:"Contact Created",active:true,runMode:"once",filters:{type:"",stage:"",heat:"",source:"",tag:"",noContactDays:"",minScore:"",behaviorType:""},actions:[{type:"Create Task",value:"Follow up today",extra:"Follow Up"}]};
+  if(duplicate){r.id="";r.name=`Copy of ${r.name}`}
+  const actionLines=(r.actions||[]).map(a=>`${a.type} | ${a.value||""} | ${a.extra||""} | ${a.subject||""}`).join("\n");
+  modal(r.id?"Edit automation rule":"Create automation rule",`<div class="form-grid">
+    <input type="hidden" id="builderRuleId" value="${esc(r.id||"")}">
+    <div class="field"><label>Rule name</label><input id="builderRuleName" value="${esc(r.name||"")}"></div>
+    <div class="field"><label>Trigger</label><select id="builderRuleTrigger">${["Contact Created","Stage Match","Behavior","Follow-Up Due","Stale","Inbound Reply","Task Completed","Manual","Always"].map(x=>`<option ${r.trigger===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field full"><label>Description</label><input id="builderRuleDescription" value="${esc(r.description||"")}"></div>
+    <div class="field"><label>Contact type</label><select id="builderRuleType"><option value="">Any</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${r.filters?.type===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Stage</label><select id="builderRuleStage"><option value="">Any</option>${[...new Set([...sellerStages,...buyerStages])].map(x=>`<option ${r.filters?.stage===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Heat</label><select id="builderRuleHeat"><option value="">Any</option>${["Hot","Warm","Cold"].map(x=>`<option ${r.filters?.heat===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Source</label><select id="builderRuleSource"><option value="">Any</option>${sources.map(x=>`<option ${r.filters?.source===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Required tag</label><input id="builderRuleTag" value="${esc(r.filters?.tag||"")}"></div>
+    <div class="field"><label>No communication for days</label><input id="builderRuleNoContact" type="number" min="0" value="${esc(r.filters?.noContactDays??"")}"></div>
+    <div class="field"><label>Minimum lead score</label><input id="builderRuleScore" type="number" min="0" max="100" value="${esc(r.filters?.minScore??"")}"></div>
+    <div class="field"><label>Behavior signal</label><select id="builderRuleBehavior"><option value="">Any</option><option ${r.filters?.behaviorType==="High Intent"?"selected":""}>High Intent</option>${behaviorTypes.map(x=>`<option ${r.filters?.behaviorType===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Repeat behavior</label><select id="builderRuleRunMode">${[["once","Once per contact"],["changed","When matching data changes"],["daily","At most daily"],["monthly","At most monthly"]].map(([v,l])=>`<option value="${v}" ${r.runMode===v?"selected":""}>${l}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="builderRuleActive"><option value="true" ${r.active?"selected":""}>Active</option><option value="false" ${!r.active?"selected":""}>Disabled</option></select></div>
+    <div class="field full"><label>Actions</label><textarea id="builderRuleActions" class="code-textarea">${esc(actionLines)}</textarea><small class="field-help">One action per line: action | value | extra. Examples: Start Plan | seller-speed · Create Task | Call today | Call · Add Tag | High Intent · Set Follow-Up | 3 · Queue Text | Hi {{first_name}}... | Personal check-in</small></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-rule-builder">Save rule</button>`)
+}
+function parseRuleActions(text){
+  const allowed=["Start Plan","Create Task","Add Tag","Remove Tag","Set Heat","Set Stage","Set Follow-Up","Add Note","Pause Plans","Queue Text","Queue Email"];
+  return String(text||"").split(/\n+/).map(line=>{const p=line.split("|").map(x=>x.trim());if(!p[0]||!allowed.includes(p[0]))return null;return {type:p[0],value:p[1]||"",extra:p[2]||"",subject:p[3]||""}}).filter(Boolean)
+}
+function saveRuleBuilder(){
+  const id=document.getElementById("builderRuleId").value||`custom-rule-${uid()}`,name=document.getElementById("builderRuleName").value.trim(),actions=parseRuleActions(document.getElementById("builderRuleActions").value);
+  if(!name){alert("Name the automation rule.");return}
+  if(!actions.length){alert("Add at least one valid action.");return}
+  const rule={id,name,description:document.getElementById("builderRuleDescription").value.trim(),trigger:document.getElementById("builderRuleTrigger").value,active:document.getElementById("builderRuleActive").value==="true",runMode:document.getElementById("builderRuleRunMode").value,filters:{type:document.getElementById("builderRuleType").value,stage:document.getElementById("builderRuleStage").value,heat:document.getElementById("builderRuleHeat").value,source:document.getElementById("builderRuleSource").value,tag:document.getElementById("builderRuleTag").value.trim(),noContactDays:document.getElementById("builderRuleNoContact").value,minScore:document.getElementById("builderRuleScore").value,behaviorType:document.getElementById("builderRuleBehavior").value},actions};
+  const i=db.automationRules.findIndex(x=>x.id===id);if(i>=0)db.automationRules[i]=rule;else db.automationRules.push(rule);
+  save();closeModal();state.automationTab="rules";renderAutomations();toast("Automation saved",name)
+}
+function previewRuleModal(ruleId){
+  const rule=db.automationRules.find(r=>r.id===ruleId),matches=matchingContactsForRule(rule,true);
+  modal(`Preview: ${rule.name}`,`<div class="preview-summary"><strong>${matches.length} contacts match right now</strong><span>${esc(automationConditionSummary(rule))}</span></div><div class="preview-contact-list">${matches.length?matches.map(c=>`<div>${avatar(c)}<span><b>${esc(fullName(c))}</b><small>${esc(c.type)} • ${esc(c.stage)} • score ${scoreContact(c).score}</small></span></div>`).join(""):`<div class="empty">Nobody currently matches this trigger and its conditions.</div>`}</div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>${matches.length?`<button class="primary-btn" data-action="run-rule" data-id="${ruleId}">Run for these contacts</button>`:""}`)
+}
+function runRuleNow(ruleId){
+  const rule=db.automationRules.find(r=>r.id===ruleId);if(!rule)return;
+  const matches=matchingContactsForRule(rule,false);
+  if(!matches.length){toast("No matches",rule.name);return}
+  if(!confirm(`Run "${rule.name}" for ${matches.length} matching contact(s)? Messages will be queued for review.`))return;
+  let count=0;matches.forEach(c=>{if(runAutomationRule(rule,c,{manual:true}))count++});
+  processPlanRuns();save(false);closeModal();renderAutomations();toast("Rule completed",`${count} contacts processed`)
+}
+function batchQueueModal(){
+  const tags=[...new Set(db.contacts.flatMap(c=>c.tags))].sort();
+  modal("Build personalized batch queue",`<div class="warning">This creates one personalized draft per person. It does not secretly blast messages. Review consent, relevance, and the final wording before launching each message.</div><div class="form-grid" style="margin-top:12px">
+    <div class="field"><label>Contact type</label><select id="batchType"><option value="">Any</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Required tag</label><select id="batchTag"><option value="">Any</option>${tags.map(x=>`<option>${esc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label>Channel</label><select id="batchChannel"><option>Text</option><option>Email</option></select></div>
+    <div class="field"><label>Email subject</label><input id="batchSubject" value="A quick Holton Homes check-in"></div>
+    <div class="field full"><label>Message template</label><textarea id="batchBody">Hi {{first_name}}, I wanted to personally check in and see what has changed with your real estate plans. — {{agent_name}}</textarea><small class="field-help">Available fields: {{first_name}}, {{last_name}}, {{full_name}}, {{property}}, {{agent_name}}, {{agent_email}}, {{agent_phone}}.</small></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-batch-queue">Create review queue</button>`)
+}
+function saveBatchQueue(){
+  const type=document.getElementById("batchType").value,tag=document.getElementById("batchTag").value,channel=document.getElementById("batchChannel").value,subject=document.getElementById("batchSubject").value.trim(),body=document.getElementById("batchBody").value.trim();
+  if(!body){alert("Write a message.");return}
+  const contacts=db.contacts.filter(c=>(!type||c.type===type)&&(!tag||c.tags.some(t=>t.toLowerCase()===tag.toLowerCase())));
+  let count=0;contacts.forEach(c=>{if(channel==="Text"&&!hasPhone(c))return;if(channel==="Email"&&!hasEmail(c))return;queueAutomationMessage(c,channel,"Personal batch follow-up",body,subject,"Batch",`${TODAY()}:${type}:${tag}:${channel}`,TODAY());count++});
+  save(false);closeModal();state.automationTab="queue";renderAutomations();toast("Batch queue created",`${count} personalized drafts need review`)
+}
+function queueItemModal(id){
+  const item=db.automationQueue.find(q=>q.id===id),c=contact(item?.contactId);if(!item||!c)return;
+  modal(`Review ${item.channel} for ${fullName(c)}`,`<div class="form-grid">
+    <div class="field"><label>Person</label><input value="${esc(fullName(c))}" disabled></div>
+    <div class="field"><label>Destination</label><input value="${esc(item.channel==="Text"?c.phone:c.email)}" disabled></div>
+    ${item.channel==="Email"?`<div class="field full"><label>Subject</label><input id="queueSubject" value="${esc(item.subject||"")}"></div>`:""}
+    <div class="field full"><label>Message</label><textarea id="queueBody">${esc(item.body)}</textarea></div>
+    <div class="field full"><div class="warning">Launching opens your device's ${item.channel.toLowerCase()} app. Mark it sent only after you actually send it.</div></div>
+  </div>`,`<button class="ghost-btn" data-action="skip-queue-item" data-id="${id}">Skip</button><button class="ghost-btn" data-action="launch-queue-item" data-id="${id}">Launch ${item.channel}</button><button class="primary-btn" data-action="mark-queue-sent" data-id="${id}">Mark sent</button>`)
+}
+function updateQueueDraftFromModal(item){
+  const body=document.getElementById("queueBody");if(body)item.body=body.value;
+  const subject=document.getElementById("queueSubject");if(subject)item.subject=subject.value
+}
+function launchQueueItem(id){
+  const item=db.automationQueue.find(q=>q.id===id),c=contact(item?.contactId);if(!item||!c)return;
+  updateQueueDraftFromModal(item);save(false);
+  if(item.channel==="Text"&&hasPhone(c))location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(item.body)}`;
+  if(item.channel==="Email"&&hasEmail(c))location.href=`mailto:${c.email}?subject=${encodeURIComponent(item.subject||"Holton Homes")}&body=${encodeURIComponent(item.body)}`
+}
+function markQueueSent(id){
+  const item=db.automationQueue.find(q=>q.id===id),c=contact(item?.contactId);if(!item||!c)return;
+  updateQueueDraftFromModal(item);item.status="Sent";item.sentAt=NOW();
+  db.communications.unshift({id:uid(),contactId:c.id,channel:item.channel,direction:"outbound",outcome:"Sent from approval queue",body:item.body,date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});
+  c.lastCommunication=TODAY();c.followUp=addDays(TODAY(),3);
+  db.tasks.filter(t=>t.sourceKey===`queue:${item.id}`&&t.status!=="Done").forEach(t=>{t.status="Done";t.completedAt=TODAY()});
+  automationLog({kind:"Approval Queue",name:item.title,contactId:c.id,status:"Completed",detail:`${item.channel} marked sent.`,sourceId:item.id});
+  save();closeModal();renderAutomations();toast("Message logged",`${item.channel} to ${fullName(c)}`)
+}
+function skipQueueItem(id){
+  const item=db.automationQueue.find(q=>q.id===id);if(!item)return;
+  item.status="Skipped";item.skipReason="Skipped by user";db.tasks.filter(t=>t.sourceKey===`queue:${item.id}`&&t.status!=="Done").forEach(t=>{t.status="Done";t.completedAt=TODAY()});
+  automationLog({kind:"Approval Queue",name:item.title,contactId:item.contactId,status:"Skipped",detail:"Skipped during human review.",sourceId:item.id});
+  save(false);closeModal();renderAutomations();toast("Draft skipped",item.title)
+}
 
 function pipNotices(){
   const items=[];const hot=dueContacts().filter(c=>c.type==="Seller"&&c.heat==="Hot")[0];if(hot)items.push({title:`Call ${fullName(hot)}`,detail:"Hot seller follow-up is due.",route:`#/contact/${hot.id}`});
@@ -816,6 +1485,11 @@ function seedDemo(){
 }
 
 document.addEventListener("click",event=>{
+  const directNameLink=event.target.closest("a.person-name-link");
+  if(directNameLink){
+    const actionNode=directNameLink.closest("[data-action]");
+    if(actionNode&&actionNode!==directNameLink)event.stopPropagation();
+  }
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
   if(action==="open-contact")openContactModal(id||"");
@@ -841,6 +1515,7 @@ document.addEventListener("click",event=>{
   if(action==="save-communication")saveCommunication();
   if(action==="launch-channel")launchChannel(channel,id);
   if(action==="open-profile")location.hash=`#/contact/${id}`;
+  if(action==="name-link")return;
   if(action==="open-tag")openTagModal(id);
   if(action==="choose-tag"){const input=document.getElementById("newTagValue");if(input)input.value=el.dataset.tag||""}
   if(action==="save-tag"){const input=document.getElementById("newTagValue");if(addTagToContact(id,input?.value||"")){closeModal();toast("Tag added",normalizeTag(input.value));route()}}
@@ -862,9 +1537,28 @@ document.addEventListener("click",event=>{
   if(action==="save-behavior")saveBehavior();
   if(action==="open-alerts")alertsModal(id);
   if(action==="save-alerts")saveAlerts(id);
+  if(action==="automation-tab"){state.automationTab=id;renderAutomations()}
+  if(action==="run-engine"){processAutomationEngine({manual:true});toast("Automation check complete","Rules, plans, and due steps were evaluated.")}
+  if(action==="open-rule-builder")ruleBuilderModal(id||"",false);
+  if(action==="save-rule-builder")saveRuleBuilder();
+  if(action==="toggle-rule"){const rule=db.automationRules.find(r=>r.id===id);if(rule){rule.active=!rule.active;save(false);renderAutomations()}}
+  if(action==="preview-rule")previewRuleModal(id);
+  if(action==="run-rule")runRuleNow(id);
+  if(action==="duplicate-rule")ruleBuilderModal(id,true);
+  if(action==="open-plan-builder")planBuilderModal(id||"",false);
+  if(action==="save-plan-builder")savePlanBuilder();
+  if(action==="duplicate-plan")planBuilderModal(id,true);
+  if(action==="build-batch-queue")batchQueueModal();
+  if(action==="save-batch-queue")saveBatchQueue();
+  if(action==="process-next-queue"){const next=db.automationQueue.find(q=>q.status==="Needs Review");if(next)queueItemModal(next.id);else toast("Queue clear","No messages need review.")}
+  if(action==="open-queue-item")queueItemModal(id);
+  if(action==="launch-queue-item")launchQueueItem(id);
+  if(action==="mark-queue-sent")markQueueSent(id);
+  if(action==="skip-queue-item")skipQueueItem(id);
+  if(action==="clear-automation-logs"&&confirm("Clear the automation audit log? Contacts and plan runs will remain.")){db.automationLogs=[];save(false);renderAutomations()}
   if(action==="apply-plan")planModal(id||"",el.dataset.plan||"");
   if(action==="save-plan-run")savePlanRun();
-  if(action==="toggle-plan-run"){const run=db.planRuns.find(r=>r.id===id);if(run){run.status=run.status==="Active"?"Paused":"Active";save();renderAutomations()}}
+  if(action==="toggle-plan-run"){const run=db.planRuns.find(r=>r.id===id);if(run){run.status=run.status==="Active"?"Paused by user":"Active";run.pauseReason=run.status==="Active"?"":"Paused by user";save();renderAutomations()}}
   if(action==="pipeline-type"){state.pipelineType=id;renderPipeline()}
   if(action==="select-call"){state.callIndex=Number(el.dataset.index||0);renderCallQueue()}
   if(action==="create-call-tasks"){dueContacts().filter(hasPhone).forEach(c=>{if(!db.tasks.some(t=>t.contactId===c.id&&t.type==="Call"&&t.status!=="Done"))db.tasks.push({id:uid(),contactId:c.id,title:`Follow up with ${fullName(c)}`,type:"Call",due:c.followUp||TODAY(),status:"Open",priority:c.heat==="Hot"?"High":"Normal",planRunId:"",createdAt:TODAY()})});save();renderCallQueue();toast("Call queue updated","Due follow-ups were added.")}
@@ -915,7 +1609,7 @@ document.addEventListener("input",event=>{
     const q=event.target.value.toLowerCase().trim(),box=document.getElementById("globalSearchResults");
     if(!q){box.classList.remove("open");box.innerHTML="";return}
     const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,c.property,...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
-    box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong>${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
+    box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong class="person-name-link">${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
   }
 });
 document.addEventListener("keydown",event=>{
@@ -937,5 +1631,5 @@ document.getElementById("globalAddPerson")?.addEventListener("click",event=>{
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);
-renderPip();route();restoreFromIndexedDbIfNeeded();
+renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);
 })();
