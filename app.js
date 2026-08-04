@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v3_fub";
-const LEGACY_KEYS = ["holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v3_2_openhouse";
+const LEGACY_KEYS = ["holtonHomesCRM_v3_fub","holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -403,7 +403,7 @@ const defaultAutomationRules = [
 ];
 
 let db = null;
-let state = {route:"people",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",notificationFilter:"priority"};
+let state = {route:"people",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",openHouseKioskId:"",openHouseKioskStep:1,openHouseKioskDraft:null,openHouseKioskSuccess:"",notificationFilter:"priority"};
 let focusTimerHandle=null;
 let speechRecognizer=null;
 let automationBusy=false,automationTimer=null;
@@ -2365,10 +2365,15 @@ function normalize(raw){
   const openHouses=(Array.isArray(raw.openHouses)?raw.openHouses:[]).map(item=>({
     id:item.id||uid(),propertyId:item.propertyId||"",contactId:item.contactId||"",title:item.title||"Open House",
     address:item.address||"",date:item.date||TODAY(),time:item.time||"12:00",duration:Number(item.duration||120),
-    notes:item.notes||"",status:item.status||"Upcoming",visitors:Array.isArray(item.visitors)?item.visitors.map(v=>({
+    notes:item.notes||"",status:item.status||"Upcoming",
+    kioskHeadline:item.kioskHeadline||"Welcome! Please sign in.",
+    kioskSubheadline:item.kioskSubheadline||"A few quick questions help us make your visit more useful.",
+    kioskThankYou:item.kioskThankYou||"You’re checked in. Enjoy the open house!",
+    visitors:Array.isArray(item.visitors)?item.visitors.map(v=>({
       id:v.id||uid(),firstName:v.firstName||"",lastName:v.lastName||"",phone:v.phone||"",email:v.email||"",
       represented:v.represented||"Unknown",lenderStatus:v.lenderStatus||"Unknown",timeline:v.timeline||"Unknown",
       interest:v.interest||"",homeowner:Boolean(v.homeowner),maySell:Boolean(v.maySell),notes:v.notes||"",
+      marketingConsent:v.marketingConsent!==false,consentAt:v.consentAt||"",
       contactId:v.contactId||"",createdAt:v.createdAt||NOW()
     })):[],createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
   }));
@@ -2747,49 +2752,147 @@ function renderField(){
     <section class="field-schedule"><div class="agent-panel-head"><div><span>NEXT 7 DAYS</span><h2>Your route</h2></div></div>${appointments.map(t=>{const person=contact(t.contactId);return `<article><time>${dateLabel(t.due)}<b>${esc(t.time||"All day")}</b></time><div><strong>${esc(t.title)}</strong><small>${person?esc(fullName(person)):"No contact"}${t.location?` • ${esc(t.location)}`:""}</small></div>${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Go</button>`:""}<button class="quick" data-action="complete-task-button" data-id="${t.id}">Done</button></article>`}).join("")||`<div class="empty">No appointments in the next seven days.</div>`}</section>
   </section>`
 }
+
+let openHouseWakeLock=null;
+let openHouseKioskResetTimer=null;
+
 function openHouse(id){return db.openHouses.find(item=>item.id===id)}
 function openHouseAddress(item){
   const p=db.properties.find(property=>property.id===item?.propertyId);
   return propertyAddress(p)||item?.address||""
 }
+function openHouseHostName(){return db.settings.agentName||"Jacob Holton"}
+function openHouseVisitorContact(visitor){return visitor?.contactId?contact(visitor.contactId):null}
+function openHouseUnrepresentedVisitors(item){
+  return (item?.visitors||[]).filter(visitor=>visitor.represented!=="Yes"&&visitor.marketingConsent!==false)
+}
 function renderOpenHouses(){
   const items=[...db.openHouses].sort((a,b)=>String(`${a.date} ${a.time}`).localeCompare(String(`${b.date} ${b.time}`)));
-  document.getElementById("view").innerHTML=pageHead("Lead generation","Open Houses","Capture visitors, identify buyers and homeowners, and start follow-up before you leave.",`<button class="primary-btn" data-action="open-open-house">＋ New open house</button>`)+
-    `<section class="open-house-grid">${items.length?items.map(item=>`<article class="open-house-card"><div class="open-house-date"><strong>${String(item.date).slice(5)}</strong><span>${esc(item.time)}</span></div><div><span>${esc(item.status)}</span><h2>${esc(item.title)}</h2><p>${esc(openHouseAddress(item)||"Address needed")}</p><small>${item.visitors.length} visitor${item.visitors.length===1?"":"s"} • ${item.visitors.filter(v=>v.maySell).length} possible seller${item.visitors.filter(v=>v.maySell).length===1?"":"s"}</small></div><a class="primary-btn compact" href="#/open-house/${item.id}">Open event</a></article>`).join(""):`<div class="empty open-house-empty"><strong>Your first open house can become a lead engine.</strong><span>Create the event, then use the iPad as a sign-in station.</span><button class="primary-btn" data-action="open-open-house">Create open house</button></div>`}</section>`
+  document.getElementById("view").innerHTML=
+    pageHead("Lead generation","Open Houses","Run a private iPad sign-in, identify real opportunities, and follow up without exposing the CRM.",`<button class="primary-btn" data-action="open-open-house">＋ New open house</button>`)+
+    `<section class="open-house-grid">${items.length?items.map(item=>`
+      <article class="open-house-card open-house-card-v32">
+        <div class="open-house-date"><strong>${String(item.date).slice(5)}</strong><span>${esc(item.time)}</span></div>
+        <div class="open-house-card-copy"><span>${esc(item.status)}</span><h2>${esc(item.title)}</h2><p>${esc(openHouseAddress(item)||"Address needed")}</p>
+          <small>${item.visitors.length} guest${item.visitors.length===1?"":"s"} • ${item.visitors.filter(v=>v.maySell).length} possible seller${item.visitors.filter(v=>v.maySell).length===1?"":"s"}</small>
+        </div>
+        <div class="open-house-card-actions">
+          <button class="primary-btn compact" data-action="launch-open-house-kiosk" data-id="${item.id}">Launch sign-in</button>
+          <a class="ghost-btn compact" href="#/open-house/${item.id}">Manage</a>
+        </div>
+      </article>`).join(""):`
+      <div class="empty open-house-empty"><strong>Your first open house can become a lead engine.</strong><span>Create the event, then launch a private iPad sign-in that never exposes your CRM.</span><button class="primary-btn" data-action="open-open-house">Create open house</button></div>`}
+    </section>`
 }
 function renderOpenHouse(id){
   const item=openHouse(id);if(!item){location.hash="#/open-houses";return}
-  document.getElementById("view").innerHTML=`<section class="open-house-hero"><div><span>OPEN HOUSE MODE</span><h1>${esc(item.title)}</h1><p>${dateLabel(item.date)} • ${esc(item.time)} • ${esc(openHouseAddress(item)||"Address needed")}</p></div><div>${openHouseAddress(item)?`<button class="ghost-btn" data-action="open-directions" data-address="${esc(openHouseAddress(item))}">Directions</button>`:""}<button class="ghost-btn" data-action="open-open-house" data-id="${item.id}">Edit</button><button class="primary-btn" data-action="open-house-visitor" data-id="${item.id}">＋ Add visitor</button></div></section>
-    <section class="open-house-metrics"><div><strong>${item.visitors.length}</strong><span>Visitors</span></div><div><strong>${item.visitors.filter(v=>v.timeline!=="Unknown").length}</strong><span>Active timelines</span></div><div><strong>${item.visitors.filter(v=>v.homeowner).length}</strong><span>Homeowners</span></div><div><strong>${item.visitors.filter(v=>v.maySell).length}</strong><span>Possible sellers</span></div></section>
-    <div class="open-house-layout"><main><section class="open-house-signin"><span>IPAD SIGN-IN</span><h2>Hand them the screen.</h2><p>Capture permission and the details needed for useful follow-up.</p><button class="primary-btn" data-action="open-house-visitor" data-id="${item.id}">Start visitor sign-in</button></section>
-      <section class="agent-panel"><div class="agent-panel-head"><div><span>VISITORS</span><h2>Follow-up list</h2></div>${item.visitors.some(v=>v.contactId)?`<button class="ghost-btn compact" data-action="start-open-house-followup" data-id="${item.id}">Start follow-up sprint</button>`:""}</div>
-      <div class="visitor-list">${item.visitors.length?item.visitors.map(v=>`<article><div><strong>${esc(`${v.firstName} ${v.lastName}`)}</strong><small>${esc(v.timeline)} • ${esc(v.lenderStatus)}${v.maySell?" • Possible seller":""}</small><span>${esc(v.interest||v.notes||"No notes")}</span></div>${v.contactId?`<a class="ghost-btn compact" href="#/contact/${v.contactId}">Profile</a>`:""}<button class="quick" data-action="open-house-visitor" data-id="${item.id}" data-visitor="${v.id}">Edit</button></article>`).join(""):`<div class="empty">No visitors signed in yet.</div>`}</div></section>
-    </main><aside><section class="card card-pad"><h2>Property notes</h2><p class="panel-note">${esc(item.notes||"Add property talking points, showing instructions, and seller-approved details.")}</p></section></aside></div>`
+  const eligible=openHouseUnrepresentedVisitors(item);
+  document.getElementById("view").innerHTML=`
+    <section class="open-house-hero open-house-staff-hero">
+      <div><span>OPEN HOUSE STAFF VIEW</span><h1>${esc(item.title)}</h1><p>${dateLabel(item.date)} • ${esc(item.time)} • ${esc(openHouseAddress(item)||"Address needed")}</p></div>
+      <div class="open-house-staff-actions">
+        ${openHouseAddress(item)?`<button class="ghost-btn" data-action="open-directions" data-address="${esc(openHouseAddress(item))}">Directions</button>`:""}
+        <button class="ghost-btn" data-action="open-open-house" data-id="${item.id}">Edit event</button>
+        <button class="ghost-btn" data-action="open-house-visitor" data-id="${item.id}">Add guest manually</button>
+        <button class="primary-btn" data-action="launch-open-house-kiosk" data-id="${item.id}">Launch iPad sign-in</button>
+      </div>
+    </section>
+    <section class="open-house-metrics">
+      <div><strong>${item.visitors.length}</strong><span>Guests</span></div>
+      <div><strong>${eligible.length}</strong><span>Follow-up eligible</span></div>
+      <div><strong>${item.visitors.filter(v=>v.homeowner).length}</strong><span>Homeowners</span></div>
+      <div><strong>${item.visitors.filter(v=>v.maySell).length}</strong><span>Possible sellers</span></div>
+    </section>
+    <div class="open-house-layout">
+      <main>
+        <section class="open-house-signin open-house-kiosk-launch-card">
+          <span>PRIVATE IPAD SIGN-IN</span>
+          <h2>Hand them the iPad—not your CRM.</h2>
+          <p>The guest view hides the entire CRM, shows one question at a time, clears every guest’s information, and returns to a clean welcome screen.</p>
+          <div><button class="primary-btn" data-action="launch-open-house-kiosk" data-id="${item.id}">Open full-screen sign-in</button><button class="ghost-btn" data-action="preview-open-house-kiosk" data-id="${item.id}">Preview guest experience</button></div>
+        </section>
+        <section class="agent-panel">
+          <div class="agent-panel-head"><div><span>GUESTS</span><h2>Staff follow-up list</h2></div>
+            ${eligible.some(v=>v.contactId)?`<button class="ghost-btn compact" data-action="start-open-house-followup" data-id="${item.id}">Start follow-up sprint</button>`:""}
+          </div>
+          <div class="visitor-list">${item.visitors.length?item.visitors.map(v=>{
+            const c=openHouseVisitorContact(v);
+            const permission=v.marketingConsent===false?"No follow-up permission":v.represented==="Yes"?"Already represented":"Follow-up allowed";
+            return `<article class="${v.marketingConsent===false||v.represented==="Yes"?"visitor-restricted":""}">
+              <div><strong>${esc(`${v.firstName} ${v.lastName}`)}</strong><small>${esc(v.timeline)} • ${esc(v.lenderStatus)}${v.maySell?" • Possible seller":""}</small><span>${esc(permission)}${v.interest?` • ${esc(v.interest)}`:""}</span></div>
+              ${c?`<a class="ghost-btn compact" href="#/contact/${c.id}">Profile</a>`:""}
+              <button class="quick" data-action="open-house-visitor" data-id="${item.id}" data-visitor="${v.id}">Edit</button>
+            </article>`
+          }).join(""):`<div class="empty">No guests signed in yet.</div>`}</div>
+        </section>
+      </main>
+      <aside>
+        <section class="card card-pad"><h2>Property notes</h2><p class="panel-note">${esc(item.notes||"Add seller-approved talking points and showing instructions.")}</p></section>
+        <section class="card card-pad open-house-safety-note"><h2>Follow-up protection</h2><p class="panel-note">Guests who say they already have an agent or decline follow-up permission remain in the event record, but are excluded from the follow-up sprint.</p></section>
+      </aside>
+    </div>`
 }
 function openHouseModal(id=""){
-  const item=openHouse(id)||{id:"",propertyId:"",contactId:"",title:"Open House",address:"",date:TODAY(),time:"12:00",duration:120,notes:"",status:"Upcoming",visitors:[]};
+  const item=openHouse(id)||{
+    id:"",propertyId:"",contactId:"",title:"Open House",address:"",date:TODAY(),time:"12:00",duration:120,
+    notes:"",status:"Upcoming",visitors:[],kioskHeadline:"Welcome! Please sign in.",
+    kioskSubheadline:"A few quick questions help us make your visit more useful.",
+    kioskThankYou:"You’re checked in. Enjoy the open house!"
+  };
   modal(item.id?"Edit open house":"New open house",`<div class="form-grid">
     <input id="openHouseId" type="hidden" value="${esc(item.id)}">
-    <div class="field"><label>Title</label><input id="openHouseTitle" value="${esc(item.title)}"></div>
+    <div class="field"><label>Event title</label><input id="openHouseTitle" value="${esc(item.title)}"></div>
     <div class="field"><label>Status</label><select id="openHouseStatus">${["Upcoming","Live","Completed","Cancelled"].map(x=>`<option ${item.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field full"><label>Property address</label><input id="openHouseAddress" value="${esc(openHouseAddress(item))}"></div>
     <div class="field"><label>Date</label><input id="openHouseDate" type="date" value="${esc(item.date)}"></div>
     <div class="field"><label>Start time</label><input id="openHouseTime" type="time" value="${esc(item.time)}"></div>
     <div class="field"><label>Duration</label><select id="openHouseDuration">${[60,90,120,180,240].map(value=>`<option value="${value}" ${item.duration===value?"selected":""}>${value} minutes</option>`).join("")}</select></div>
-    <div class="field full"><label>Property talking points and instructions</label><textarea id="openHouseNotes">${esc(item.notes)}</textarea></div>
-  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house">Save event</button>`)
+    <div class="field full section-label">Guest sign-in experience</div>
+    <div class="field full"><label>Welcome headline</label><input id="openHouseKioskHeadline" value="${esc(item.kioskHeadline)}"></div>
+    <div class="field full"><label>Welcome message</label><input id="openHouseKioskSubheadline" value="${esc(item.kioskSubheadline)}"></div>
+    <div class="field full"><label>Thank-you message</label><input id="openHouseKioskThankYou" value="${esc(item.kioskThankYou)}"></div>
+    <div class="field full"><label>Property talking points and staff instructions</label><textarea id="openHouseNotes">${esc(item.notes)}</textarea></div>
+  </div>`,`${item.id?`<button class="danger-btn" data-action="delete-open-house" data-id="${item.id}">Delete event</button>`:""}<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house">Save event</button>`)
 }
 function saveOpenHouse(){
-  const id=document.getElementById("openHouseId").value||uid(),old=openHouse(id),item={id,propertyId:old?.propertyId||"",contactId:old?.contactId||"",title:document.getElementById("openHouseTitle").value.trim()||"Open House",address:document.getElementById("openHouseAddress").value.trim(),date:document.getElementById("openHouseDate").value,time:document.getElementById("openHouseTime").value||"12:00",duration:Number(document.getElementById("openHouseDuration").value||120),notes:document.getElementById("openHouseNotes").value.trim(),status:document.getElementById("openHouseStatus").value,visitors:old?.visitors||[],createdAt:old?.createdAt||NOW(),updatedAt:NOW()};
-  const index=db.openHouses.findIndex(x=>x.id===id);if(index>=0)db.openHouses[index]=item;else db.openHouses.unshift(item);
+  const id=document.getElementById("openHouseId").value||uid(),old=openHouse(id);
+  const item={
+    id,propertyId:old?.propertyId||"",contactId:old?.contactId||"",
+    title:document.getElementById("openHouseTitle").value.trim()||"Open House",
+    address:document.getElementById("openHouseAddress").value.trim(),
+    date:document.getElementById("openHouseDate").value,
+    time:document.getElementById("openHouseTime").value||"12:00",
+    duration:Number(document.getElementById("openHouseDuration").value||120),
+    notes:document.getElementById("openHouseNotes").value.trim(),
+    status:document.getElementById("openHouseStatus").value,
+    kioskHeadline:document.getElementById("openHouseKioskHeadline").value.trim()||"Welcome! Please sign in.",
+    kioskSubheadline:document.getElementById("openHouseKioskSubheadline").value.trim()||"A few quick questions help us make your visit more useful.",
+    kioskThankYou:document.getElementById("openHouseKioskThankYou").value.trim()||"You’re checked in. Enjoy the open house!",
+    visitors:old?.visitors||[],createdAt:old?.createdAt||NOW(),updatedAt:NOW()
+  };
+  if(!item.address)return alert("Add the open-house address.");
+  if(!item.date)return alert("Add the open-house date.");
+  const index=db.openHouses.findIndex(x=>x.id===id);
+  if(index>=0)db.openHouses[index]=item;else db.openHouses.unshift(item);
   save();closeModal();location.hash=`#/open-house/${id}`;toast("Open house saved",`${dateLabel(item.date)} • ${item.time}`)
 }
+function deleteOpenHouse(id){
+  const item=openHouse(id);if(!item)return;
+  const count=item.visitors.length;
+  const message=`Delete “${item.title}”?${count?` This removes the event and its ${count} guest sign-in record${count===1?"":"s"} from Open House Mode.`:""} CRM contact profiles already created from guests will remain in People.`;
+  if(!confirm(message))return;
+  db.openHouses=db.openHouses.filter(event=>event.id!==id);
+  save();closeModal();location.hash="#/open-houses";toast("Open house deleted","Any CRM contacts created from guests were preserved.")
+}
 function openHouseVisitorModal(openHouseId,visitorId=""){
-  const item=openHouse(openHouseId),visitor=item?.visitors.find(v=>v.id===visitorId)||{id:"",firstName:"",lastName:"",phone:"",email:"",represented:"Unknown",lenderStatus:"Unknown",timeline:"Unknown",interest:"",homeowner:false,maySell:false,notes:"",contactId:""};
+  const item=openHouse(openHouseId),visitor=item?.visitors.find(v=>v.id===visitorId)||{
+    id:"",firstName:"",lastName:"",phone:"",email:"",represented:"Unknown",lenderStatus:"Unknown",
+    timeline:"Unknown",interest:"",homeowner:false,maySell:false,notes:"",marketingConsent:true,contactId:""
+  };
   if(!item)return;
-  modal(visitor.id?"Edit visitor":"Open house sign-in",`<div class="visitor-signin">
+  modal(visitor.id?"Edit guest":"Add guest manually",`<div class="visitor-signin">
     <input id="visitorOpenHouseId" type="hidden" value="${item.id}"><input id="visitorId" type="hidden" value="${visitor.id}">
-    <div class="visitor-brand"><span class="brand-mark">HH</span><div><strong>Welcome in.</strong><small>Tell us a little about your move so Jacob can be useful.</small></div></div>
+    <div class="visitor-brand"><span class="brand-mark">HH</span><div><strong>Staff entry</strong><small>This form is for correcting or manually entering a guest. Use Launch iPad Sign-In for the private guest experience.</small></div></div>
     <div class="form-grid">
       <div class="field"><label>First name</label><input id="visitorFirst" value="${esc(visitor.firstName)}"></div>
       <div class="field"><label>Last name</label><input id="visitorLast" value="${esc(visitor.lastName)}"></div>
@@ -2797,35 +2900,261 @@ function openHouseVisitorModal(openHouseId,visitorId=""){
       <div class="field"><label>Email</label><input id="visitorEmail" type="email" value="${esc(visitor.email)}"></div>
       <div class="field"><label>Already represented?</label><select id="visitorRepresented">${["Unknown","No","Yes"].map(x=>`<option ${visitor.represented===x?"selected":""}>${x}</option>`).join("")}</select></div>
       <div class="field"><label>Financing</label><select id="visitorLender">${["Unknown","Need a lender","Pre-approved","Cash"].map(x=>`<option ${visitor.lenderStatus===x?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field"><label>Move timeline</label><select id="visitorTimeline">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${visitor.timeline===x?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field full"><label>What caught your attention?</label><input id="visitorInterest" value="${esc(visitor.interest)}"></div>
-      <div class="field full visitor-checks"><label class="checkbox-row"><input id="visitorHomeowner" type="checkbox" ${visitor.homeowner?"checked":""}> I currently own a home</label><label class="checkbox-row"><input id="visitorMaySell" type="checkbox" ${visitor.maySell?"checked":""}> I may need to sell a home</label></div>
-      <div class="field full"><label>Anything else?</label><textarea id="visitorNotes">${esc(visitor.notes)}</textarea></div>
+      <div class="field"><label>Move timeline</label><select id="visitorTimeline">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Just looking","Unknown"].map(x=>`<option ${visitor.timeline===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field full"><label>What caught their attention?</label><input id="visitorInterest" value="${esc(visitor.interest)}"></div>
+      <div class="field full visitor-checks"><label class="checkbox-row"><input id="visitorHomeowner" type="checkbox" ${visitor.homeowner?"checked":""}> Currently owns a home</label><label class="checkbox-row"><input id="visitorMaySell" type="checkbox" ${visitor.maySell?"checked":""}> May need to sell a home</label></div>
+      <div class="field full"><label class="checkbox-row"><input id="visitorConsent" type="checkbox" ${visitor.marketingConsent!==false?"checked":""}> Permission to follow up by call, text, or email</label></div>
+      <div class="field full"><label>Staff notes</label><textarea id="visitorNotes">${esc(visitor.notes)}</textarea></div>
     </div>
-  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house-visitor">Save sign-in</button>`)
+  </div>`,`${visitor.id?`<button class="danger-btn" data-action="delete-open-house-visitor" data-id="${item.id}" data-visitor="${visitor.id}">Remove guest</button>`:""}<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house-visitor">Save guest</button>`)
+}
+function createOpenHouseContact(item,data,existingContactId=""){
+  let c=existingContactId?contact(existingContactId):null;
+  if(!c){
+    c=db.contacts.find(person=>
+      (data.phone&&normalizePhone(person.phone)===normalizePhone(data.phone))||
+      (data.email&&String(person.email).toLowerCase()===String(data.email).toLowerCase())
+    )
+  }
+  const represented=data.represented==="Yes";
+  const consent=data.marketingConsent!==false;
+  const followUp=represented||!consent?"":addDays(TODAY(),1);
+  const heat=data.timeline==="Now — 0–3 months"?"Hot":data.timeline==="3–6 months"?"Warm":"Cold";
+  const tags=["Open House",data.maySell?"Potential Seller":"",represented?"Represented — Do Not Prospect":"",!consent?"No Follow-Up Permission":""].filter(Boolean);
+  const eventNote=`Visited ${item.title} at ${openHouseAddress(item)}. Timeline: ${data.timeline}. Representation: ${data.represented}. Financing: ${data.lenderStatus}.${data.interest?` Interest: ${data.interest}.`:""}${data.notes?` ${data.notes}`:""}`;
+  if(c){
+    c.tags=[...new Set([...(c.tags||[]),...tags])];
+    c.notes=[c.notes,eventNote].filter(Boolean).join("\n");
+    if(!represented&&consent&&followUp)c.followUp=followUp;
+    c.updatedAt=NOW();
+    return c.id
+  }
+  const normalized=normalize({contacts:[{
+    id:uid(),firstName:data.firstName,lastName:data.lastName,phone:data.phone,email:data.email,
+    type:"Buyer",stage:"New",heat,timeframe:data.timeline||"Unknown",followUp,
+    source:"Open House",tags,notes:eventNote,createdAt:NOW(),updatedAt:NOW()
+  }]}).contacts[0];
+  db.contacts.unshift(normalized);
+  return normalized.id
 }
 function saveOpenHouseVisitor(){
   const item=openHouse(document.getElementById("visitorOpenHouseId").value);if(!item)return;
-  const id=document.getElementById("visitorId").value||uid(),old=item.visitors.find(v=>v.id===id),first=document.getElementById("visitorFirst").value.trim(),last=document.getElementById("visitorLast").value.trim(),phone=document.getElementById("visitorPhone").value.trim(),email=document.getElementById("visitorEmail").value.trim();
-  if(!first||!last)return alert("Add first and last name.");
-  if(!phone&&!email)return alert("Add a phone number or email.");
-  let contactId=old?.contactId||"";
-  if(!contactId){
-    const existing=db.contacts.find(c=>(phone&&normalizePhone(c.phone)===normalizePhone(phone))||(email&&String(c.email).toLowerCase()===email.toLowerCase()));
-    if(existing)contactId=existing.id;
-    else{
-      const c=normalize({contacts:[{id:uid(),firstName:first,lastName:last,phone,email,type:"Buyer",stage:"New",heat:"Warm",timeframe:document.getElementById("visitorTimeline").value,followUp:TODAY(),source:"Open House",tags:["Open House",document.getElementById("visitorMaySell").checked?"Potential Seller":""].filter(Boolean),notes:`Visited ${item.title} at ${openHouseAddress(item)}. ${document.getElementById("visitorNotes").value.trim()}`,createdAt:NOW(),updatedAt:NOW()}]}).contacts[0];
-      db.contacts.unshift(c);contactId=c.id
-    }
-  }
-  const visitor={id,firstName:first,lastName:last,phone,email,represented:document.getElementById("visitorRepresented").value,lenderStatus:document.getElementById("visitorLender").value,timeline:document.getElementById("visitorTimeline").value,interest:document.getElementById("visitorInterest").value.trim(),homeowner:document.getElementById("visitorHomeowner").checked,maySell:document.getElementById("visitorMaySell").checked,notes:document.getElementById("visitorNotes").value.trim(),contactId,createdAt:old?.createdAt||NOW()};
-  const index=item.visitors.findIndex(v=>v.id===id);if(index>=0)item.visitors[index]=visitor;else item.visitors.push(visitor);
-  item.updatedAt=NOW();save();closeModal();renderOpenHouse(item.id);toast("Visitor captured",`${first} ${last} is in follow-up.`)
+  const id=document.getElementById("visitorId").value||uid(),old=item.visitors.find(v=>v.id===id);
+  const data={
+    id,firstName:document.getElementById("visitorFirst").value.trim(),
+    lastName:document.getElementById("visitorLast").value.trim(),
+    phone:document.getElementById("visitorPhone").value.trim(),
+    email:document.getElementById("visitorEmail").value.trim(),
+    represented:document.getElementById("visitorRepresented").value,
+    lenderStatus:document.getElementById("visitorLender").value,
+    timeline:document.getElementById("visitorTimeline").value,
+    interest:document.getElementById("visitorInterest").value.trim(),
+    homeowner:document.getElementById("visitorHomeowner").checked,
+    maySell:document.getElementById("visitorMaySell").checked,
+    marketingConsent:document.getElementById("visitorConsent").checked,
+    consentAt:document.getElementById("visitorConsent").checked?(old?.consentAt||NOW()):"",
+    notes:document.getElementById("visitorNotes").value.trim(),
+    contactId:old?.contactId||"",createdAt:old?.createdAt||NOW()
+  };
+  if(!data.firstName||!data.lastName)return alert("Add first and last name.");
+  if(!data.phone&&!data.email)return alert("Add a phone number or email.");
+  data.contactId=createOpenHouseContact(item,data,data.contactId);
+  const index=item.visitors.findIndex(v=>v.id===id);
+  if(index>=0)item.visitors[index]=data;else item.visitors.push(data);
+  item.updatedAt=NOW();save();closeModal();renderOpenHouse(item.id);toast("Guest saved",`${data.firstName} ${data.lastName}`)
+}
+function deleteOpenHouseVisitor(openHouseId,visitorId){
+  const item=openHouse(openHouseId),visitor=item?.visitors.find(v=>v.id===visitorId);if(!item||!visitor)return;
+  if(!confirm(`Remove ${visitor.firstName} ${visitor.lastName} from this open house? Their CRM contact profile will remain in People.`))return;
+  item.visitors=item.visitors.filter(v=>v.id!==visitorId);item.updatedAt=NOW();
+  save();closeModal();renderOpenHouse(item.id);toast("Guest removed","The CRM contact was preserved.")
 }
 function startOpenHouseFollowup(id){
-  const item=openHouse(id),ids=[...new Set((item?.visitors||[]).map(v=>v.contactId).filter(Boolean))];
-  if(!ids.length)return alert("No visitor contacts are available yet.");
+  const item=openHouse(id),ids=[...new Set(openHouseUnrepresentedVisitors(item).map(v=>v.contactId).filter(Boolean))];
+  if(!ids.length)return alert("No unrepresented guests with follow-up permission are available.");
   startFocusSession(ids,"open-house")
+}
+
+/* ------------------------- Guest kiosk ------------------------- */
+function freshOpenHouseKioskDraft(){
+  return {
+    firstName:"",lastName:"",phone:"",email:"",
+    timeline:"",represented:"",lenderStatus:"",
+    homeownerAnswer:"",maySellAnswer:"",interest:"",
+    marketingConsent:true
+  }
+}
+async function requestOpenHouseWakeLock(){
+  try{
+    if("wakeLock" in navigator&&!openHouseWakeLock){
+      openHouseWakeLock=await navigator.wakeLock.request("screen")
+    }
+  }catch{}
+}
+function releaseOpenHouseWakeLock(){
+  try{openHouseWakeLock?.release()}catch{}
+  openHouseWakeLock=null
+}
+function launchOpenHouseKiosk(id){
+  const item=openHouse(id);if(!item)return;
+  clearTimeout(openHouseKioskResetTimer);
+  state.openHouseKioskId=id;state.openHouseKioskStep=1;
+  state.openHouseKioskDraft=freshOpenHouseKioskDraft();state.openHouseKioskSuccess="";
+  location.hash=`#/open-house-kiosk/${id}`
+}
+function previewOpenHouseKiosk(id){launchOpenHouseKiosk(id)}
+function ensureOpenHouseKioskState(id){
+  if(state.openHouseKioskId!==id||!state.openHouseKioskDraft){
+    state.openHouseKioskId=id;state.openHouseKioskStep=1;
+    state.openHouseKioskDraft=freshOpenHouseKioskDraft();state.openHouseKioskSuccess=""
+  }
+}
+function kioskChoice(name,value,label,selected){
+  return `<button class="kiosk-choice ${selected===value?"selected":""}" data-action="open-house-kiosk-choice" data-name="${name}" data-value="${esc(value)}"><span>${esc(label)}</span><b>✓</b></button>`
+}
+function openHouseKioskStepHtml(item){
+  const draft=state.openHouseKioskDraft||freshOpenHouseKioskDraft(),step=state.openHouseKioskStep;
+  if(step===1)return `<section class="kiosk-question">
+    <span>WELCOME</span><h1>${esc(item.kioskHeadline)}</h1><p>${esc(item.kioskSubheadline)}</p>
+    <div class="kiosk-name-grid">
+      <label><span>First name</span><input id="kioskFirstName" autocomplete="given-name" value="${esc(draft.firstName)}" placeholder="First name"></label>
+      <label><span>Last name</span><input id="kioskLastName" autocomplete="family-name" value="${esc(draft.lastName)}" placeholder="Last name"></label>
+    </div>
+  </section>`;
+  if(step===2)return `<section class="kiosk-question">
+    <span>KEEP IN TOUCH</span><h1>What’s the best way to reach you?</h1><p>Phone or email is enough. Both are helpful.</p>
+    <div class="kiosk-contact-grid">
+      <label><span>Mobile phone</span><input id="kioskPhone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(draft.phone)}" placeholder="(513) 555-0123"></label>
+      <label><span>Email address</span><input id="kioskEmail" type="email" inputmode="email" autocomplete="email" value="${esc(draft.email)}" placeholder="you@example.com"></label>
+    </div>
+  </section>`;
+  if(step===3)return `<section class="kiosk-question">
+    <span>YOUR MOVE</span><h1>Where are you in the process?</h1><p>Choose the answers that fit best.</p>
+    <div class="kiosk-section-label">WHEN MIGHT YOU MOVE?</div>
+    <div class="kiosk-choice-grid">${[
+      ["Now — 0–3 months","0–3 months"],["3–6 months","3–6 months"],["6–12 months","6–12 months"],["12+ months","12+ months"],["Just looking","Just looking"]
+    ].map(([value,label])=>kioskChoice("timeline",value,label,draft.timeline)).join("")}</div>
+    <div class="kiosk-two-column">
+      <div><div class="kiosk-section-label">WORKING WITH AN AGENT?</div><div class="kiosk-choice-grid compact">${kioskChoice("represented","No","No",draft.represented)}${kioskChoice("represented","Yes","Yes",draft.represented)}</div></div>
+      <div><div class="kiosk-section-label">FINANCING</div><div class="kiosk-choice-grid compact">${[
+        ["Pre-approved","Pre-approved"],["Need a lender","Need a lender"],["Cash","Cash"],["Unknown","Not sure"]
+      ].map(([value,label])=>kioskChoice("lenderStatus",value,label,draft.lenderStatus)).join("")}</div></div>
+    </div>
+  </section>`;
+  return `<section class="kiosk-question">
+    <span>ONE LAST THING</span><h1>Tell us a little about your situation.</h1><p>This helps ${esc(openHouseHostName())} follow up with something useful instead of a generic sales message.</p>
+    <div class="kiosk-two-column">
+      <div><div class="kiosk-section-label">DO YOU CURRENTLY OWN A HOME?</div><div class="kiosk-choice-grid compact">${kioskChoice("homeownerAnswer","Yes","Yes",draft.homeownerAnswer)}${kioskChoice("homeownerAnswer","No","No",draft.homeownerAnswer)}</div></div>
+      <div class="${draft.homeownerAnswer==="Yes"?"":"kiosk-conditional-disabled"}"><div class="kiosk-section-label">MIGHT YOU NEED TO SELL IT?</div><div class="kiosk-choice-grid compact">${kioskChoice("maySellAnswer","Yes","Yes",draft.maySellAnswer)}${kioskChoice("maySellAnswer","No","No",draft.maySellAnswer)}${kioskChoice("maySellAnswer","Not sure","Not sure",draft.maySellAnswer)}</div></div>
+    </div>
+    <label class="kiosk-interest"><span>What caught your attention today? <small>Optional</small></span><input id="kioskInterest" value="${esc(draft.interest)}" placeholder="The kitchen, acreage, price, neighborhood…"></label>
+    <label class="kiosk-consent"><input id="kioskConsent" type="checkbox" ${draft.marketingConsent?"checked":""}><span>I agree that ${esc(openHouseHostName())} / Holton Homes may follow up with me about this property and my real-estate plans by call, text, or email. Message and data rates may apply.</span></label>
+  </section>`
+}
+function renderOpenHouseKiosk(id){
+  const item=openHouse(id);if(!item){location.hash="#/open-houses";return}
+  ensureOpenHouseKioskState(id);requestOpenHouseWakeLock();
+  const view=document.getElementById("view");
+  if(state.openHouseKioskSuccess){
+    view.innerHTML=`<main class="open-house-kiosk">
+      <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Staff exit</button>
+      <section class="kiosk-success">
+        <div class="kiosk-success-mark">✓</div>
+        <span>YOU’RE CHECKED IN</span>
+        <h1>Thanks, ${esc(state.openHouseKioskSuccess)}!</h1>
+        <p>${esc(item.kioskThankYou)}</p>
+        <button class="primary-btn" data-action="reset-open-house-kiosk" data-id="${item.id}">Ready for next guest</button>
+      </section>
+      <footer class="kiosk-footer"><strong>Holton Homes</strong><span>${esc(openHouseAddress(item))}</span></footer>
+    </main>`;
+    clearTimeout(openHouseKioskResetTimer);
+    openHouseKioskResetTimer=setTimeout(()=>resetOpenHouseKiosk(item.id),5000);
+    return
+  }
+  const step=state.openHouseKioskStep;
+  view.innerHTML=`<main class="open-house-kiosk">
+    <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Staff exit</button>
+    <header class="kiosk-property-header">
+      <div class="kiosk-brand"><span>HH</span><div><strong>Holton Homes</strong><small>Open House</small></div></div>
+      <div class="kiosk-property"><strong>${esc(item.title)}</strong><span>${esc(openHouseAddress(item))}</span></div>
+    </header>
+    <div class="kiosk-progress" aria-label="Step ${step} of 4">${[1,2,3,4].map(number=>`<span class="${number<step?"done":number===step?"active":""}"><b>${number<step?"✓":number}</b></span>`).join("")}</div>
+    <div class="kiosk-content">${openHouseKioskStepHtml(item)}</div>
+    <footer class="kiosk-actions">
+      ${step>1?`<button class="ghost-btn kiosk-back" data-action="open-house-kiosk-back" data-id="${item.id}">← Back</button>`:`<span></span>`}
+      <div><small>Step ${step} of 4</small><button class="primary-btn" data-action="${step===4?"save-open-house-kiosk":"open-house-kiosk-next"}" data-id="${item.id}">${step===4?"Check in":"Continue →"}</button></div>
+    </footer>
+  </main>`
+}
+function captureOpenHouseKioskStep(){
+  const draft=state.openHouseKioskDraft||freshOpenHouseKioskDraft(),step=state.openHouseKioskStep;
+  if(step===1){
+    draft.firstName=document.getElementById("kioskFirstName")?.value.trim()||"";
+    draft.lastName=document.getElementById("kioskLastName")?.value.trim()||"";
+    if(!draft.firstName||!draft.lastName){alert("Please add your first and last name.");return false}
+  }
+  if(step===2){
+    draft.phone=document.getElementById("kioskPhone")?.value.trim()||"";
+    draft.email=document.getElementById("kioskEmail")?.value.trim()||"";
+    if(!draft.phone&&!draft.email){alert("Please add a mobile number or email address.");return false}
+  }
+  if(step===3){
+    if(!draft.timeline){alert("Please choose a move timeline.");return false}
+    if(!draft.represented){alert("Please tell us whether you are already working with an agent.");return false}
+    if(!draft.lenderStatus)draft.lenderStatus="Unknown"
+  }
+  if(step===4){
+    draft.interest=document.getElementById("kioskInterest")?.value.trim()||"";
+    draft.marketingConsent=document.getElementById("kioskConsent")?.checked!==false;
+    if(!draft.homeownerAnswer){alert("Please tell us whether you currently own a home.");return false}
+    if(draft.homeownerAnswer==="Yes"&&!draft.maySellAnswer){alert("Please tell us whether you may need to sell your current home.");return false}
+    if(draft.homeownerAnswer==="No")draft.maySellAnswer="No"
+  }
+  state.openHouseKioskDraft=draft;return true
+}
+function openHouseKioskNext(id){
+  if(!captureOpenHouseKioskStep())return;
+  state.openHouseKioskStep=Math.min(4,state.openHouseKioskStep+1);renderOpenHouseKiosk(id)
+}
+function openHouseKioskBack(id){
+  captureOpenHouseKioskStep();
+  state.openHouseKioskStep=Math.max(1,state.openHouseKioskStep-1);renderOpenHouseKiosk(id)
+}
+function openHouseKioskChoice(name,value){
+  const draft=state.openHouseKioskDraft||freshOpenHouseKioskDraft();
+  draft[name]=value;
+  if(name==="homeownerAnswer"&&value==="No")draft.maySellAnswer="No";
+  state.openHouseKioskDraft=draft;renderOpenHouseKiosk(state.openHouseKioskId)
+}
+function saveOpenHouseKiosk(id){
+  if(!captureOpenHouseKioskStep())return;
+  const item=openHouse(id),draft=state.openHouseKioskDraft;if(!item||!draft)return;
+  const data={
+    id:uid(),firstName:draft.firstName,lastName:draft.lastName,phone:draft.phone,email:draft.email,
+    represented:draft.represented||"Unknown",lenderStatus:draft.lenderStatus||"Unknown",
+    timeline:draft.timeline||"Unknown",interest:draft.interest||"",
+    homeowner:draft.homeownerAnswer==="Yes",
+    maySell:["Yes","Not sure"].includes(draft.maySellAnswer),
+    marketingConsent:draft.marketingConsent!==false,
+    consentAt:draft.marketingConsent!==false?NOW():"",
+    notes:draft.maySellAnswer==="Not sure"?"Guest is unsure whether a sale would be needed.":"",
+    contactId:"",createdAt:NOW()
+  };
+  data.contactId=createOpenHouseContact(item,data);
+  item.visitors.push(data);item.updatedAt=NOW();save();
+  state.openHouseKioskSuccess=draft.firstName;
+  renderOpenHouseKiosk(id)
+}
+function resetOpenHouseKiosk(id){
+  clearTimeout(openHouseKioskResetTimer);
+  state.openHouseKioskStep=1;state.openHouseKioskDraft=freshOpenHouseKioskDraft();state.openHouseKioskSuccess="";
+  renderOpenHouseKiosk(id)
+}
+function exitOpenHouseKiosk(id){
+  if(!confirm("Exit the guest sign-in screen and return to staff view?"))return;
+  clearTimeout(openHouseKioskResetTimer);releaseOpenHouseWakeLock();
+  state.openHouseKioskId="";state.openHouseKioskDraft=null;state.openHouseKioskSuccess="";
+  location.hash=`#/open-house/${id}`
 }
 
 const marketSignalOptions=[
@@ -3237,11 +3566,15 @@ function route(){
   closeContactPeek();
   const hash=(location.hash||"#/people").replace(/^#\//,"");
   const [name,id]=hash.split("/");
+  const kiosk=name==="open-house-kiosk";
+  document.body.classList.toggle("open-house-kiosk-active",kiosk);
+  if(!kiosk)releaseOpenHouseWakeLock();
   state.route=name||"people";
   renderNav();
   if(name==="contact"&&id)return renderContact(id);
   if(name==="transaction"&&id)return renderTransaction(id);
   if(name==="open-house"&&id)return renderOpenHouse(id);
+  if(name==="open-house-kiosk"&&id)return renderOpenHouseKiosk(id);
   const renderers={today:renderToday,more:renderMore,focus:renderFocus,field:renderField,"open-houses":renderOpenHouses,"market-study":renderMarketStudy,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
   (renderers[state.route]||renderPeople)();
 }
@@ -5369,9 +5702,18 @@ document.addEventListener("click",event=>{
   if(action==="finish-focus-session")finishFocusSession();
   if(action==="open-open-house")openHouseModal(id||"");
   if(action==="save-open-house")saveOpenHouse();
+  if(action==="delete-open-house")deleteOpenHouse(id);
   if(action==="open-house-visitor")openHouseVisitorModal(id,el.dataset.visitor||"");
   if(action==="save-open-house-visitor")saveOpenHouseVisitor();
+  if(action==="delete-open-house-visitor")deleteOpenHouseVisitor(id,el.dataset.visitor||"");
   if(action==="start-open-house-followup")startOpenHouseFollowup(id);
+  if(action==="launch-open-house-kiosk"||action==="preview-open-house-kiosk")launchOpenHouseKiosk(id);
+  if(action==="open-house-kiosk-next")openHouseKioskNext(id);
+  if(action==="open-house-kiosk-back")openHouseKioskBack(id);
+  if(action==="open-house-kiosk-choice")openHouseKioskChoice(el.dataset.name||"",el.dataset.value||"");
+  if(action==="save-open-house-kiosk")saveOpenHouseKiosk(id);
+  if(action==="reset-open-house-kiosk")resetOpenHouseKiosk(id);
+  if(action==="exit-open-house-kiosk")exitOpenHouseKiosk(id);
   if(action==="open-market-study")openMarketStudyModal(id||"",el.dataset.area||"");
   if(action==="select-market-area")selectMarketArea(el.dataset.area||"");
   if(action==="toggle-market-check")toggleMarketCheck(el.dataset.check||"");

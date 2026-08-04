@@ -658,3 +658,31 @@ The active storage key is `holtonHomesCRM_v3_fub`. V3 migrates the CRM Pro 2 sta
 - Mobile controls use the same visual family.
 
 No database or Supabase changes are required.
+
+
+## V3.2 — Open House Staff Control and Private iPad Kiosk
+
+### Staff controls
+- Delete an accidentally created open house from Edit Event.
+- Deleting an event removes its event/guest records but preserves CRM contacts already created.
+- Remove an individual guest from the event without deleting their CRM profile.
+- Separate Manage, Add Guest Manually, and Launch iPad Sign-In actions.
+- Follow-up sprint excludes represented guests and guests without follow-up permission.
+
+### Private guest experience
+- Full-screen kiosk route hides the CRM top bar, navigation, contact data, notifications, and Quick Add.
+- One question group at a time:
+  1. Name
+  2. Phone/email
+  3. Timeline, agent representation, and financing
+  4. Homeownership, possible sale, interest, and follow-up permission
+- Large iPad-friendly fields and choices.
+- Branded property welcome screen.
+- Each submission creates or updates a CRM contact.
+- Represented guests are tagged `Represented — Do Not Prospect`.
+- Guests without permission are tagged `No Follow-Up Permission`.
+- Success screen automatically clears the previous guest after five seconds.
+- Best-effort screen wake lock keeps supported iPads awake.
+- Discreet Staff Exit returns to event management.
+
+No new Supabase SQL is required. Existing V3 data migrates automatically.

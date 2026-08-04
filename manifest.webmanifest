@@ -1,7 +1,7 @@
 {
-  "name": "Holton Homes CRM V3",
+  "name": "Holton Homes CRM V3.2",
   "short_name": "Holton CRM",
-  "description": "A Follow Up Boss-inspired relationship CRM for Holton Homes.",
+  "description": "A relationship CRM with a private full-screen iPad open-house sign-in.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
