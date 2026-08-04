@@ -58,6 +58,7 @@
         <div class="search-results" id="globalSearchResults"></div>
       </div>
       <div class="top-actions"><button class="cloud-sync-pill" id="cloudSyncButton" data-action="cloud-sync-now"><span id="cloudSyncDot">●</span><span id="cloudSyncLabel">Sign in to sync</span></button>
+        <button class="notification-button" id="notificationButton" data-action="open-notifications" aria-label="Notifications"><span>♢</span><b id="notificationCount"></b></button>
         <button class="agent-mode-button" data-action="open-day-briefing">☀ Start my day</button>
         <button class="primary-btn" id="globalAddPerson" type="button">＋ Quick capture</button>
       </div>
@@ -82,6 +83,13 @@
     <button class="primary-btn compact" data-action="ask-pip">Ask</button>
   </div>
   <div class="pip-answer" id="pipAnswer"></div>
+</aside>
+
+<div class="notification-backdrop" id="notificationBackdrop"></div>
+<aside class="notification-drawer" id="notificationDrawer" aria-hidden="true">
+  <div class="notification-drawer-head"><div><span>HOLTON HOMES</span><h2>Notifications</h2></div><button class="icon-btn" data-action="close-notifications">×</button></div>
+  <div class="notification-filters" id="notificationFilters"></div>
+  <div class="notification-list" id="notificationList"></div>
 </aside>
 
 <div class="modal-backdrop" id="modalBackdrop">

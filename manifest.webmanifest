@@ -1,7 +1,7 @@
 {
-  "name": "Holton Homes Agent OS",
-  "short_name": "Holton Homes",
-  "description": "A seller-focused daily operating system for real estate.",
+  "name": "Holton Homes CRM Pro",
+  "short_name": "Holton CRM",
+  "description": "A professional seller-focused CRM and daily real estate operating system.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",

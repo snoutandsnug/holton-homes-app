@@ -521,3 +521,77 @@ This release consolidates the daily-use features into one product rather than ar
 - Persistent Quick Capture button.
 
 No new Supabase SQL is required. New datasets continue to sync inside the existing protected JSON state.
+
+
+## Agent OS 2 — Easier Market Study
+
+Market Study is now a five-minute guided workflow instead of a long data-entry form.
+
+### Quick workflow
+1. Choose a saved market area.
+2. Open the saved MLS website.
+3. Mark three actives, one reduction, and two solds as reviewed.
+4. Tap the pattern that stood out.
+5. Save one sentence.
+
+### Tap-based market signals
+- Homes moving fast
+- Price cuts showing up
+- Updated homes winning
+- Buyers negotiating
+- Inventory feels thin
+- Listings sitting
+- Acreage behaves differently
+- Mixed market
+
+The selected signal generates an editable client-ready observation. Voice or Apple keyboard dictation can replace typing.
+
+### Optional deep dive
+Detailed counts, average market time, list-to-sale ratio, payment examples, and listing links remain available but no longer block completing the daily scan.
+
+### Easier page
+- One primary Start button instead of duplicate actions.
+- Saved market chips.
+- Five-minute instructions.
+- Study streak and weekly count.
+- Compact market-memory history.
+- One-tap repeat study for the last area.
+
+No new Supabase SQL is required.
+
+
+# Holton Homes CRM Pro
+
+This release focuses on professional CRM structure and usability rather than adding decorative features.
+
+## Competitive workflow foundation
+- Internal notification center for replies, new untouched leads, due follow-ups, seller updates, appointments, transaction deadlines, and setup gaps.
+- Honest data-source explanation: the CRM distinguishes data it actually holds from integrations that are not connected.
+- Guided setup center for agent profile, markets, MLS portal, device-app preferences, first relationship, and recovery backup.
+
+## People Workspace
+- Seven core daily Smart Lists with the complete list library available below them.
+- Desktop three-panel workspace: Smart Lists, contact table, and relationship preview.
+- Mobile contact cards with reason, next action, and immediate communication buttons.
+- Sort by next follow-up, score, last communication, name, or projected GCI.
+- Bulk follow-up dates, stage changes, tags, exports, and focused sprints.
+- Comfortable and compact desktop density.
+
+## Contact Workspace
+- Overview, Timeline, Search/Properties, Tasks & Deals, and Details tabs.
+- Sticky next-action context without an endless contact page.
+- Relationship briefing, opportunity details, timeline filters, property activity, tasks, transactions, plans, household, and data health.
+- “How the CRM knows” panel exposes the stage, communication, follow-up, activity, and automation inputs behind recommendations.
+
+## Inbox Zero
+- Open, unread, deferred, all, and closed folders.
+- Do Now, Defer, and Close actions.
+- Relationship context and next action beside the conversation.
+- Clear disclosure that the inbox contains CRM-logged communication until live email/text services are connected.
+
+## Responsive design audit
+- Five-item mobile navigation; Settings and Pip live under More.
+- Larger readable type system, 44-pixel touch targets, professional table density, and consistent spacing.
+- Desktop layouts use available screen width without becoming visually noisy.
+
+No new Supabase SQL is required. Existing Agent OS 2 data migrates automatically.

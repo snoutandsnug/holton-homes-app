@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_agentOS1";
-const LEGACY_KEYS = ["holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_pro1";
+const LEGACY_KEYS = ["holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -403,7 +403,7 @@ const defaultAutomationRules = [
 ];
 
 let db = null;
-let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming"};
+let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",notificationFilter:"priority"};
 let focusTimerHandle=null;
 let speechRecognizer=null;
 let automationBusy=false,automationTimer=null;
@@ -2029,6 +2029,7 @@ function mergeStates(localState,cloudState){
   merged.automationHistory=[...new Set([...(merged.automationHistory||[]),...(local.automationHistory||[])])].slice(-5000);
   merged.workSnoozes={...(merged.workSnoozes||{}),...(local.workSnoozes||{})};
   merged.scriptDrafts={...(merged.scriptDrafts||{}),...(local.scriptDrafts||{})};
+  merged.notificationDismissals={...(merged.notificationDismissals||{}),...(local.notificationDismissals||{})};
   const localSaved=local.settings?.lastSavedAt||"",cloudSaved=merged.settings?.lastSavedAt||"";
   merged.settings={...(cloudSaved>=localSaved?local.settings:merged.settings),...(cloudSaved>=localSaved?merged.settings:local.settings)};
   return normalize(merged)
@@ -2333,7 +2334,7 @@ function normalize(raw){
   const communications=(raw.communications||raw.activities||[]).map(a=>({
     id:a.id||uid(),contactId:a.contactId||a.personId||"",channel:a.channel||a.type||"Note",
     direction:a.direction||"outbound",outcome:a.outcome||"",body:a.body||a.summary||"",date:a.date?.includes("T")?a.date:`${a.date||TODAY()}T12:00:00`,
-    unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",scriptId:a.scriptId||"",createdAt:a.createdAt||NOW()
+    unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",deferredUntil:a.deferredUntil||"",starred:Boolean(a.starred),scriptId:a.scriptId||"",createdAt:a.createdAt||NOW()
   }));
   const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),time:t.time||"",duration:Number(t.duration||60),location:t.location||"",notes:t.notes||"",status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
   const planRuns=(raw.planRuns||[]).map(r=>({...r,id:r.id||uid(),status:r.status||"Active",startedAt:r.startedAt||TODAY(),stepStates:r.stepStates||{},sourceRuleId:r.sourceRuleId||"",completedAt:r.completedAt||""}));
@@ -2372,10 +2373,13 @@ function normalize(raw){
     })):[],createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
   }));
   const marketStudies=(Array.isArray(raw.marketStudies)?raw.marketStudies:[]).map(item=>({
-    id:item.id||uid(),date:item.date||TODAY(),area:item.area||"",active:Number(item.active||0),
-    reductions:Number(item.reductions||0),pending:Number(item.pending||0),sold:Number(item.sold||0),
-    averageDom:Number(item.averageDom||0),listSaleRatio:Number(item.listSaleRatio||0),
-    paymentExample:item.paymentExample||"",observation:item.observation||"",links:item.links||"",
+    id:item.id||uid(),date:item.date||TODAY(),area:item.area||"",
+    mode:item.mode||"Quick",signal:item.signal||"",propertyType:item.propertyType||"All homes",
+    priceRange:item.priceRange||"",scanChecks:Array.isArray(item.scanChecks)?item.scanChecks:[],
+    active:Number(item.active||0),reductions:Number(item.reductions||0),pending:Number(item.pending||0),
+    sold:Number(item.sold||0),averageDom:Number(item.averageDom||0),
+    listSaleRatio:Number(item.listSaleRatio||0),paymentExample:item.paymentExample||"",
+    observation:item.observation||"",links:item.links||"",
     createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
   }));
   const focusSessions=(Array.isArray(raw.focusSessions)?raw.focusSessions:[]).map(item=>({
@@ -2383,11 +2387,12 @@ function normalize(raw){
     startedAt:item.startedAt||NOW(),durationMinutes:Number(item.durationMinutes||30),
     outcomes:Array.isArray(item.outcomes)?item.outcomes:[],endedAt:item.endedAt||""
   }));
+  const notificationDismissals=raw.notificationDismissals&&typeof raw.notificationDismissals==="object"?raw.notificationDismissals:{};
   const transactions=(Array.isArray(raw.transactions)?raw.transactions:[]).map(normalizeTransaction);
   contacts.filter(c=>["Buyer","Seller"].includes(c.type)&&c.stage==="Under Contract"&&!transactions.some(tx=>tx.contactId===c.id&&!["Closed","Terminated"].includes(tx.status))).forEach(c=>{const tx=blankTransaction(c.id,c.type),p=properties.find(item=>item.contactId===c.id&&item.primary)||properties.find(item=>item.contactId===c.id);if(p){tx.propertyId=p.id;Object.assign(tx,{street:p.street,unit:p.unit,city:p.city,state:p.state,zip:p.zip,county:p.county,purchasePrice:Number(p.expectedSalePrice||p.listPrice||0)})}tx.gci=c.gci;buildTransactionChecklist(tx,false);transactions.push(tx)});
-  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,openHouses,marketStudies,focusSessions,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",mapProvider:"apple",calendarProvider:"ask",emailProvider:"native",calendarDefaultTime:"09:00",calendarDefaultDuration:60,calendarReminderMinutes:30,calendarTimeZone:"America/New_York",
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,openHouses,marketStudies,focusSessions,notificationDismissals,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",mapProvider:"apple",calendarProvider:"ask",emailProvider:"native",calendarDefaultTime:"09:00",calendarDefaultDuration:60,calendarReminderMinutes:30,calendarTimeZone:"America/New_York",
     dailyAttemptTarget:10,dailySellerConversationTarget:1,dailyAppointmentTarget:1,dailyMarketStudyTarget:1,
-    activeFocusSessionId:"",showCelebrations:true,homeDensity:"comfortable",...(raw.settings||{})}};
+    activeFocusSessionId:"",showCelebrations:true,homeDensity:"comfortable",peopleDensity:"comfortable",onboardingCollapsed:false,setupCompletedAt:"",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -2402,7 +2407,7 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,openHouses:[],marketStudies:[],focusSessions:[],settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,openHouses:[],marketStudies:[],focusSessions:[],notificationDismissals:{},settings:{}});
 }
 
 
@@ -2439,7 +2444,7 @@ function dailyProduction(){
     {id:"conversations",label:"Real conversations",value:conversations,target:targets.conversations,icon:"◉"},
     {id:"sellers",label:"Seller conversations",value:sellerConversations,target:targets.sellers,icon:"⌂"},
     {id:"appointments",label:"Appointments set",value:appointments,target:targets.appointments,icon:"◆"},
-    {id:"market",label:"Market study",value:marketStudy,target:targets.marketStudy,icon:"↗"}
+    {id:"market",label:"5-min market scan",value:marketStudy,target:targets.marketStudy,icon:"↗"}
   ];
   const score=Math.round(metrics.reduce((sum,m)=>sum+Math.min(1,m.value/Math.max(1,m.target)),0)/metrics.length*100);
   return {attempts,conversations,sellerConversations,appointments,newLeads,marketStudy,metrics,score}
@@ -2535,20 +2540,22 @@ function moreTile(route,icon,title,description,count=0,className=""){
   return `<a class="more-tile ${className}" href="#/${route}"><span>${icon}</span><div><strong>${esc(title)}</strong><small>${esc(description)}</small></div>${count?`<b>${count}</b>`:""}</a>`
 }
 function renderMore(){
-  const unread=db.communications.filter(x=>x.unread).length,dueTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length;
-  document.getElementById("view").innerHTML=backupWarningHtml()+pageHead("Everything else","More","Tools you need without crowding the daily workspace.",`<button class="primary-btn" data-action="open-quick-capture">＋ Quick capture</button>`)+
-  `<section class="more-grid">
+  const unread=db.communications.filter(x=>x.unread).length,dueTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,setup=setupProgress();
+  document.getElementById("view").innerHTML=backupWarningHtml()+pageHead("Tools & administration","More","Communication, focused work, lead generation, reports, and system setup.",`<button class="primary-btn" data-action="open-quick-capture">＋ Quick capture</button>`)+
+  `<section class="more-grid pro-more-grid">
+    <button class="more-tile setup" data-action="open-setup-center"><span>✓</span><div><strong>CRM Setup & Guide</strong><small>${setup.done}/${setup.total} foundations complete</small></div><b>${setup.pct}%</b></button>
     ${moreTile("focus","⚡","Prospecting Sprint","Work one relationship at a time.",callQueue().length,"seller")}
     ${moreTile("field","⌖","Field Mode","Appointments, directions, calls, and notes.","","field")}
-    ${moreTile("inbox","▣","Inbox","Replies and logged conversations.",unread,"inbox")}
+    ${moreTile("inbox","▣","Inbox","Action, defer, or close conversations.",unread,"inbox")}
     ${moreTile("call-queue","☎","Call Queue","Resume your due calls.",callQueue().length,"calls")}
-    ${moreTile("tasks","✓","Tasks","Promises and appointments.",dueTasks,"tasks")}
+    ${moreTile("tasks","✓","Tasks & Calendar","Promises and appointments.",dueTasks,"tasks")}
     ${moreTile("open-houses","⌂","Open Houses","Capture visitors and follow up.","","openhouse")}
-    ${moreTile("market-study","↗","Market Study","Build daily local expertise.","","market")}
-    ${moreTile("automations","⚡","Automations","Action plans and review queues.","","automation")}
-    ${moreTile("activity","◉","Lead Activity","Behavior and property signals.","","activity")}
+    ${moreTile("market-study","↗","Market Study","Build local expertise in five minutes.","","market")}
+    ${moreTile("automations","⚡","Plans & Automations","Repeatable follow-up systems.","","automation")}
+    ${moreTile("activity","◉","Lead Activity","Property and behavior signals.","","activity")}
     ${moreTile("reports","▥","Reports","Pipeline, source, and production.","","reports")}
     ${moreTile("settings","⚙","Settings","Apps, goals, scripts, and backups.","","settings")}
+    <button class="more-tile coach" data-action="open-pip"><span>●</span><div><strong>Pip Coach</strong><small>Ask what deserves attention next.</small></div></button>
   </section>`
 }
 function quickCaptureModal(){
@@ -2820,37 +2827,246 @@ function startOpenHouseFollowup(id){
   if(!ids.length)return alert("No visitor contacts are available yet.");
   startFocusSession(ids,"open-house")
 }
-function openMarketStudyModal(id=""){
-  const item=db.marketStudies.find(x=>x.id===id)||{id:"",date:TODAY(),area:(db.settings.coreMarkets||"").split(",")[0]?.trim()||"",active:0,reductions:0,pending:0,sold:0,averageDom:0,listSaleRatio:0,paymentExample:"",observation:"",links:""};
-  modal(item.id?"Edit market study":"Today’s market study",`<div class="market-study-form">
-    <div class="market-study-prompt"><strong>Do not memorize the whole market.</strong><span>Find one pattern you could explain simply to a buyer or seller today.</span></div><div class="form-grid">
-      <input id="marketStudyId" type="hidden" value="${item.id}">
-      <div class="field"><label>Date</label><input id="marketStudyDate" type="date" value="${item.date}"></div>
-      <div class="field"><label>Area / school district</label><input id="marketStudyArea" value="${esc(item.area)}"></div>
-      <div class="field"><label>Active listings reviewed</label><input id="marketStudyActive" type="number" value="${item.active||""}"></div>
-      <div class="field"><label>Price reductions</label><input id="marketStudyReductions" type="number" value="${item.reductions||""}"></div>
-      <div class="field"><label>Pending reviewed</label><input id="marketStudyPending" type="number" value="${item.pending||""}"></div>
-      <div class="field"><label>Recent sales reviewed</label><input id="marketStudySold" type="number" value="${item.sold||""}"></div>
-      <div class="field"><label>Average days on market</label><input id="marketStudyDom" type="number" value="${item.averageDom||""}"></div>
-      <div class="field"><label>List-to-sale ratio %</label><input id="marketStudyRatio" type="number" step=".1" value="${item.listSaleRatio||""}"></div>
-      <div class="field full"><label>Monthly payment example</label><input id="marketStudyPayment" value="${esc(item.paymentExample)}" placeholder="$300,000 at today’s example assumptions..."></div>
-      <div class="field full"><label>One useful market observation</label><textarea id="marketStudyObservation" rows="5" placeholder="Updated ranches under $300k are moving faster than larger rural homes priced above recent acreage comps.">${esc(item.observation)}</textarea></div>
-      <div class="field full"><label>MLS / listing links</label><textarea id="marketStudyLinks" placeholder="One link per line">${esc(item.links)}</textarea></div>
-    </div>
-  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-market-study">Save study</button>`)
+
+const marketSignalOptions=[
+  {id:"fast",icon:"⚡",label:"Homes moving fast",template:"Well-priced homes are moving quickly"},
+  {id:"reductions",icon:"↓",label:"Price cuts showing up",template:"Price reductions are becoming more common"},
+  {id:"updated",icon:"✦",label:"Updated homes winning",template:"Updated homes are outperforming dated competition"},
+  {id:"buyers",icon:"↔",label:"Buyers negotiating",template:"Buyers appear to have more negotiating room"},
+  {id:"thin",icon:"◌",label:"Inventory feels thin",template:"Inventory is limited for serious buyers"},
+  {id:"sitting",icon:"⌛",label:"Listings sitting",template:"Overpriced or weaker listings are sitting longer"},
+  {id:"acreage",icon:"⌂",label:"Acreage behaves differently",template:"Acreage and rural properties are behaving differently from neighborhood homes"},
+  {id:"mixed",icon:"≈",label:"Mixed market",template:"The market is mixed and pricing strategy matters more than broad headlines"}
+];
+function marketStudyAreas(){
+  const core=String(db.settings.coreMarkets||"").split(",").map(x=>x.trim()).filter(Boolean);
+  const previous=db.marketStudies.map(item=>item.area).filter(Boolean);
+  return [...new Set([...core,...previous])].slice(0,10)
+}
+function marketStudyMlsUrl(){
+  return effectiveTransactionResource(null,"mlsUrl")||transactionResource("mlsUrl")?.url||""
+}
+function marketStudyStreak(){
+  const dates=[...new Set(db.marketStudies.map(item=>item.date))].sort((a,b)=>b.localeCompare(a));
+  if(!dates.length)return 0;
+  let cursor=TODAY(),streak=0;
+  if(!dates.includes(cursor))cursor=addDays(cursor,-1);
+  while(dates.includes(cursor)){streak++;cursor=addDays(cursor,-1)}
+  return streak
+}
+function marketStudiesThisWeek(){
+  return db.marketStudies.filter(item=>item.date>=addDays(TODAY(),-6)).length
+}
+function marketObservationFromSignal(signal,area,propertyType,priceRange){
+  const option=marketSignalOptions.find(item=>item.id===signal);
+  if(!option)return "";
+  const focus=[propertyType&&propertyType!=="All homes"?propertyType:"",priceRange].filter(Boolean).join(" ");
+  return `${option.template} in ${area||"this market"}${focus?` for ${focus}`:""}.`
+}
+function latestMarketArea(){return [...db.marketStudies].sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0]?.area||marketStudyAreas()[0]||""}
+function marketStudyAreaButtons(selected){
+  const areas=marketStudyAreas();
+  return areas.map(area=>`<button class="market-area-chip ${area===selected?"selected":""}" data-action="select-market-area" data-area="${esc(area)}">${esc(area)}</button>`).join("")
+}
+function openMarketStudyModal(id="",presetArea=""){
+  const item=db.marketStudies.find(x=>x.id===id)||{
+    id:"",date:TODAY(),area:presetArea||latestMarketArea(),mode:"Quick",signal:"",
+    propertyType:"All homes",priceRange:"",scanChecks:[],active:0,reductions:0,pending:0,
+    sold:0,averageDom:0,listSaleRatio:0,paymentExample:"",observation:"",links:""
+  };
+  modal(item.id?"Edit market insight":"Five-minute market scan",`<div class="market-quick-study">
+    <input id="marketStudyId" type="hidden" value="${esc(item.id)}">
+    <input id="marketStudyDate" type="hidden" value="${esc(item.date||TODAY())}">
+    <input id="marketStudySignal" type="hidden" value="${esc(item.signal||"")}">
+    <input id="marketStudyPropertyType" type="hidden" value="${esc(item.propertyType||"All homes")}">
+    <input id="marketStudyScanChecks" type="hidden" value="${esc((item.scanChecks||[]).join(","))}">
+
+    <header class="market-quick-head">
+      <div><span>FIVE-MINUTE MARKET SCAN</span><h2>Learn one thing you can say to a client.</h2></div>
+      <div class="market-mini-timer">5:00</div>
+    </header>
+
+    <section class="market-quick-step">
+      <div class="market-step-number">1</div>
+      <div class="market-step-content">
+        <span>CHOOSE ONE SMALL MARKET</span>
+        <h3>Where are you looking today?</h3>
+        <div class="market-area-chips" id="marketAreaChips">${marketStudyAreaButtons(item.area)}</div>
+        <input id="marketStudyArea" value="${esc(item.area)}" placeholder="City, neighborhood, or school district">
+      </div>
+    </section>
+
+    <section class="market-quick-step">
+      <div class="market-step-number">2</div>
+      <div class="market-step-content">
+        <span>QUICK MLS SCAN</span>
+        <h3>Look at six homes—not the whole market.</h3>
+        <div class="market-mls-actions">
+          <button class="primary-btn" data-action="open-market-mls">${marketStudyMlsUrl()?"Open my MLS ↗":"Set my MLS link"}</button>
+          <small>Review just enough listings to notice a pattern.</small>
+        </div>
+        <div class="market-scan-checks">
+          ${[
+            ["active","3 active listings","What is competing right now?"],
+            ["reduction","1 price reduction","What did the seller get wrong?"],
+            ["sold","2 recent sales","What did buyers actually pay?"]
+          ].map(([key,label,help])=>`<button class="${(item.scanChecks||[]).includes(key)?"complete":""}" data-action="toggle-market-check" data-check="${key}"><b>✓</b><span><strong>${label}</strong><small>${help}</small></span></button>`).join("")}
+        </div>
+      </div>
+    </section>
+
+    <section class="market-quick-step">
+      <div class="market-step-number">3</div>
+      <div class="market-step-content">
+        <span>TAP WHAT STOOD OUT</span>
+        <h3>What would you tell a client?</h3>
+        <div class="market-focus-row">
+          ${["All homes","Starter homes","Move-up homes","Luxury","Acreage / rural","Condos"].map(type=>`<button class="market-type-chip ${item.propertyType===type?"selected":""}" data-action="select-market-type" data-type="${esc(type)}">${esc(type)}</button>`).join("")}
+        </div>
+        <div class="market-signal-grid">
+          ${marketSignalOptions.map(option=>`<button class="${item.signal===option.id?"selected":""}" data-action="select-market-signal" data-signal="${option.id}"><span>${option.icon}</span><strong>${esc(option.label)}</strong></button>`).join("")}
+        </div>
+        <div class="field market-price-field"><label>Price range — optional</label><input id="marketStudyPriceRange" value="${esc(item.priceRange||"")}" placeholder="Under $300k, $400k–$600k..."></div>
+        <div class="field"><label>Your one-sentence insight</label><textarea id="marketStudyObservation" rows="4" placeholder="Tap a pattern above or say what you noticed.">${esc(item.observation)}</textarea></div>
+        <div class="market-observation-actions"><button class="ghost-btn compact" data-action="start-market-dictation">◉ Dictate</button><button class="ghost-btn compact" data-action="refresh-market-observation">Use selected pattern</button></div>
+      </div>
+    </section>
+
+    <details class="market-deep-dive">
+      <summary>Optional Deep Dive <span>Add detailed numbers only when useful</span></summary>
+      <div class="form-grid">
+        <div class="field"><label>Active reviewed</label><input id="marketStudyActive" type="number" value="${item.active||""}"></div>
+        <div class="field"><label>Price reductions</label><input id="marketStudyReductions" type="number" value="${item.reductions||""}"></div>
+        <div class="field"><label>Pending reviewed</label><input id="marketStudyPending" type="number" value="${item.pending||""}"></div>
+        <div class="field"><label>Recent sales</label><input id="marketStudySold" type="number" value="${item.sold||""}"></div>
+        <div class="field"><label>Average days on market</label><input id="marketStudyDom" type="number" value="${item.averageDom||""}"></div>
+        <div class="field"><label>List-to-sale ratio %</label><input id="marketStudyRatio" type="number" step=".1" value="${item.listSaleRatio||""}"></div>
+        <div class="field full"><label>Monthly payment example</label><input id="marketStudyPayment" value="${esc(item.paymentExample||"")}" placeholder="$300,000 at example assumptions..."></div>
+        <div class="field full"><label>MLS / listing links</label><textarea id="marketStudyLinks" placeholder="Paste links here if you want to revisit the homes.">${esc(item.links||"")}</textarea></div>
+      </div>
+    </details>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-market-study">Save quick insight</button>`);
+  document.getElementById("modal")?.classList.add("market-quick-modal")
+}
+function selectMarketArea(area){
+  const input=document.getElementById("marketStudyArea");if(input)input.value=area;
+  document.querySelectorAll(".market-area-chip").forEach(button=>button.classList.toggle("selected",button.dataset.area===area));
+  refreshMarketObservation(false)
+}
+function toggleMarketCheck(key){
+  const field=document.getElementById("marketStudyScanChecks");if(!field)return;
+  const checks=new Set(String(field.value||"").split(",").filter(Boolean));
+  checks.has(key)?checks.delete(key):checks.add(key);field.value=[...checks].join(",");
+  document.querySelector(`[data-action="toggle-market-check"][data-check="${key}"]`)?.classList.toggle("complete",checks.has(key))
+}
+function selectMarketType(type){
+  const field=document.getElementById("marketStudyPropertyType");if(field)field.value=type;
+  document.querySelectorAll(".market-type-chip").forEach(button=>button.classList.toggle("selected",button.dataset.type===type));
+  refreshMarketObservation(false)
+}
+function selectMarketSignal(signal){
+  const field=document.getElementById("marketStudySignal");if(field)field.value=signal;
+  document.querySelectorAll('[data-action="select-market-signal"]').forEach(button=>button.classList.toggle("selected",button.dataset.signal===signal));
+  refreshMarketObservation(true)
+}
+function refreshMarketObservation(force=true){
+  const observation=document.getElementById("marketStudyObservation");if(!observation)return;
+  const generated=marketObservationFromSignal(
+    document.getElementById("marketStudySignal")?.value||"",
+    document.getElementById("marketStudyArea")?.value.trim()||"",
+    document.getElementById("marketStudyPropertyType")?.value||"All homes",
+    document.getElementById("marketStudyPriceRange")?.value.trim()||""
+  );
+  if(generated&&(force||!observation.value.trim()||observation.dataset.generated==="true")){
+    observation.value=generated;observation.dataset.generated="true"
+  }
+}
+function startMarketDictation(){
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const field=document.getElementById("marketStudyObservation");
+  if(!Recognition){field?.focus();toast("Use the keyboard microphone","Tap the microphone on the iPhone or iPad keyboard and say what you noticed.");return}
+  speechRecognizer=new Recognition();speechRecognizer.continuous=false;speechRecognizer.interimResults=false;
+  speechRecognizer.onresult=event=>{const text=event.results?.[0]?.[0]?.transcript||"";if(field){field.value=text;field.dataset.generated="false"}};
+  speechRecognizer.onerror=()=>toast("Dictation unavailable","Use the keyboard microphone in the insight box.");
+  speechRecognizer.start();toast("Listening","Say the one thing you noticed.")
+}
+function openMarketMls(){
+  const url=marketStudyMlsUrl();
+  if(url){window.open(url,"_blank","noopener");return}
+  closeModal();location.hash="#/settings";toast("Add your MLS link","Open Transaction Sites & Portals in Settings and add your MLS website.")
 }
 function saveMarketStudy(){
-  const id=document.getElementById("marketStudyId").value||uid(),old=db.marketStudies.find(x=>x.id===id),item={id,date:document.getElementById("marketStudyDate").value,area:document.getElementById("marketStudyArea").value.trim(),active:Number(document.getElementById("marketStudyActive").value||0),reductions:Number(document.getElementById("marketStudyReductions").value||0),pending:Number(document.getElementById("marketStudyPending").value||0),sold:Number(document.getElementById("marketStudySold").value||0),averageDom:Number(document.getElementById("marketStudyDom").value||0),listSaleRatio:Number(document.getElementById("marketStudyRatio").value||0),paymentExample:document.getElementById("marketStudyPayment").value.trim(),observation:document.getElementById("marketStudyObservation").value.trim(),links:document.getElementById("marketStudyLinks").value.trim(),createdAt:old?.createdAt||NOW(),updatedAt:NOW()};
-  if(!item.area||!item.observation)return alert("Add the area and one useful observation.");
-  const index=db.marketStudies.findIndex(x=>x.id===id);if(index>=0)db.marketStudies[index]=item;else db.marketStudies.unshift(item);
-  save();closeModal();renderMarketStudy();toast("Market study saved",item.area)
+  const id=document.getElementById("marketStudyId").value||uid(),old=db.marketStudies.find(x=>x.id===id);
+  const item={
+    id,date:document.getElementById("marketStudyDate").value||TODAY(),
+    area:document.getElementById("marketStudyArea").value.trim(),mode:"Quick",
+    signal:document.getElementById("marketStudySignal").value,
+    propertyType:document.getElementById("marketStudyPropertyType").value||"All homes",
+    priceRange:document.getElementById("marketStudyPriceRange").value.trim(),
+    scanChecks:String(document.getElementById("marketStudyScanChecks").value||"").split(",").filter(Boolean),
+    active:Number(document.getElementById("marketStudyActive").value||0),
+    reductions:Number(document.getElementById("marketStudyReductions").value||0),
+    pending:Number(document.getElementById("marketStudyPending").value||0),
+    sold:Number(document.getElementById("marketStudySold").value||0),
+    averageDom:Number(document.getElementById("marketStudyDom").value||0),
+    listSaleRatio:Number(document.getElementById("marketStudyRatio").value||0),
+    paymentExample:document.getElementById("marketStudyPayment").value.trim(),
+    observation:document.getElementById("marketStudyObservation").value.trim(),
+    links:document.getElementById("marketStudyLinks").value.trim(),
+    createdAt:old?.createdAt||NOW(),updatedAt:NOW()
+  };
+  if(!item.area)return alert("Choose or type one market area.");
+  if(!item.observation)return alert("Tap a pattern or add one sentence about what you noticed.");
+  const index=db.marketStudies.findIndex(x=>x.id===id);
+  if(index>=0)db.marketStudies[index]=item;else db.marketStudies.unshift(item);
+  save();stopVoiceDictation();closeModal();renderMarketStudy();
+  toast("Market insight saved",`${item.area} • ${item.observation}`)
+}
+function marketHistoryCard(item){
+  const signal=marketSignalOptions.find(option=>option.id===item.signal);
+  const hasNumbers=item.active||item.reductions||item.pending||item.sold||item.averageDom||item.listSaleRatio;
+  return `<article class="market-history-card">
+    <div class="market-history-icon">${signal?.icon||"↗"}</div>
+    <div class="market-history-copy"><span>${dateLabel(item.date)} • ${esc(item.area)}${item.propertyType&&item.propertyType!=="All homes"?` • ${esc(item.propertyType)}`:""}</span><h2>${esc(item.observation)}</h2>${item.priceRange?`<small>${esc(item.priceRange)}</small>`:""}</div>
+    ${hasNumbers?`<div class="market-history-numbers">${item.active?`<span><b>${item.active}</b> active</span>`:""}${item.sold?`<span><b>${item.sold}</b> sold</span>`:""}${item.averageDom?`<span><b>${item.averageDom}</b> DOM</span>`:""}</div>`:""}
+    <button class="ghost-btn compact" data-action="open-market-study" data-id="${item.id}">Edit</button>
+  </article>`
 }
 function renderMarketStudy(){
   const studies=[...db.marketStudies].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  document.getElementById("view").innerHTML=pageHead("Become the local expert","Market Study","Twenty focused minutes a day creates better conversations, pricing judgment, and content.",`<button class="primary-btn" data-action="open-market-study">＋ Add today’s study</button>`)+
-    `<section class="market-study-hero ${studies.some(x=>x.date===TODAY())?"complete":""}"><div><span>${studies.some(x=>x.date===TODAY())?"TODAY COMPLETE":"TODAY’S 20-MINUTE ASSIGNMENT"}</span><h1>${studies.some(x=>x.date===TODAY())?"You learned something useful today.":"Review a small slice of your market."}</h1><p>Actives, reductions, pendings, recent sales, payment context, and one clear observation.</p></div><button class="primary-btn" data-action="open-market-study">${studies.some(x=>x.date===TODAY())?"Add another area":"Start study"}</button></section>
-    <section class="market-insight-grid">${studies.length?studies.map(item=>`<article><div><span>${dateLabel(item.date)} • ${esc(item.area)}</span><h2>${esc(item.observation)}</h2></div><div class="study-numbers"><span><strong>${item.active}</strong> active</span><span><strong>${item.reductions}</strong> reductions</span><span><strong>${item.pending}</strong> pending</span><span><strong>${item.sold}</strong> sold</span></div>${item.paymentExample?`<p><b>Payment example:</b> ${esc(item.paymentExample)}</p>`:""}<button class="ghost-btn compact" data-action="open-market-study" data-id="${item.id}">Edit study</button></article>`).join(""):`<div class="empty"><strong>No market studies yet.</strong><span>Start with one city or school district—not the whole Cincinnati market.</span></div>`}</section>`
+  const todayDone=studies.some(item=>item.date===TODAY()),lastArea=latestMarketArea();
+  const areas=marketStudyAreas();
+  document.getElementById("view").innerHTML=
+    pageHead("Become the local expert","Market Study","A five-minute scan that gives you one useful thing to say today.")+
+    `<section class="market-easy-hero ${todayDone?"complete":""}">
+      <div class="market-easy-copy"><span>${todayDone?"TODAY’S SCAN COMPLETE":"FIVE-MINUTE MARKET SCAN"}</span><h1>${todayDone?"You have a market talking point.":"Learn one thing. Save one sentence."}</h1><p>Three actives, one reduction, two solds. That is enough to notice a pattern without turning this into homework.</p></div>
+      <div class="market-easy-actions">
+        <button class="primary-btn" data-action="open-market-study" data-area="${esc(lastArea)}">${todayDone?"Study another area":"Start 5-minute scan"}</button>
+        ${marketStudyMlsUrl()?`<button class="ghost-btn" data-action="open-market-mls">Open MLS ↗</button>`:`<a class="ghost-btn" href="#/settings">Set MLS link</a>`}
+      </div>
+    </section>
+    <section class="market-easy-stats">
+      <div><strong>${marketStudyStreak()}</strong><span>day streak</span></div>
+      <div><strong>${marketStudiesThisWeek()}</strong><span>studies this week</span></div>
+      <div><strong>${new Set(studies.map(item=>item.area)).size}</strong><span>markets learned</span></div>
+      <div><strong>${studies.length}</strong><span>saved insights</span></div>
+    </section>
+    <section class="market-area-launcher agent-panel">
+      <div class="agent-panel-head"><div><span>QUICK START</span><h2>Pick an area</h2></div></div>
+      <div class="market-launch-chips">${areas.length?areas.map(area=>`<button data-action="open-market-study" data-area="${esc(area)}">${esc(area)}</button>`).join(""):`<button data-action="open-market-study">Add your first market</button>`}</div>
+    </section>
+    <section class="market-how-it-works">
+      <div><b>1</b><span><strong>Open MLS</strong><small>Use your normal saved search.</small></span></div>
+      <div><b>2</b><span><strong>Scan six homes</strong><small>3 active, 1 reduction, 2 sold.</small></span></div>
+      <div><b>3</b><span><strong>Tap the pattern</strong><small>No spreadsheet required.</small></span></div>
+      <div><b>4</b><span><strong>Save one sentence</strong><small>Use it with a client or in content.</small></span></div>
+    </section>
+    <section class="agent-panel market-history-panel">
+      <div class="agent-panel-head"><div><span>YOUR MARKET MEMORY</span><h2>${studies.length?`${studies.length} saved insight${studies.length===1?"":"s"}`:"Build your first insight"}</h2></div>${studies.length?`<button class="ghost-btn compact" data-action="open-market-study" data-area="${esc(lastArea)}">Study ${esc(lastArea)} again</button>`:""}</div>
+      <div class="market-history-list">${studies.length?studies.map(marketHistoryCard).join(""):`<div class="market-empty-easy"><span>↗</span><strong>No market homework required.</strong><p>Complete one five-minute scan and save the sentence you would actually tell a homeowner.</p><button class="primary-btn" data-action="open-market-study">Start first scan</button></div>`}</div>
+    </section>`
 }
+
 function relationshipMemoryHtml(c){
   const m=c.relationshipMemory||{},items=[
     ["Preferred name",m.preferredName],["Preferred contact",m.preferredContact],["Occupation",m.occupation],
@@ -2860,6 +3076,70 @@ function relationshipMemoryHtml(c){
   ].filter(([,value])=>value&&value!=="No preference");
   return items.length?`<div class="relationship-memory-grid">${items.map(([label,value])=>`<div><label>${esc(label)}</label><strong>${esc(value)}</strong></div>`).join("")}</div>`:`<div class="contact-address-empty"><div><strong>No relationship memory saved.</strong><span>Add details that help every conversation feel personal and prepared.</span></div><button class="primary-btn compact" data-action="open-contact" data-id="${c.id}">Add memory</button></div>`
 }
+
+
+function recentWithin(value,hours){
+  if(!value)return false;const date=new Date(value.includes("T")?value:`${value}T12:00:00`);return Date.now()-date.getTime()<=hours*3600000
+}
+function crmSetupItems(){
+  const mls=effectiveTransactionResource(null,"mlsUrl")||transactionResource("mlsUrl")?.url||"";
+  return [
+    {id:"profile",label:"Complete agent profile",detail:"Phone and email power templates and app handoffs.",done:Boolean(db.settings.agentPhone&&db.settings.agentEmail),route:"#/settings"},
+    {id:"markets",label:"Choose core markets",detail:"Used by market study and local workflows.",done:Boolean(String(db.settings.coreMarkets||"").trim()),route:"#/settings"},
+    {id:"mls",label:"Add MLS portal",detail:"Launch the system you actually use for listings and market study.",done:Boolean(mls),route:"#/settings"},
+    {id:"apps",label:"Choose maps, calendar, and mail",detail:"Apple or Google handoffs should match your devices.",done:Boolean(db.settings.mapProvider&&db.settings.calendarProvider&&db.settings.emailProvider),route:"#/settings"},
+    {id:"contact",label:"Add the first real relationship",detail:"Every contact needs a source and a protected next step.",done:db.contacts.length>0,route:"#/people"},
+    {id:"backup",label:"Create a recovery backup",detail:"Cloud sync is not a substitute for a monthly export.",done:Boolean(db.settings.lastManualBackupAt),route:"#/settings"}
+  ]
+}
+function setupProgress(){const items=crmSetupItems(),done=items.filter(x=>x.done).length;return {items,done,total:items.length,pct:Math.round(done/items.length*100)}}
+function setupCardHtml(){
+  const setup=setupProgress();if(setup.pct===100||db.settings.onboardingCollapsed)return "";
+  return `<section class="pro-setup-card"><div class="pro-setup-progress"><strong>${setup.pct}%</strong><i><span style="width:${setup.pct}%"></span></i></div><div><span>CRM SETUP</span><h2>Make the system trustworthy before the first lead arrives.</h2><p>${setup.done} of ${setup.total} foundations complete.</p></div><div><button class="primary-btn compact" data-action="open-setup-center">Continue setup</button><button class="text-button" data-action="collapse-setup">Hide</button></div></section>`
+}
+function setupCenterModal(){
+  const setup=setupProgress();
+  modal("CRM setup & operating guide",`<div class="setup-center"><div class="setup-center-hero"><strong>${setup.pct}%</strong><div><span>FOUNDATION</span><h3>Build the habits and connections the CRM depends on.</h3></div></div><div class="setup-center-list">${setup.items.map(item=>`<a href="${item.route}" data-action="close-modal" class="${item.done?"done":""}"><b>${item.done?"✓":""}</b><div><strong>${esc(item.label)}</strong><span>${esc(item.detail)}</span></div><em>${item.done?"Complete":"Open"}</em></a>`).join("")}</div><section class="data-source-explainer"><span>HOW THIS CRM GETS ITS DATA</span><p><b>Today:</b> information you enter, communication you log, open-house sign-ins, property records, tasks, transaction dates, behavior signals, imports, and market studies.</p><p><b>Not automatic yet:</b> MLS website activity, true Gmail inbox sync, business texting, caller records, and lead portals require authorized integrations or a secure backend. The app will never pretend it received data that it did not.</p></section></div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>`)
+}
+function crmNotifications(){
+  const list=[],add=(item)=>{if(!db.notificationDismissals[item.id])list.push(item)};
+  threads().filter(t=>t.unread).forEach(t=>add({id:`reply-${t.contact.id}`,type:"reply",priority:110,title:`Reply to ${fullName(t.contact)}`,detail:`Unread ${t.last.channel.toLowerCase()} • ${dateTimeLabel(t.last.date)}`,route:`#/inbox`,contactId:t.contact.id,source:"Communication"}));
+  db.contacts.filter(c=>isOpen(c)&&!c.lastCommunication&&recentWithin(c.createdAt,48)).forEach(c=>add({id:`new-${c.id}`,type:"lead",priority:105,title:`New ${c.type.toLowerCase()}: ${fullName(c)}`,detail:`No personal contact logged • Source: ${c.source}`,route:`#/contact/${c.id}`,contactId:c.id,source:"Lead record"}));
+  db.contacts.filter(c=>isOpen(c)&&c.followUp&&c.followUp<=TODAY()).forEach(c=>add({id:`followup-${c.id}-${c.followUp}`,type:"followup",priority:c.followUp<TODAY()?100:88,title:`Follow up with ${fullName(c)}`,detail:`${c.followUp<TODAY()?"Overdue":"Due today"} • ${reasonToCall(c)}`,route:`#/contact/${c.id}`,contactId:c.id,source:"Next follow-up"}));
+  transactionDeadlineItems().forEach(({tx,c,step})=>add({id:`tx-${tx.id}-${step.id}`,type:"transaction",priority:step.status==="Problem"?120:108,title:step.title,detail:`${transactionAddress(tx)||"Transaction"} • ${step.status==="Problem"?"Problem":step.due<TODAY()?"Overdue":"Due today"}`,route:`#/transaction/${tx.id}`,source:"Transaction"}));
+  todayAppointments().forEach(t=>add({id:`appt-${t.id}`,type:"appointment",priority:92,title:t.title,detail:`${t.time||"All day"}${t.location?` • ${t.location}`:""}`,route:t.contactId?`#/contact/${t.contactId}`:"#/tasks",source:"Calendar"}));
+  db.contacts.filter(c=>c.type==="Seller"&&c.stage==="Active Listing"&&daysSince(c.lastCommunication)>=7).forEach(c=>add({id:`seller-update-${c.id}`,type:"seller",priority:95,title:`Seller update due: ${fullName(c)}`,detail:`${daysSince(c.lastCommunication)} days since the last personal update`,route:`#/contact/${c.id}`,contactId:c.id,source:"Seller workflow"}));
+  const setup=setupProgress();if(setup.pct<100)add({id:"setup-foundation",type:"setup",priority:25,title:"Finish CRM setup",detail:`${setup.done} of ${setup.total} foundation items complete`,route:"#/settings",source:"System"});
+  return list.sort((a,b)=>b.priority-a.priority)
+}
+function notificationCount(){return crmNotifications().filter(n=>n.priority>=80).length}
+function updateNotificationBadge(){const count=notificationCount(),el=document.getElementById("notificationCount");if(el){el.textContent=count||"";el.style.display=count?"grid":"none"}}
+function notificationFiltersHtml(){const all=crmNotifications();return [["priority","Priority",all.filter(n=>n.priority>=80).length],["all","All",all.length],["lead","Leads",all.filter(n=>["lead","followup","seller"].includes(n.type)).length],["transaction","Deals",all.filter(n=>["transaction","appointment"].includes(n.type)).length]].map(([id,label,count])=>`<button class="${state.notificationFilter===id?"active":""}" data-action="notification-filter" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}
+function notificationListHtml(){let list=crmNotifications();if(state.notificationFilter==="priority")list=list.filter(n=>n.priority>=80);if(state.notificationFilter==="lead")list=list.filter(n=>["lead","followup","seller"].includes(n.type));if(state.notificationFilter==="transaction")list=list.filter(n=>["transaction","appointment"].includes(n.type));return list.length?list.map(n=>`<article class="notification-item ${n.type}"><div class="notification-icon">${n.type==="transaction"?"⌛":n.type==="reply"?"↩":n.type==="appointment"?"□":n.type==="seller"?"⌂":n.type==="setup"?"⚙":"◎"}</div><div><span>${esc(n.source)}</span><strong>${esc(n.title)}</strong><p>${esc(n.detail)}</p></div><div><button class="primary-btn compact" data-action="open-notification" data-id="${n.id}">Open</button><button class="text-button" data-action="dismiss-notification" data-id="${n.id}">Dismiss</button></div></article>`).join(""):`<div class="notification-empty"><span>✓</span><strong>Nothing needs attention here.</strong><p>The CRM will surface replies, new leads, due follow-ups, appointments, and transaction risks.</p></div>`}
+function renderNotificationDrawer(){document.getElementById("notificationFilters").innerHTML=notificationFiltersHtml();document.getElementById("notificationList").innerHTML=notificationListHtml();updateNotificationBadge()}
+function openNotifications(){renderNotificationDrawer();document.getElementById("notificationBackdrop").classList.add("open");document.getElementById("notificationDrawer").classList.add("open");document.getElementById("notificationDrawer").setAttribute("aria-hidden","false")}
+function closeNotifications(){document.getElementById("notificationBackdrop").classList.remove("open");document.getElementById("notificationDrawer").classList.remove("open");document.getElementById("notificationDrawer").setAttribute("aria-hidden","true")}
+function openNotification(id){const n=crmNotifications().find(x=>x.id===id);if(!n)return;closeNotifications();if(n.contactId&&n.type==="reply")state.activeThread=n.contactId;location.hash=n.route}
+function dismissNotification(id){db.notificationDismissals[id]=NOW();save(false);renderNotificationDrawer()}
+function coreSmartListIds(){return ["replies","untouched","due","stale-hot","hot-sellers","appointments","deadlines"]}
+function peopleSortOptions(){return [["next","Next follow-up"],["score","Lead score"],["last","Last communication"],["name","Name"],["gci","Projected GCI"]]}
+function peopleStats(people){return {hot:people.filter(c=>c.heat==="Hot").length,due:people.filter(c=>c.followUp&&c.followUp<=TODAY()).length,sellers:people.filter(c=>c.type==="Seller").length,gci:people.reduce((sum,c)=>sum+Number(c.gci||0),0)}}
+function selectedPeopleContacts(){return state.selectedPeople.map(contact).filter(Boolean)}
+function peopleBulkBarHtml(){const selected=selectedPeopleContacts();if(!selected.length)return "";return `<div class="people-bulk-bar"><strong>${selected.length} selected</strong><button data-action="bulk-people" data-bulk="followup">Set follow-up</button><button data-action="bulk-people" data-bulk="stage">Change stage</button><button data-action="bulk-people" data-bulk="tag">Add tag</button><button data-action="start-selected-sprint">Start sprint</button><button data-action="export-selected-people">Export</button><button class="text-button" data-action="clear-selected-people">Clear</button></div>`}
+function togglePersonSelected(id,checked){const set=new Set(state.selectedPeople);checked?set.add(id):set.delete(id);state.selectedPeople=[...set];renderPeople()}
+function peopleBulkModal(type){const selected=selectedPeopleContacts();if(!selected.length)return;let body="",title="";if(type==="followup"){title="Set next follow-up";body=`<div class="field"><label>Date for ${selected.length} contacts</label><input id="bulkPeopleValue" type="date" value="${addDays(TODAY(),1)}"></div>`}if(type==="stage"){title="Change stage";body=`<div class="field"><label>Stage for ${selected.length} contacts</label><select id="bulkPeopleValue">${[...new Set([...sellerStages,...buyerStages])].map(x=>`<option>${esc(x)}</option>`).join("")}</select></div>`}if(type==="tag"){title="Add tag";body=`<div class="field"><label>Tag for ${selected.length} contacts</label><input id="bulkPeopleValue" placeholder="Open House, Farm Owner, Referral..." autofocus></div>`}modal(title,body,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="apply-bulk-people" data-bulk="${type}">Apply</button>`)}
+function applyPeopleBulk(type){const value=document.getElementById("bulkPeopleValue")?.value.trim();if(!value)return alert("Choose a value.");selectedPeopleContacts().forEach(c=>{if(type==="followup")c.followUp=value;if(type==="stage"){const old=c.stage;c.stage=value;applyStageWorkflow(c,old,value)}if(type==="tag")c.tags=[...new Set([...(c.tags||[]),value])];c.updatedAt=TODAY()});save();closeModal();toast("Contacts updated",`${state.selectedPeople.length} records changed.`);renderPeople()}
+function exportSelectedPeople(){const selected=selectedPeopleContacts();if(!selected.length)return;const rows=[["First Name","Last Name","Phone","Email","Type","Stage","Heat","Source","Next Follow-Up","Property"],...selected.map(c=>[c.firstName,c.lastName,c.phone,c.email,c.type,c.stage,c.heat,c.source,c.followUp,propertyDisplay(c)])];download(`holton-homes-selected-${TODAY()}.csv`,"text/csv",rows.map(row=>row.map(value=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\n"));toast("Selected contacts exported",`${selected.length} records`)}
+function peoplePreviewHtml(c){if(!c)return `<aside class="people-preview"><div class="people-preview-empty"><span>◎</span><strong>Select a person</strong><p>Preview the relationship without losing your place in the list.</p></div></aside>`;const next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due)))),summary=contactSummary(c,scoreContact(c));return `<aside class="people-preview"><div class="people-preview-head">${avatar(c)}<div><span>${esc(c.type)} • ${esc(c.stage)}</span><h2>${esc(fullName(c))}</h2><p>${esc(c.phone||c.email||"Contact information missing")}</p></div><a href="#/contact/${c.id}" class="ghost-btn compact">Full profile</a></div><div class="people-preview-actions">${contactQuickActions(c,true)}</div><section><span>WHY THIS PERSON</span><p>${esc(smartListReason(c)||reasonToCall(c))}</p></section><section><span>NEXT STEP</span><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small><div><button class="primary-btn compact" data-action="complete-next-action" data-id="${c.id}" data-channel="${esc(next.channel)}" data-task="${esc(next.taskId)}">Complete & log</button><button class="ghost-btn compact" data-action="show-script" data-id="${c.id}">Script</button></div></section><section><span>RELATIONSHIP BRIEF</span><p>${esc(summary)}</p>${relationshipReminder(c)?`<small>${esc(relationshipReminder(c))}</small>`:""}</section><section><span>PROPERTY / AREA</span><strong>${esc(propertyDisplay(c)||"Not completed")}</strong><small>${esc(contactAddressDisplay(c)||"")}</small></section></aside>`}
+function contactMetricStrip(c,s,tasks){return `<section class="contact-metric-strip"><div><label>Score</label><strong>${s.score}</strong><span>${scoreLabel(s.score)} opportunity</span></div><div><label>Last touch</label><strong>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</strong><span>${c.lastCommunication?`${daysSince(c.lastCommunication)} days ago`:"Contact now"}</span></div><div><label>Next follow-up</label><strong>${c.followUp?dateLabel(c.followUp):"Missing"}</strong><span>${c.followUp&&c.followUp<TODAY()?"Overdue":c.followUp===TODAY()?"Due today":"Protected"}</span></div><div><label>Open work</label><strong>${tasks.length}</strong><span>Tasks and appointments</span></div><div><label>Projected GCI</label><strong>${money(c.gci)}</strong><span>${esc(c.source||"Source missing")}</span></div></section>`}
+function contactOverviewTab(c,s,comms,tasks,runs,next,summary){const recent=comms.slice(0,4);return `<div class="contact-tab-layout"><main><section class="what-matters pro-what-matters"><div><div class="eyebrow">RELATIONSHIP BRIEF</div><p>${esc(summary)}</p>${relationshipReminder(c)?`<aside>${esc(relationshipReminder(c))}</aside>`:""}</div><div class="score-block"><span class="score ${scoreClass(s.score)}">${s.score}</span><div><strong>${scoreLabel(s.score)} opportunity</strong><small>${esc(scoreImprovement(c).join(" • ")||"Relationship data is healthy.")}</small></div></div></section><section class="pro-next-work"><div><span>NEXT ACTION</span><h2>${esc(next.title)}</h2><p>${next.due?`${next.due<TODAY()?"Overdue":"Due"} ${dateLabel(next.due)}`:"No due date"}</p></div><div><button class="primary-btn" data-action="complete-next-action" data-id="${c.id}" data-channel="${esc(next.channel)}" data-task="${esc(next.taskId)}">Complete & log</button><button class="ghost-btn" data-action="show-script" data-id="${c.id}">Show script</button><button class="ghost-btn" data-action="reschedule-contact" data-id="${c.id}">Change date</button></div></section><section class="pro-overview-grid"><article><div class="section-head"><div><h2>Opportunity</h2><p>The fields that drive advice and prioritization.</p></div><button class="ghost-btn compact" data-action="open-contact" data-id="${c.id}">Edit</button></div><div class="detail-grid">${typeSpecificHtml(c)}</div></article><article><div class="section-head"><div><h2>Relationship memory</h2><p>What makes the next conversation personal.</p></div></div>${relationshipMemoryHtml(c)}</article></section><section class="timeline-card"><div class="section-head"><div><h2>Recent activity</h2><p>The latest calls, messages, and notes.</p></div><button class="ghost-btn compact" data-action="contact-tab" data-id="timeline">Full timeline</button></div><div class="timeline">${recent.length?timelineHtml(c,recent,[]):contactEmptyTimeline(c)}</div></section></main><aside><section class="pro-side-card"><span>PROPERTY / TARGET</span><strong>${esc(propertyDisplay(c)||"Not completed")}</strong><p>${esc(contactAddressDisplay(c)||"")}</p><button class="ghost-btn compact" data-action="contact-tab" data-id="properties">Open properties</button></section><section class="pro-side-card"><span>UPCOMING WORK</span>${tasks.length?tasks.slice(0,5).map(t=>`<div class="pro-mini-task"><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${dateLabel(t.due)} • ${esc(t.type)}</small></div></div>`).join(""):`<p>No open tasks.</p>`}<button class="ghost-btn compact full-width" data-action="open-task" data-id="${c.id}">＋ Add task</button></section><section class="pro-side-card"><span>HOW THE CRM KNOWS</span><div class="data-origin-list"><div><b>Stage</b><small>${esc(c.stage)}</small></div><div><b>Communication</b><small>${c.lastCommunication?dateLabel(c.lastCommunication):"None logged"}</small></div><div><b>Next follow-up</b><small>${dateLabel(c.followUp)}</small></div><div><b>Behavior signals</b><small>${(c.behaviors||[]).length}</small></div><div><b>Active plans</b><small>${runs.filter(r=>r.status==="Active").length}</small></div></div></section></aside></div>`}
+function contactTimelineTab(c,comms,tasks){let filtered=comms;if(state.timelineFilter==="calls")filtered=comms.filter(m=>m.channel==="Call");if(state.timelineFilter==="texts")filtered=comms.filter(m=>m.channel==="Text");if(state.timelineFilter==="emails")filtered=comms.filter(m=>m.channel==="Email");if(state.timelineFilter==="notes")filtered=comms.filter(m=>m.channel==="Note");return `<div class="contact-single-tab">${activityComposer(c)}<section class="timeline-card"><div class="section-head timeline-head"><div><h2>Complete timeline</h2><p>Filter communication without losing the relationship context.</p></div><div class="timeline-filters">${[["all","All"],["calls","Calls"],["texts","Texts"],["emails","Emails"],["notes","Notes"]].map(([id,label])=>`<button class="${state.timelineFilter===id?"active":""}" data-action="timeline-filter" data-id="${id}">${label}</button>`).join("")}</div></div><div class="timeline">${timelineHtml(c,filtered,state.timelineFilter==="all"?tasks:[])}</div></section></div>`}
+function contactPropertiesTab(c){return `<div class="contact-tab-layout"><main><section class="pro-panel"><div class="section-head"><div><h2>Properties & opportunities</h2><p>Owned, selling, buying, and investment opportunities.</p></div><button class="primary-btn compact" data-action="open-property" data-id="${c.id}">＋ Add property</button></div>${propertyCardsHtml(c)}</section><section class="pro-panel"><div class="section-head"><div><h2>${c.type==="Buyer"?"Search criteria":"Opportunity details"}</h2><p>Keep the criteria used in conversations and follow-up.</p></div><button class="ghost-btn compact" data-action="open-contact" data-id="${c.id}">Edit</button></div><div class="detail-grid">${typeSpecificHtml(c)}</div></section></main><aside><section class="pro-side-card"><span>PROPERTY ACTIVITY</span>${(c.behaviors||[]).length?(c.behaviors||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,6).map(b=>`<div class="side-activity"><div><strong>${esc(b.type)}</strong><small>${esc(b.property||b.details||"")}</small></div><span>${dateLabel(b.date)}</span></div>`).join(""):`<p>No activity recorded.</p>`}<button class="ghost-btn compact full-width" data-action="open-behavior" data-id="${c.id}">＋ Add signal</button></section><section class="pro-side-card"><span>ALERTS</span><p>${c.alertSettings.propertyAlert||c.alertSettings.marketSnapshot?`${c.alertSettings.frequency} • ${esc(c.alertSettings.criteria||"Criteria saved")}`:"No property or market alert recorded."}</p><button class="ghost-btn compact full-width" data-action="open-alerts" data-id="${c.id}">Manage alerts</button></section></aside></div>`}
+function contactWorkTab(c,tasks,runs){return `<div class="contact-tab-layout"><main><section class="pro-panel"><div class="section-head"><div><h2>Transactions</h2><p>Contract-to-close files attached to this relationship.</p></div><button class="primary-btn compact" data-action="open-transaction" data-contact="${c.id}">＋ Start transaction</button></div>${transactionContactPanelHtml(c)}</section><section class="pro-panel"><div class="section-head"><div><h2>Tasks & appointments</h2><p>Specific promises belong here; broad follow-up belongs in Smart Lists.</p></div><button class="primary-btn compact" data-action="open-task" data-id="${c.id}">＋ Add task</button></div><div class="pro-task-list">${tasks.length?tasks.map(t=>`<article><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${dateLabel(t.due)}${t.time?` • ${esc(t.time)}`:""} • ${esc(t.type)}</small></div><button class="quick" data-action="edit-task" data-id="${t.id}">Edit</button></article>`).join(""):`<div class="empty">No open tasks.</div>`}</div></section></main><aside><section class="pro-side-card"><span>ACTION PLANS</span>${runs.length?runs.map(run=>{const p=planById(run.planId);return `<div class="side-activity"><div><strong>${esc(p?.name||"Plan")}</strong><small>Started ${dateLabel(run.startedAt)}</small></div><span class="badge ${run.status==="Active"?"good":"warn"}">${esc(run.status)}</span></div>`}).join(""):`<p>No plan applied.</p>`}<button class="ghost-btn compact full-width" data-action="apply-plan" data-id="${c.id}">Apply plan</button></section><section class="pro-side-card"><span>HOUSEHOLD</span>${householdHtml(c)}</section></aside></div>`}
+function contactDetailsTab(c){return `<div class="contact-tab-layout"><main><section class="pro-panel"><div class="section-head"><div><h2>Contact record</h2><p>Identity, source, address, and searchable relationship data.</p></div><button class="primary-btn compact" data-action="open-contact" data-id="${c.id}">Edit record</button></div><div class="detail-grid">${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Source",c.source||"Missing")}${detail("Timeframe",c.timeframe||"Unknown")}${detail("Contact address",contactAddressDisplay(c)||"Missing")}${detail("Tags",(c.tags||[]).join(", ")||"None")}</div></section><section class="pro-panel"><div class="section-head"><div><h2>Household & decision makers</h2></div></div>${householdHtml(c)}</section><section class="pro-panel"><div class="section-head"><div><h2>Relationship notes</h2></div><button class="ghost-btn compact" data-action="open-note" data-id="${c.id}">＋ Note</button></div><p class="notes-copy">${esc(c.notes||"No relationship notes yet.")}</p></section></main><aside><section class="pro-side-card"><span>DATA HEALTH</span>${leadIntakeHtml(c)}</section><section class="pro-side-card"><span>MAILING ADDRESS</span>${contactAddressPanelHtml(c)}</section><section class="pro-side-card danger-zone"><span>RECORD CONTROL</span><button class="ghost-btn compact full-width" data-action="review-duplicate" data-id="${c.id}">Check duplicates</button><button class="danger-btn compact full-width" data-action="trash-contact" data-id="${c.id}">Move to Recently Deleted</button></section></aside></div>`}
+function contactTabsHtml(c){return `<nav class="contact-tabs">${[["overview","Overview"],["timeline","Timeline"],["properties",c.type==="Buyer"?"Search & Homes":"Properties"],["work","Tasks & Deals"],["details","Details"]].map(([id,label])=>`<button class="${state.contactTab===id?"active":""}" data-action="contact-tab" data-id="${id}">${label}</button>`).join("")}</nav>`}
+function deferThreadModal(contactId){const c=contact(contactId);if(!c)return;modal(`Defer ${fullName(c)}`,`<div class="field"><label>Bring this conversation back</label><select id="deferThreadDate"><option value="${addDays(TODAY(),1)}">Tomorrow</option><option value="${addDays(TODAY(),3)}">In 3 days</option><option value="${addDays(TODAY(),7)}">In 1 week</option></select></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-defer-thread" data-id="${contactId}">Defer</button>`)}
+function setThreadStatus(contactId,status,deferredUntil=""){const messages=db.communications.filter(m=>m.contactId===contactId).sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=messages.at(-1);if(!last)return;last.threadStatus=status;last.deferredUntil=deferredUntil;if(status==="open")last.unread=false;save();renderInbox()}
 
 function route(){
   const hash=(location.hash||"#/today").replace(/^#\//,"");
@@ -2875,7 +3155,7 @@ function route(){
 function renderNav(){
   document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")||(moreRoutes.has(state.route)&&a.dataset.route==="more")));
   const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length,transactionDeadlines=transactionDeadlineItems().length;
-  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("navMoreCount",unread+openTasks+calls);setCount("pipNavCount",pipNotices().length)
+  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("navMoreCount",unread+openTasks+calls);setCount("pipNavCount",pipNotices().length);updateNotificationBadge()
 }
 function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.textContent=n||"";el.style.display=n?"grid":"none"}
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
@@ -2952,6 +3232,7 @@ function renderToday(){
   document.getElementById("view").innerHTML=
     backupWarningHtml()+
     `<section class="agent-home-head"><div><span>HOLTON HOMES AGENT OS</span><h1>Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${esc(db.settings.agentName||"Jacob")}.</h1><p>${work.length?`${work.length} relationship${work.length===1?"":"s"} or deadline${work.length===1?"":"s"} need movement.`:"Your urgent work is clear. Create conversations and study the market."}</p></div><div><button class="ghost-btn" data-action="open-day-briefing">☀ Brief me</button><button class="primary-btn" data-action="start-focus-modal">⚡ Start sprint</button></div></section>
+    ${setupCardHtml()}
     ${homeNextActionHtml()}
     ${dailyProgressHtml()}
     <section class="agent-home-grid">
@@ -3142,68 +3423,25 @@ function smartListReason(c,listId=state.smartList){
 }
 
 function filteredPeople(){
-  const list=smartLists().find(x=>x.id===state.smartList)?.items||db.contacts;
-  const q=state.peopleQuery.toLowerCase();
-  return list.filter(c=>{
-    const blob=[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();
-    return (!q||blob.includes(q))&&(!state.peopleType||c.type===state.peopleType)&&(!state.peopleStage||c.stage===state.peopleStage)&&(!state.peopleHeat||c.heat===state.peopleHeat)
-  }).sort((a,b)=>(a.followUp||"9999").localeCompare(b.followUp||"9999"))
+  const list=smartLists().find(x=>x.id===state.smartList)?.items||db.contacts,q=state.peopleQuery.toLowerCase();
+  const people=list.filter(c=>{const blob=[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();return (!q||blob.includes(q))&&(!state.peopleType||c.type===state.peopleType)&&(!state.peopleStage||c.stage===state.peopleStage)&&(!state.peopleHeat||c.heat===state.peopleHeat)});
+  return people.sort((a,b)=>{if(state.peopleSort==="score")return scoreContact(b).score-scoreContact(a).score;if(state.peopleSort==="last")return String(b.lastCommunication||"").localeCompare(String(a.lastCommunication||""));if(state.peopleSort==="name")return fullName(a).localeCompare(fullName(b));if(state.peopleSort==="gci")return Number(b.gci||0)-Number(a.gci||0);return String(a.followUp||"9999").localeCompare(String(b.followUp||"9999"))})
 }
-
 function renderPeople(){
-  const lists=smartLists(),people=filteredPeople(),active=lists.find(x=>x.id===state.smartList)||lists[0];
+  const lists=smartLists(),people=filteredPeople(),active=lists.find(x=>x.id===state.smartList)||lists[0],stats=peopleStats(people),core=coreSmartListIds(),preview=contact(state.peoplePreviewId)||people[0]||null;
+  if(preview&&!state.peoplePreviewId)state.peoplePreviewId=preview.id;
   const collections=[...new Set(lists.map(x=>x.collection))];
-  document.getElementById("view").innerHTML=
-    pageHead("Relationship database","Leads & Contacts","Work the list, log the conversation, and let the contact leave automatically.",`<button class="primary-btn" data-action="open-contact">＋ New contact</button>`) +
-    `<div class="people-layout">
-      <aside class="smart-sidebar"><h3>Smart Lists</h3>${collections.map(collection=>`<div class="smart-collection"><label>${esc(collection)}</label>${lists.filter(x=>x.collection===collection).map(x=>`<button class="smart-list-btn ${x.id===state.smartList?"active":""}" data-action="smart-list" data-id="${x.id}" title="${esc(x.description)}"><span>${esc(x.name)}</span><b>${x.items.length}</b></button>`).join("")}</div>`).join("")}</aside>
-      <section>
-        <div class="active-list-head"><div><span>${esc(active.collection)}</span><h2>${esc(active.name)}</h2><p>${esc(active.description)}</p></div><b>${people.length}</b></div>
-        <div class="toolbar">
-          <input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search name, phone, email, contact address, property, source, or tag">
-          <select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select>
-          <select id="peopleStage"><option value="">All stages</option>${[...new Set([...sellerStages,...buyerStages])].map(x=>`<option ${state.peopleStage===x?"selected":""}>${x}</option>`).join("")}</select>
-          <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
-          <button class="ghost-btn compact" data-action="clear-people">Clear</button>
-        </div>
-        <div class="table-wrap desktop-people"><table><thead><tr><th>Person and reason</th><th>Contact Address</th><th>Type</th><th>Stage</th><th>Score</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th>Open GCI</th><th>Actions</th></tr></thead>
-        <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="10"><div class="empty">Nobody is on this list right now.</div></td></tr>`}</tbody></table></div>
-        <div class="mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="empty">Nobody is on this list right now.</div>`}</div>
-      </section>
+  document.getElementById("view").innerHTML=pageHead("Relationship database","People","Smart Lists tell you who needs contact; the workspace keeps context and actions together.",`<button class="primary-btn" data-action="open-contact">＋ New contact</button>`)+
+    peopleBulkBarHtml()+
+    `<section class="people-summary-strip"><div><strong>${people.length}</strong><span>in this view</span></div><div><strong>${stats.hot}</strong><span>hot</span></div><div><strong>${stats.due}</strong><span>due now</span></div><div><strong>${stats.sellers}</strong><span>sellers</span></div><div><strong>${money(stats.gci)}</strong><span>projected GCI</span></div></section>
+    <div class="pro-people-layout ${db.settings.peopleDensity||"comfortable"}">
+      <aside class="pro-smart-sidebar"><div class="pro-smart-title"><span>DAILY VIEWS</span><strong>Who needs you?</strong></div>${lists.filter(x=>core.includes(x.id)).map(x=>`<button class="smart-list-btn ${x.id===state.smartList?"active":""}" data-action="smart-list" data-id="${x.id}"><span>${esc(x.name)}</span><b>${x.items.length}</b></button>`).join("")}<details><summary>All Smart Lists</summary>${collections.map(collection=>`<div class="smart-collection"><label>${esc(collection)}</label>${lists.filter(x=>x.collection===collection&&!core.includes(x.id)).map(x=>`<button class="smart-list-btn ${x.id===state.smartList?"active":""}" data-action="smart-list" data-id="${x.id}"><span>${esc(x.name)}</span><b>${x.items.length}</b></button>`).join("")}</div>`).join("")}</details></aside>
+      <section class="pro-people-main"><div class="active-list-head pro-list-head"><div><span>${esc(active.collection)}</span><h2>${esc(active.name)}</h2><p>${esc(active.description)}</p></div><b>${people.length}</b></div><div class="pro-people-toolbar"><input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search people, address, property, source, or tag"><select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select><select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select><select id="peopleSort">${peopleSortOptions().map(([id,label])=>`<option value="${id}" ${state.peopleSort===id?"selected":""}>Sort: ${label}</option>`).join("")}</select><button class="ghost-btn compact" data-action="clear-people">Clear</button></div><div class="table-wrap desktop-people pro-people-table"><table><thead><tr><th><input type="checkbox" data-action="select-all-people" ${people.length&&people.every(c=>state.selectedPeople.includes(c.id))?"checked":""}></th><th>Person & reason</th><th>Opportunity</th><th>Stage</th><th>Last touch</th><th>Next step</th><th>Source</th><th>GCI</th><th></th></tr></thead><tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">Nobody is on this list right now.</div></td></tr>`}</tbody></table></div><div class="mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="empty">Nobody is on this list right now.</div>`}</div></section>
+      ${peoplePreviewHtml(preview)}
     </div>`
 }
-function personRow(c){
-  const s=scoreContact(c),reason=smartListReason(c);
-  return `<tr>
-    <td><a class="contact-cell contact-cell-link" href="#/contact/${c.id}">${avatar(c)}<div><strong>${esc(fullName(c))}</strong><small>${esc(reason||c.phone||c.email||"No contact information")}</small>${renderTagChips(c.tags)}</div></a>${state.smartList==="cleanup"?cleanupBadges(c):""}</td>
-    <td class="people-address-cell">${contactAddressDisplay(c)?`<button class="address-map-link" data-action="open-map" data-address="${esc(contactAddressDisplay(c))}">${esc(contactAddressDisplay(c))}</button><small>${esc(contactAddressObject(c).type||"Home")}${contactAddressObject(c).sameAsPrimaryProperty?" • property synced":""}</small>`:`<button class="missing-address-button" data-action="open-contact" data-id="${c.id}">＋ Add address</button>`}</td>
-    <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
-    <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
-    <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td>
-    <td>${contactQuickActions(c)}${state.smartList==="cleanup"?`<button class="quick cleanup-fix" data-action="open-cleanup" data-id="${c.id}">Fix</button>`:""}${state.smartList==="duplicates"?`<button class="quick cleanup-fix" data-action="review-duplicate" data-id="${c.id}">Merge</button>`:""}</td>
-  </tr>`
-}
-function mobilePersonCard(c){
-  const s=scoreContact(c),issues=cleanupIssues(c),reason=smartListReason(c);
-  return `<article class="mobile-contact-card">
-    <a class="mobile-contact-main" href="#/contact/${c.id}">
-      ${avatar(c)}
-      <div class="mobile-contact-copy">
-        <div class="mobile-contact-title"><strong>${esc(fullName(c))}</strong><span class="score ${scoreClass(s.score)}">${s.score}</span></div>
-        <span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span>
-        <small>${esc(reason||`${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"} • ${c.followUp?`Next ${dateLabel(c.followUp)}`:"No next step"}`)}</small>
-        <small class="mobile-contact-address">${contactAddressDisplay(c)?`⌖ ${esc(contactAddressDisplay(c))}`:"⌖ Contact address missing"}</small>
-        ${renderTagChips(c.tags)}
-      </div>
-    </a>
-    ${state.smartList==="cleanup"&&issues.length?cleanupBadges(c):""}
-    <div class="mobile-contact-actions">
-      ${contactQuickActions(c,true)}
-      ${state.smartList==="cleanup"?`<button class="primary-btn compact" data-action="open-cleanup" data-id="${c.id}">Fix</button>`:state.smartList==="duplicates"?`<button class="primary-btn compact" data-action="review-duplicate" data-id="${c.id}">Merge</button>`:`<a class="ghost-btn compact" href="#/contact/${c.id}">Open</a>`}
-    </div>
-  </article>`
-}
-
+function personRow(c){const s=scoreContact(c),reason=smartListReason(c),next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<tr class="${state.peoplePreviewId===c.id?"preview-active":""}"><td><input type="checkbox" data-action="select-person" data-id="${c.id}" ${state.selectedPeople.includes(c.id)?"checked":""}></td><td><div class="pro-person-cell">${avatar(c)}<div><a href="#/contact/${c.id}" class="person-name-link">${esc(fullName(c))}</a><small>${esc(reason||c.phone||c.email||"Contact information missing")}</small><div>${renderTagChips((c.tags||[]).slice(0,3))}</div></div></div></td><td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span><small class="pro-opportunity-score">Score ${s.score} • ${esc(c.heat)}</small></td><td>${inlineSelect("stage",c.stage,c.type==="Buyer"?buyerStages:sellerStages,c.id)}</td><td><strong>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</strong><small>${c.lastCommunication?`${daysSince(c.lastCommunication)}d ago`:"New relationship"}</small></td><td class="${next.due&&next.due<TODAY()?"overdue":""}"><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small></td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td><div class="pro-row-actions"><button class="quick" data-action="preview-person" data-id="${c.id}">Preview</button>${contactQuickActions(c)}</div></td></tr>`}
+function mobilePersonCard(c){const s=scoreContact(c),reason=smartListReason(c),next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<article class="mobile-contact-card pro-mobile-person"><div class="pro-mobile-select"><input type="checkbox" data-action="select-person" data-id="${c.id}" ${state.selectedPeople.includes(c.id)?"checked":""}></div><a class="mobile-contact-main" href="#/contact/${c.id}">${avatar(c)}<div class="mobile-contact-copy"><div class="mobile-contact-title"><strong>${esc(fullName(c))}</strong><span class="score ${scoreClass(s.score)}">${s.score}</span></div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><small>${esc(reason||reasonToCall(c))}</small><div class="pro-mobile-next"><label>NEXT</label><strong>${esc(next.title)}</strong><span>${next.due?dateLabel(next.due):"No date"}</span></div></div></a><div class="mobile-contact-actions">${contactQuickActions(c,true)}<a class="ghost-btn compact" href="#/contact/${c.id}">Open</a></div></article>`}
 
 function cleanPhone(value){return String(value||"").replace(/\D/g,"").slice(-10)}
 function duplicateMatches(c){
@@ -3637,40 +3875,9 @@ function resetCallScripts(){
   db.callScripts=JSON.parse(JSON.stringify(defaultCallScripts));save();renderSettings();toast("Starter scripts restored","Conversation Mode is back to the Holton Homes defaults.")
 }
 
-function threads(){
-  const map=new Map();
-  db.communications.forEach(m=>{
-    if(!map.has(m.contactId))map.set(m.contactId,[]);
-    map.get(m.contactId).push(m)
-  });
-  return [...map.entries()].map(([contactId,messages])=>{
-    messages.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    const last=messages.at(-1),c=contact(contactId);
-    return {contact:c,messages,last,unread:messages.some(x=>x.unread),status:last?.threadStatus||"open"}
-  }).filter(x=>x.contact).sort((a,b)=>String(b.last.date).localeCompare(String(a.last.date)))
-}
-function renderInbox(){
-  let list=threads();
-  if(state.inboxFolder==="unread")list=list.filter(t=>t.unread);
-  if(state.inboxFolder==="open")list=list.filter(t=>t.status!=="closed");
-  if(state.inboxFolder==="closed")list=list.filter(t=>t.status==="closed");
-  if(!state.activeThread||!list.some(x=>x.contact.id===state.activeThread))state.activeThread=list[0]?.contact.id||null;
-  const active=list.find(x=>x.contact.id===state.activeThread);
-  document.getElementById("view").innerHTML=
-    pageHead("Conversation command center","Inbox","Calls, texts, emails, and notes in one relationship-focused workflow.",`<button class="ghost-btn" data-action="inbox-zero">Mark all read</button>`) +
-    `<div class="inbox-layout">
-      <aside class="inbox-folders">${[["open","Open",threads().filter(t=>t.status!=="closed").length],["unread","Unread",threads().filter(t=>t.unread).length],["all","All",threads().length],["closed","Closed",threads().filter(t=>t.status==="closed").length]].map(([id,label,count])=>`<button class="folder-btn ${state.inboxFolder===id?"active":""}" data-action="inbox-folder" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}</aside>
-      <section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong><a class="person-name-link" href="#/contact/${t.contact.id}" data-action="name-link">${esc(fullName(t.contact))}</a></strong><time>${dateTimeLabel(t.last.date)}</time></div><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p></article>`).join(""):`<div class="empty">Inbox zero. No conversations here.</div>`}</section>
-      ${active?conversationHtml(active):`<section class="conversation"><div class="empty">Select a conversation.</div></section>`}
-    </div>`;
-}
-function conversationHtml(thread){
-  thread.messages.forEach(m=>m.unread=false);save();
-  return `<section class="conversation"><div class="conversation-head"><div><strong><a class="person-name-link" href="#/contact/${thread.contact.id}">${esc(fullName(thread.contact))}</a></strong><small style="display:block;color:var(--muted);font-size:8px">${esc(thread.contact.stage)} • ${esc(thread.contact.phone||thread.contact.email)}</small></div><div class="row-actions">${contactQuickActions(thread.contact)}<button class="quick" data-action="toggle-thread" data-id="${thread.contact.id}">${thread.status==="closed"?"Reopen":"Close"}</button></div></div>
-  <div class="messages">${thread.messages.map(m=>`<div class="message ${m.direction==="outbound"?"outbound":""}"><b>${esc(m.channel)}${m.outcome?` • ${esc(m.outcome)}`:""}</b><div>${esc(m.body||"No details")}</div><small>${dateTimeLabel(m.date)}</small></div>`).join("")}</div>
-  <div class="composer"><textarea id="inboxReply" placeholder="Write a text reply or relationship note..."></textarea><div class="composer-row"><select id="inboxChannel"><option>Text</option><option>Email</option><option>Note</option></select><button class="primary-btn compact" data-action="send-inbox-reply" data-id="${thread.contact.id}">Launch & log</button></div></div></section>`
-}
-
+function threads(){const map=new Map();db.communications.forEach(m=>{if(!map.has(m.contactId))map.set(m.contactId,[]);map.get(m.contactId).push(m)});return [...map.entries()].map(([contactId,messages])=>{messages.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=messages.at(-1),c=contact(contactId);return {contact:c,messages,last,unread:messages.some(x=>x.unread),status:last?.threadStatus||"open",deferredUntil:last?.deferredUntil||""}}).filter(x=>x.contact).sort((a,b)=>String(b.last.date).localeCompare(String(a.last.date)))}
+function renderInbox(){let list=threads();if(state.inboxFolder==="unread")list=list.filter(t=>t.unread);if(state.inboxFolder==="open")list=list.filter(t=>t.status==="open"||!t.status);if(state.inboxFolder==="deferred")list=list.filter(t=>t.status==="deferred");if(state.inboxFolder==="closed")list=list.filter(t=>t.status==="closed");if(!state.activeThread||!list.some(x=>x.contact.id===state.activeThread))state.activeThread=list[0]?.contact.id||null;const active=list.find(x=>x.contact.id===state.activeThread);const all=threads();document.getElementById("view").innerHTML=pageHead("Conversation workflow","Inbox Zero","Do now, defer, or close every relationship conversation. This inbox contains CRM-logged communication; it is not a live Gmail or business-text feed until those services are connected.",`<button class="ghost-btn" data-action="inbox-zero">Mark all read</button>`)+`<section class="inbox-zero-summary"><div><strong>${all.filter(t=>t.status==="open").length}</strong><span>open</span></div><div><strong>${all.filter(t=>t.unread).length}</strong><span>unread</span></div><div><strong>${all.filter(t=>t.status==="deferred").length}</strong><span>deferred</span></div><div><strong>${all.filter(t=>t.status==="closed").length}</strong><span>closed</span></div></section><div class="inbox-layout pro-inbox-layout"><aside class="inbox-folders">${[["open","Do now",all.filter(t=>t.status==="open").length],["unread","Unread",all.filter(t=>t.unread).length],["deferred","Deferred",all.filter(t=>t.status==="deferred").length],["all","All",all.length],["closed","Closed",all.filter(t=>t.status==="closed").length]].map(([id,label,count])=>`<button class="folder-btn ${state.inboxFolder===id?"active":""}" data-action="inbox-folder" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}</aside><section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong>${esc(fullName(t.contact))}</strong><time>${dateTimeLabel(t.last.date)}</time></div><span>${esc(t.contact.type)} • ${esc(t.contact.stage)}</span><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p>${t.status==="deferred"?`<small>Returns ${dateLabel(t.deferredUntil)}</small>`:""}</article>`).join(""):`<div class="empty">This folder is clear.</div>`}</section>${active?conversationHtml(active):`<section class="conversation"><div class="empty">Select a conversation.</div></section>`}</div>`}
+function conversationHtml(thread){thread.messages.forEach(m=>m.unread=false);save(false);const c=thread.contact,next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<section class="conversation pro-conversation"><div class="conversation-head"><div>${avatar(c)}<div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.phone||c.email||"No contact information")}</small></div></div><div class="row-actions">${contactQuickActions(c)}<button class="quick" data-action="inbox-do-now" data-id="${c.id}">Do now</button><button class="quick" data-action="defer-thread" data-id="${c.id}">Defer</button><button class="quick" data-action="toggle-thread" data-id="${c.id}">${thread.status==="closed"?"Reopen":"Close"}</button></div></div><section class="conversation-context"><div><span>NEXT ACTION</span><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small></div><div><span>RELATIONSHIP</span><p>${esc(contactSummary(c,scoreContact(c)))}</p></div></section><div class="messages">${thread.messages.map(m=>`<div class="message ${m.direction==="outbound"?"outbound":""}"><b>${esc(m.channel)}${m.outcome?` • ${esc(m.outcome)}`:""}</b><div>${esc(m.body||"No details")}</div><small>${dateTimeLabel(m.date)}</small></div>`).join("")}</div><div class="composer"><textarea id="inboxReply" placeholder="Write a text, email, or CRM note..."></textarea><div class="composer-row"><select id="inboxChannel"><option>Text</option><option>Email</option><option>Note</option></select><button class="primary-btn compact" data-action="send-inbox-reply" data-id="${c.id}">Launch & log</button></div></div></section>`}
 
 function scoreLabel(score){return score>=70?"High":score>=40?"Medium":"Low"}
 function scoreImprovement(c){
@@ -3858,99 +4065,10 @@ function contactEmptyTimeline(c){
 }
 
 function renderContact(id){
-  const c=contact(id);if(!c){location.hash="#/people";return}
-  const s=scoreContact(c),
-    comms=db.communications.filter(x=>x.contactId===id).sort((a,b)=>String(b.date).localeCompare(String(a.date))),
-    tasks=db.tasks.filter(x=>x.contactId===id&&x.status!=="Done").sort((a,b)=>a.due.localeCompare(b.due)),
-    runs=db.planRuns.filter(x=>x.contactId===id),
-    next=nextActionFor(c,tasks),
-    improvements=scoreImprovement(c),
-    summary=contactSummary(c,s);
-  const stages=c.type==="Buyer"?buyerStages:sellerStages;
-  document.getElementById("view").innerHTML=
-    backupWarningHtml() +
-    `<section class="contact-hero">
-      <div class="contact-identity">${avatar(c)}<div>
-        <div class="eyebrow">${["Realtor","Lender"].includes(c.type)?"REFERRAL PARTNER":`${esc(c.type)} CONTACT`}</div>
-        <h1>${esc(fullName(c))}</h1>
-        <div class="contact-lines">
-          ${hasPhone(c)?`<a href="tel:${esc(c.phone.replace(/[^\d+]/g,""))}">${esc(c.phone)}</a>`:`<span class="missing">No phone</span>`}
-          <span>•</span>
-          ${hasEmail(c)?`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`:`<span class="missing">No email</span>`}
-        </div>
-        <div class="contact-hero-address">
-          ${contactAddressDisplay(c)?`<button class="contact-map-button" data-action="open-map" data-address="${esc(contactAddressDisplay(c))}">⌖ ${esc(contactAddressDisplay(c))}</button><button data-action="open-directions" data-address="${esc(contactAddressDisplay(c))}">Directions</button><button data-action="copy-contact-address" data-id="${c.id}">Copy</button>`:`<button class="missing-address-hero" data-action="open-contact" data-id="${c.id}">＋ Add contact address</button>`}
-        </div>
-        <div class="inline-fields">
-          <span class="field-label">Stage ${inlineSelect("stage",c.stage,stages,c.id)}</span>
-          <span class="field-label">Heat ${inlineSelect("heat",c.heat,["Hot","Warm","Cold"],c.id)}</span>
-          <span class="field-label">Source ${inlineSelect("source",c.source,sources,c.id)}</span>
-          <span class="field-label">Timeframe ${inlineSelect("timeframe",c.timeframe,["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"],c.id)}</span>
-        </div>
-      </div></div>
-      <div class="hero-actions">${contactQuickActions(c,true)}<button class="quick note-large" data-action="open-note" data-id="${c.id}">＋ Note</button><button class="ghost-btn compact" data-action="open-contact" data-id="${c.id}">Edit</button><button class="ghost-btn compact contact-trash" data-action="trash-contact" data-id="${c.id}">Trash</button></div>
-    </section>
-
-    <section class="next-action-strip">
-      <div class="next-action-copy"><span>NEXT ACTION</span><strong>${esc(next.title)}</strong><small class="${next.due<TODAY()?"overdue":""}">${next.due===TODAY()?"Due today":`Due ${dateLabel(next.due)}`}</small></div>
-      <div class="next-action-buttons">
-        <button class="primary-btn" data-action="complete-next-action" data-id="${c.id}" data-channel="${esc(next.channel)}" data-task="${esc(next.taskId)}">Complete & log</button>
-        <button class="ghost-btn" data-action="show-script" data-id="${c.id}" data-context="profile" data-task="${esc(next.taskId)}">▤ Show script</button>
-        <button class="ghost-btn" data-action="reschedule-contact" data-id="${c.id}">Reschedule</button>
-      </div>
-    </section>
-
-    <div class="contact-workspace">
-      <main class="contact-main">
-        <section class="what-matters">
-          <div><div class="eyebrow">WHAT MATTERS</div><p>${esc(summary)}</p></div>
-          ${(c.household||[]).length&&!c.household.some(member=>member.decisionMaker)?`<div class="decision-warning">Confirm who makes the final decision.</div>`:""}<div class="score-block"><span class="score ${scoreClass(s.score)}">${s.score}</span><div><strong>${scoreLabel(s.score)} score</strong><small>${improvements.length?`Improve it: ${esc(improvements.join(" • "))}`:"Strong relationship data and activity."}</small></div></div>
-        </section>
-
-        ${activityComposer(c)}
-
-        <section class="timeline-card">
-          <div class="section-head"><div><h2>Communication timeline</h2><p>Calls, texts, emails, notes, appointments, tasks, and property activity.</p></div><button class="ghost-btn compact" data-action="open-communication" data-id="${c.id}" data-channel="Note">Open full logger</button></div>
-          <div class="timeline">${timelineHtml(c,comms,tasks)}</div>
-        </section>
-      </main>
-
-      <aside class="contact-sidebar">
-        <details class="compact-panel" open><summary>Contact & lead details <span>Edit inline above</span></summary><div class="compact-body detail-grid">
-          ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Estimated from open opportunities GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
-        </div></details>
-
-        <details class="compact-panel" open><summary>Relationship memory <span>${relationshipReminder(c)?"Ready":"Add details"}</span></summary><div class="compact-body">${relationshipMemoryHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Contact / mailing address <span>${contactAddressComplete(c)?"Complete":"Missing"}</span></summary><div class="compact-body">${contactAddressPanelHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Lead intake & data health <span>${leadIntakeItems(c).filter(x=>x.done).length}/${leadIntakeItems(c).length}</span></summary><div class="compact-body">${leadIntakeHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Transaction file <span>${transactionsForContact(c.id).length}</span></summary><div class="compact-body">${transactionContactPanelHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Properties & opportunities <span>${propertiesForContact(c.id).length}</span></summary><div class="compact-body property-panel-body">${propertyCardsHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>${c.type==="Seller"?"Seller opportunity":c.type==="Buyer"?"Buyer criteria":c.type==="Realtor"?"Realtor partner":c.type==="Lender"?"Lending partner":"Sphere relationship"} <span>${esc(c.type)}</span></summary><div class="compact-body detail-grid">${typeSpecificHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Household & decision makers <span>${(c.household||[]).length}</span></summary><div class="compact-body household-panel-body">${householdHtml(c)}</div></details>
-
-        <details class="compact-panel" open><summary>Upcoming tasks <span>${tasks.length}</span></summary><div class="compact-body">
-          ${tasks.length?tasks.slice(0,5).map(t=>`<div class="sidebar-task"><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)} • ${dateLabel(t.due)}</small></div></div>`).join(""):`<div class="compact-empty"><span>No open tasks.</span><button class="ghost-btn compact" data-action="open-task" data-id="${c.id}">＋ Add task</button></div>`}
-          ${tasks.length?`<button class="ghost-btn compact full-width" data-action="open-task" data-id="${c.id}">＋ Add another task</button>`:""}
-        </div></details>
-
-        <details class="compact-panel"><summary>Property activity & alerts <span>${(c.behaviors||[]).length}</span></summary><div class="compact-body">
-          ${(c.behaviors||[]).length?(c.behaviors||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,4).map(b=>`<div class="side-activity"><div><strong>${esc(b.type)}</strong><small>${esc(b.property||b.details||"")}</small></div><span>${dateLabel(b.date)}</span></div>`).join(""):`<div class="compact-empty"><span>No property activity recorded.</span><button class="ghost-btn compact" data-action="open-behavior" data-id="${c.id}">＋ Add activity</button></div>`}
-          <button class="ghost-btn compact full-width" data-action="open-alerts" data-id="${c.id}">${c.alertSettings.propertyAlert||c.alertSettings.marketSnapshot?"Manage alerts":"Set property / market alert"}</button>
-        </div></details>
-
-        <details class="compact-panel"><summary>Action plans <span>${runs.length}</span></summary><div class="compact-body">
-          ${runs.length?runs.map(run=>{const p=planById(run.planId);return `<div class="side-activity"><div><strong>${esc(p?.name||"Plan")}</strong><small>Started ${dateLabel(run.startedAt)}</small></div><span class="badge ${run.status==="Active"?"good":"warn"}">${esc(run.status)}</span></div>`}).join(""):`<div class="compact-empty"><span>No active action plan.</span><button class="ghost-btn compact" data-action="apply-plan" data-id="${c.id}">Apply plan</button></div>`}
-        </div></details>
-
-        <details class="compact-panel"><summary>Relationship notes <span>${c.notes?"Saved":"Empty"}</span></summary><div class="compact-body notes-copy">${esc(c.notes||"No relationship notes yet.")}</div></details>
-      </aside>
-    </div>`;
+  const c=contact(id);if(!c){location.hash="#/people";return}if(state.activeContactId!==id){state.activeContactId=id;state.contactTab="overview";state.timelineFilter="all"}
+  const s=scoreContact(c),comms=db.communications.filter(x=>x.contactId===id).sort((a,b)=>String(b.date).localeCompare(String(a.date))),tasks=db.tasks.filter(x=>x.contactId===id&&x.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))),runs=db.planRuns.filter(x=>x.contactId===id),next=nextActionFor(c,tasks),summary=contactSummary(c,s),stages=c.type==="Buyer"?buyerStages:sellerStages;
+  const tab=state.contactTab==="timeline"?contactTimelineTab(c,comms,tasks):state.contactTab==="properties"?contactPropertiesTab(c):state.contactTab==="work"?contactWorkTab(c,tasks,runs):state.contactTab==="details"?contactDetailsTab(c):contactOverviewTab(c,s,comms,tasks,runs,next,summary);
+  document.getElementById("view").innerHTML=backupWarningHtml()+`<section class="contact-hero pro-contact-hero"><div class="contact-identity">${avatar(c)}<div><div class="eyebrow">${esc(c.type)} • ${esc(c.heat)}</div><h1>${esc(fullName(c))}</h1><div class="contact-lines">${hasPhone(c)?`<a href="tel:${esc(c.phone.replace(/[^\d+]/g,""))}">${esc(c.phone)}</a>`:`<span class="missing">No phone</span>`}<span>•</span>${hasEmail(c)?`<button class="inline-email-link" data-action="compose-email" data-email="${esc(c.email)}">${esc(c.email)}</button>`:`<span class="missing">No email</span>`}</div><div class="contact-hero-address">${contactAddressDisplay(c)?`<button class="contact-map-button" data-action="open-map" data-address="${esc(contactAddressDisplay(c))}">⌖ ${esc(contactAddressDisplay(c))}</button>`:`<button class="missing-address-hero" data-action="open-contact" data-id="${c.id}">＋ Add address</button>`}</div><div class="inline-fields"><span class="field-label">Stage ${inlineSelect("stage",c.stage,stages,c.id)}</span><span class="field-label">Source ${inlineSelect("source",c.source,sources,c.id)}</span><span class="field-label">Timeframe ${inlineSelect("timeframe",c.timeframe,["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"],c.id)}</span></div></div></div><div class="hero-actions">${contactQuickActions(c,true)}<button class="quick note-large" data-action="open-note" data-id="${c.id}">＋ Note</button><button class="ghost-btn compact" data-action="open-contact" data-id="${c.id}">Edit</button></div></section>${contactMetricStrip(c,s,tasks)}${contactTabsHtml(c)}<section class="contact-tab-content">${tab}</section>`
 }
 function detail(label,value){return `<div class="detail"><label>${esc(label)}</label><strong>${esc(value)}</strong></div>`}
 function contactSummary(c,s){
@@ -4414,6 +4532,7 @@ function renderSettings(){
       ${templatesSettingsHtml()}
       ${callScriptsSettingsHtml()}
       ${transactionResourcesSettingsHtml()}
+      <section class="setting-card pro-ui-settings"><div class="setting-card-head"><div><h3>Professional workspace</h3><p>Readable typography and list density across desktop, iPad, and phone.</p></div></div><div class="field"><label>People list density</label><select id="settingPeopleDensity"><option value="comfortable" ${db.settings.peopleDensity!=="compact"?"selected":""}>Comfortable</option><option value="compact" ${db.settings.peopleDensity==="compact"?"selected":""}>Compact desktop</option></select></div><button class="primary-btn compact" data-action="save-pro-ui">Save workspace</button><button class="ghost-btn compact" data-action="open-setup-center">Open setup guide</button></section>
       <section class="setting-card recently-deleted"><div class="setting-card-head"><div><h3>Recently Deleted</h3><p>Restore contacts removed by mistake.</p></div><b>${db.deletedContacts.length}</b></div>
         <div class="deleted-list">${db.deletedContacts.length?db.deletedContacts.slice(0,10).map(item=>`<div class="deleted-row"><div><strong>${esc(fullName(item.contact))}</strong><span>Deleted ${dateTimeLabel(item.deletedAt)}</span></div><button class="ghost-btn compact" data-action="restore-deleted" data-id="${item.id}">Restore</button><button class="quick" data-action="permanent-delete" data-id="${item.id}">×</button></div>`).join(""):`<div class="compact-empty">No deleted contacts.</div>`}</div>
       </section>
@@ -4929,6 +5048,26 @@ document.addEventListener("click",event=>{
   }
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
+  if(action==="open-notifications")openNotifications();
+  if(action==="close-notifications")closeNotifications();
+  if(action==="notification-filter"){state.notificationFilter=id;renderNotificationDrawer()}
+  if(action==="open-notification")openNotification(id);
+  if(action==="dismiss-notification")dismissNotification(id);
+  if(action==="open-setup-center")setupCenterModal();
+  if(action==="collapse-setup"){db.settings.onboardingCollapsed=true;save(false);renderToday()}
+  if(action==="preview-person"){state.peoplePreviewId=id;renderPeople()}
+  if(action==="select-person")togglePersonSelected(id,el.checked);
+  if(action==="select-all-people"){const ids=filteredPeople().map(c=>c.id);state.selectedPeople=el.checked?[...new Set([...state.selectedPeople,...ids])]:state.selectedPeople.filter(id=>!ids.includes(id));renderPeople()}
+  if(action==="clear-selected-people"){state.selectedPeople=[];renderPeople()}
+  if(action==="bulk-people")peopleBulkModal(el.dataset.bulk||"");
+  if(action==="apply-bulk-people")applyPeopleBulk(el.dataset.bulk||"");
+  if(action==="start-selected-sprint")startFocusSession(state.selectedPeople,"selected");
+  if(action==="export-selected-people")exportSelectedPeople();
+  if(action==="contact-tab"){state.contactTab=id;renderContact(state.activeContactId)}
+  if(action==="timeline-filter"){state.timelineFilter=id;renderContact(state.activeContactId)}
+  if(action==="defer-thread")deferThreadModal(id);
+  if(action==="save-defer-thread"){setThreadStatus(id,"deferred",document.getElementById("deferThreadDate").value);closeModal()}
+  if(action==="inbox-do-now"){const c=contact(id);if(c){c.followUp=TODAY();setThreadStatus(id,"open");location.hash=`#/contact/${id}`}}
   if(action==="open-quick-capture")quickCaptureModal();
   if(action==="open-day-briefing")dayBriefingModal();
   if(action==="quick-lead")quickLeadModal();
@@ -4947,7 +5086,14 @@ document.addEventListener("click",event=>{
   if(action==="open-house-visitor")openHouseVisitorModal(id,el.dataset.visitor||"");
   if(action==="save-open-house-visitor")saveOpenHouseVisitor();
   if(action==="start-open-house-followup")startOpenHouseFollowup(id);
-  if(action==="open-market-study")openMarketStudyModal(id||"");
+  if(action==="open-market-study")openMarketStudyModal(id||"",el.dataset.area||"");
+  if(action==="select-market-area")selectMarketArea(el.dataset.area||"");
+  if(action==="toggle-market-check")toggleMarketCheck(el.dataset.check||"");
+  if(action==="select-market-type")selectMarketType(el.dataset.type||"All homes");
+  if(action==="select-market-signal")selectMarketSignal(el.dataset.signal||"");
+  if(action==="refresh-market-observation")refreshMarketObservation(true);
+  if(action==="start-market-dictation")startMarketDictation();
+  if(action==="open-market-mls")openMarketMls();
   if(action==="save-market-study")saveMarketStudy();
   if(action==="open-map")openMapAddress(el.dataset.address||"","search");
   if(action==="open-directions")openMapAddress(el.dataset.address||"","directions");
@@ -5124,6 +5270,7 @@ document.addEventListener("click",event=>{
   if(action==="close-pip")closePip();
   if(action==="ask-pip")askPip();
   
+  if(action==="save-pro-ui"){db.settings.peopleDensity=document.getElementById("settingPeopleDensity").value;save();toast("Workspace updated",db.settings.peopleDensity==="compact"?"Compact desktop density enabled.":"Comfortable density enabled.")}
   if(action==="save-settings"){db.settings.agentName=document.getElementById("settingAgentName").value.trim()||"Jacob";db.settings.agentEmail=document.getElementById("settingAgentEmail").value.trim();db.settings.agentPhone=document.getElementById("settingAgentPhone").value.trim();save();toast("Settings saved","Agent profile updated.")}
   if(action==="save-goals"){
     db.settings.annualGciTarget=Number(document.getElementById("settingGciTarget").value||100000);
@@ -5181,11 +5328,12 @@ document.addEventListener("change",event=>{
   }
   if(["scriptFollowUp","scriptAppointmentDate"].includes(event.target.id)){saveScriptDraftFromFields();return}
   const inline=event.target.closest('[data-action="inline-contact-field"]');
-  if(inline){const c=contact(inline.dataset.id);if(c){const oldValue=c[inline.dataset.field];c[inline.dataset.field]=inline.value;c.updatedAt=TODAY();if(inline.dataset.field==="stage")applyStageWorkflow(c,oldValue,inline.value);save();renderContact(c.id);toast("Contact updated",`${inline.dataset.field} → ${inline.value}`)}return}
+  if(inline){const c=contact(inline.dataset.id);if(c){const oldValue=c[inline.dataset.field];c[inline.dataset.field]=inline.value;c.updatedAt=TODAY();if(inline.dataset.field==="stage")applyStageWorkflow(c,oldValue,inline.value);save();if(state.route==="people")renderPeople();else renderContact(c.id);toast("Contact updated",`${inline.dataset.field} → ${inline.value}`)}return}
   if(event.target.id==="contactType"){const type=event.target.value,stage=document.getElementById("contactStage");stage.innerHTML=(type==="Buyer"?buyerStages:sellerStages).map(x=>`<option>${x}</option>`).join("");const holder=document.getElementById("contactSpecificFields");if(holder)holder.innerHTML=contactSpecificForm({},type)}
   if(event.target.id==="peopleType"){state.peopleType=event.target.value;renderPeople()}
   if(event.target.id==="peopleStage"){state.peopleStage=event.target.value;renderPeople()}
   if(event.target.id==="peopleHeat"){state.peopleHeat=event.target.value;renderPeople()}
+  if(event.target.id==="peopleSort"){state.peopleSort=event.target.value;renderPeople()}
 });
 document.addEventListener("input",event=>{
   if(event.target.id==="scriptNotes"){saveScriptDraftFromFields();return}
@@ -5232,7 +5380,8 @@ document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible")setTimeout(showPendingTouchPrompt,250)
 });
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
+document.getElementById("notificationBackdrop").addEventListener("click",closeNotifications);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);
-db=loadDatabase();renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);initCloud();
+db=loadDatabase();renderPip();updateNotificationBadge();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);initCloud();
 })();
