@@ -595,3 +595,51 @@ This release focuses on professional CRM structure and usability rather than add
 - Desktop layouts use available screen width without becoming visually noisy.
 
 No new Supabase SQL is required. Existing Agent OS 2 data migrates automatically.
+
+
+## CRM Pro 2 — Suggested Texts and UI Polish
+
+### Suggested text composer
+- Text buttons open a context-aware message composer instead of an empty message.
+- Seller, buyer, past-client, sphere, professional-partner, appointment, active-listing, under-contract, and valuation scenarios.
+- Several tones and approaches for each contact.
+- Full editing before sending.
+- Copy or open directly in the operating system's Messages handler.
+- Works with Windows Phone Link when the PC handles `sms:` links.
+- Voicemail follow-up text suggestions are included in Conversation Mode.
+
+### Readability and spacing
+- Larger form controls and minimum text sizes.
+- Wider modal padding and footer spacing.
+- Larger call-preparation facts and contact information.
+- More space between script sections, questions, objections, and live notes.
+- Two-column suggested-text composer on desktop and clean stacked layout on mobile.
+- Larger People table rows, names, supporting text, filters, and actions.
+- More breathing room around contact-profile panels.
+- Stronger five-item mobile navigation constraints.
+
+No new Supabase SQL is required.
+
+
+# V3 — FUB-Inspired Interface Rewrite
+
+V3 keeps the existing Supabase state, contacts, transactions, scripts, workflows, market study, open houses, and app handoffs. The interface shell and People workspace were rebuilt.
+
+## Main changes
+
+- People is the default working screen.
+- Horizontal desktop navigation inspired by established real-estate CRMs.
+- Exactly five bottom navigation destinations on mobile.
+- Smart List rail on the left.
+- Full-width professional contact database table.
+- One restrained pink accent rather than competing card colors.
+- Contact rows prioritize name, stage, communication, next follow-up, and source.
+- Contact slide-over drawer keeps the database visible while working.
+- Drawer includes call, suggested text, email, script, next action, coaching, recent activity, property, and tasks.
+- Larger, consistent table text and 68-pixel contact rows.
+- Filters remain available without permanently consuming screen space.
+- Existing full contact profile remains available from the drawer.
+
+## Data migration
+
+The active storage key is `holtonHomesCRM_v3_fub`. V3 migrates the CRM Pro 2 state automatically. No Supabase SQL changes are required.

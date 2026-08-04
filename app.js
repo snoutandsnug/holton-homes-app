@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_pro1";
-const LEGACY_KEYS = ["holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v3_fub";
+const LEGACY_KEYS = ["holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -403,7 +403,7 @@ const defaultAutomationRules = [
 ];
 
 let db = null;
-let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",notificationFilter:"priority"};
+let state = {route:"people",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",notificationFilter:"priority"};
 let focusTimerHandle=null;
 let speechRecognizer=null;
 let automationBusy=false,automationTimer=null;
@@ -3141,16 +3141,109 @@ function contactTabsHtml(c){return `<nav class="contact-tabs">${[["overview","Ov
 function deferThreadModal(contactId){const c=contact(contactId);if(!c)return;modal(`Defer ${fullName(c)}`,`<div class="field"><label>Bring this conversation back</label><select id="deferThreadDate"><option value="${addDays(TODAY(),1)}">Tomorrow</option><option value="${addDays(TODAY(),3)}">In 3 days</option><option value="${addDays(TODAY(),7)}">In 1 week</option></select></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-defer-thread" data-id="${contactId}">Defer</button>`)}
 function setThreadStatus(contactId,status,deferredUntil=""){const messages=db.communications.filter(m=>m.contactId===contactId).sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=messages.at(-1);if(!last)return;last.threadStatus=status;last.deferredUntil=deferredUntil;if(status==="open")last.unread=false;save();renderInbox()}
 
+
+let contactPeekId="";
+function contactPeekRecent(c){
+  return db.communications.filter(item=>item.contactId===c.id)
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,4)
+}
+function contactPeekTasks(c){
+  return db.tasks.filter(item=>item.contactId===c.id&&item.status!=="Done")
+    .sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"))).slice(0,4)
+}
+function contactPeekHtml(c){
+  if(!c)return "";
+  const score=scoreContact(c);
+  const next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done")
+    .sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"))));
+  const recent=contactPeekRecent(c),tasks=contactPeekTasks(c);
+  const p=primaryProperty(c);
+  return `<div class="contact-peek-shell">
+    <header class="contact-peek-header">
+      <button class="contact-peek-close" data-action="close-contact-peek" aria-label="Close">×</button>
+      <div class="contact-peek-person">${avatar(c)}<div>
+        <span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span>
+        <h2>${esc(fullName(c))}</h2>
+        <p>${esc(c.phone||"No phone")}${c.email?` • ${esc(c.email)}`:""}</p>
+      </div></div>
+      <div class="contact-peek-actions">
+        <button data-action="quick-launch" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}><span>☎</span>Call</button>
+        <button data-action="quick-launch" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}><span>✉</span>Text</button>
+        <button data-action="quick-launch" data-channel="Email" data-id="${c.id}" ${hasEmail(c)?"":"disabled"}><span>@</span>Email</button>
+        <button data-action="show-script" data-id="${c.id}"><span>▤</span>Script</button>
+      </div>
+    </header>
+
+    <section class="contact-peek-next">
+      <div><span>NEXT ACTION</span><h3>${esc(next.title)}</h3><p>${next.due?`${next.due<TODAY()?"Overdue":"Due"} ${dateLabel(next.due)}`:"No date protected"}</p></div>
+      <button class="primary-btn" data-action="complete-next-action" data-id="${c.id}" data-channel="${esc(next.channel)}" data-task="${esc(next.taskId)}">Complete & log</button>
+    </section>
+
+    <section class="contact-peek-coach">
+      <div class="contact-peek-section-title"><span>COACH</span><b>${score.score}</b></div>
+      <p><strong>${esc(smartListReason(c)||reasonToCall(c))}</strong></p>
+      <p>${esc(contactSummary(c,score))}</p>
+      ${relationshipReminder(c)?`<aside>${esc(relationshipReminder(c))}</aside>`:""}
+    </section>
+
+    <section class="contact-peek-section">
+      <div class="contact-peek-section-title"><span>PROPERTY / AREA</span><button data-action="open-contact" data-id="${c.id}">Edit</button></div>
+      <h3>${esc(propertyAddress(p)||propertyDisplay(c)||"Not completed")}</h3>
+      <p>${esc(contactAddressDisplay(c)||"")}</p>
+      ${propertyAddress(p)?`<button class="peek-link" data-action="open-map" data-address="${esc(propertyAddress(p))}">Open map ↗</button>`:""}
+    </section>
+
+    <section class="contact-peek-section">
+      <div class="contact-peek-section-title"><span>RECENT ACTIVITY</span><a href="#/contact/${c.id}" data-action="close-contact-peek">Full timeline</a></div>
+      <div class="contact-peek-timeline">${recent.length?recent.map(item=>`<article>
+        <b>${esc(item.channel)}</b><div><strong>${esc(item.outcome||item.direction||"Activity")}</strong><p>${esc(item.body||"No note entered")}</p><small>${dateTimeLabel(item.date)}</small></div>
+      </article>`).join(""):`<div class="peek-empty">No communication logged yet.</div>`}</div>
+    </section>
+
+    <section class="contact-peek-section">
+      <div class="contact-peek-section-title"><span>UPCOMING WORK</span><button data-action="open-task" data-id="${c.id}">＋ Add</button></div>
+      <div class="contact-peek-task-list">${tasks.length?tasks.map(task=>`<article>
+        <input type="checkbox" data-action="complete-task" data-id="${task.id}">
+        <div><strong>${esc(task.title)}</strong><small>${dateLabel(task.due)} • ${esc(task.type)}</small></div>
+      </article>`).join(""):`<div class="peek-empty">No open tasks.</div>`}</div>
+    </section>
+
+    <footer class="contact-peek-footer">
+      <a class="primary-btn" href="#/contact/${c.id}" data-action="close-contact-peek">Open full profile</a>
+      <button class="ghost-btn" data-action="open-contact" data-id="${c.id}">Edit contact</button>
+    </footer>
+  </div>`
+}
+function openContactPeek(id){
+  const c=contact(id);if(!c)return;
+  contactPeekId=id;
+  const content=document.getElementById("contactPeekContent");
+  if(content)content.innerHTML=contactPeekHtml(c);
+  document.getElementById("contactPeekBackdrop")?.classList.add("open");
+  const drawer=document.getElementById("contactPeekDrawer");
+  drawer?.classList.add("open");drawer?.setAttribute("aria-hidden","false");
+  document.body.classList.add("contact-peek-open")
+}
+function closeContactPeek(){
+  contactPeekId="";
+  document.getElementById("contactPeekBackdrop")?.classList.remove("open");
+  const drawer=document.getElementById("contactPeekDrawer");
+  drawer?.classList.remove("open");drawer?.setAttribute("aria-hidden","true");
+  document.body.classList.remove("contact-peek-open")
+}
+
+
 function route(){
-  const hash=(location.hash||"#/today").replace(/^#\//,"");
+  closeContactPeek();
+  const hash=(location.hash||"#/people").replace(/^#\//,"");
   const [name,id]=hash.split("/");
-  state.route=name||"today";
+  state.route=name||"people";
   renderNav();
   if(name==="contact"&&id)return renderContact(id);
   if(name==="transaction"&&id)return renderTransaction(id);
   if(name==="open-house"&&id)return renderOpenHouse(id);
   const renderers={today:renderToday,more:renderMore,focus:renderFocus,field:renderField,"open-houses":renderOpenHouses,"market-study":renderMarketStudy,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
-  (renderers[state.route]||renderToday)();
+  (renderers[state.route]||renderPeople)();
 }
 function renderNav(){
   document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")||(moreRoutes.has(state.route)&&a.dataset.route==="more")));
@@ -3427,21 +3520,99 @@ function filteredPeople(){
   const people=list.filter(c=>{const blob=[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),c.source,...c.tags].join(" ").toLowerCase();return (!q||blob.includes(q))&&(!state.peopleType||c.type===state.peopleType)&&(!state.peopleStage||c.stage===state.peopleStage)&&(!state.peopleHeat||c.heat===state.peopleHeat)});
   return people.sort((a,b)=>{if(state.peopleSort==="score")return scoreContact(b).score-scoreContact(a).score;if(state.peopleSort==="last")return String(b.lastCommunication||"").localeCompare(String(a.lastCommunication||""));if(state.peopleSort==="name")return fullName(a).localeCompare(fullName(b));if(state.peopleSort==="gci")return Number(b.gci||0)-Number(a.gci||0);return String(a.followUp||"9999").localeCompare(String(b.followUp||"9999"))})
 }
-function renderPeople(){
-  const lists=smartLists(),people=filteredPeople(),active=lists.find(x=>x.id===state.smartList)||lists[0],stats=peopleStats(people),core=coreSmartListIds(),preview=contact(state.peoplePreviewId)||people[0]||null;
-  if(preview&&!state.peoplePreviewId)state.peoplePreviewId=preview.id;
-  const collections=[...new Set(lists.map(x=>x.collection))];
-  document.getElementById("view").innerHTML=pageHead("Relationship database","People","Smart Lists tell you who needs contact; the workspace keeps context and actions together.",`<button class="primary-btn" data-action="open-contact">＋ New contact</button>`)+
-    peopleBulkBarHtml()+
-    `<section class="people-summary-strip"><div><strong>${people.length}</strong><span>in this view</span></div><div><strong>${stats.hot}</strong><span>hot</span></div><div><strong>${stats.due}</strong><span>due now</span></div><div><strong>${stats.sellers}</strong><span>sellers</span></div><div><strong>${money(stats.gci)}</strong><span>projected GCI</span></div></section>
-    <div class="pro-people-layout ${db.settings.peopleDensity||"comfortable"}">
-      <aside class="pro-smart-sidebar"><div class="pro-smart-title"><span>DAILY VIEWS</span><strong>Who needs you?</strong></div>${lists.filter(x=>core.includes(x.id)).map(x=>`<button class="smart-list-btn ${x.id===state.smartList?"active":""}" data-action="smart-list" data-id="${x.id}"><span>${esc(x.name)}</span><b>${x.items.length}</b></button>`).join("")}<details><summary>All Smart Lists</summary>${collections.map(collection=>`<div class="smart-collection"><label>${esc(collection)}</label>${lists.filter(x=>x.collection===collection&&!core.includes(x.id)).map(x=>`<button class="smart-list-btn ${x.id===state.smartList?"active":""}" data-action="smart-list" data-id="${x.id}"><span>${esc(x.name)}</span><b>${x.items.length}</b></button>`).join("")}</div>`).join("")}</details></aside>
-      <section class="pro-people-main"><div class="active-list-head pro-list-head"><div><span>${esc(active.collection)}</span><h2>${esc(active.name)}</h2><p>${esc(active.description)}</p></div><b>${people.length}</b></div><div class="pro-people-toolbar"><input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search people, address, property, source, or tag"><select id="peopleType"><option value="">All types</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select><select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select><select id="peopleSort">${peopleSortOptions().map(([id,label])=>`<option value="${id}" ${state.peopleSort===id?"selected":""}>Sort: ${label}</option>`).join("")}</select><button class="ghost-btn compact" data-action="clear-people">Clear</button></div><div class="table-wrap desktop-people pro-people-table"><table><thead><tr><th><input type="checkbox" data-action="select-all-people" ${people.length&&people.every(c=>state.selectedPeople.includes(c.id))?"checked":""}></th><th>Person & reason</th><th>Opportunity</th><th>Stage</th><th>Last touch</th><th>Next step</th><th>Source</th><th>GCI</th><th></th></tr></thead><tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="9"><div class="empty">Nobody is on this list right now.</div></td></tr>`}</tbody></table></div><div class="mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="empty">Nobody is on this list right now.</div>`}</div></section>
-      ${peoplePreviewHtml(preview)}
-    </div>`
+function fubSmartListRail(lists,active){
+  const collections=[...new Set(lists.map(item=>item.collection))];
+  return `<aside class="fub-list-rail">
+    <div class="fub-rail-title"><div><span class="fub-rail-icon">☷</span><strong>People</strong></div><button title="Collapse">‹</button></div>
+    <button class="fub-all-people ${state.smartList==="all"?"active":""}" data-action="smart-list" data-id="all"><span>♙ All People</span><b>${db.contacts.length}</b></button>
+    <div class="fub-rail-label">COLLECTIONS</div>
+    ${collections.map(collection=>{
+      const collectionLists=lists.filter(item=>item.collection===collection&&item.id!=="all");
+      const count=new Set(collectionLists.flatMap(item=>item.items.map(c=>c.id))).size;
+      return `<details class="fub-smart-collection" ${["Work Now","Seller Growth"].includes(collection)?"open":""}>
+        <summary><span>${esc(collection)}</span><b>${count}</b></summary>
+        <div>${collectionLists.map(item=>`<button class="${item.id===state.smartList?"active":""}" data-action="smart-list" data-id="${item.id}"><span>${esc(item.name)}</span><b>${item.items.length}</b></button>`).join("")}</div>
+      </details>`
+    }).join("")}
+    <div class="fub-rail-footer"><a href="#/settings"><span>⚙</span> Manage</a></div>
+  </aside>`
 }
-function personRow(c){const s=scoreContact(c),reason=smartListReason(c),next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<tr class="${state.peoplePreviewId===c.id?"preview-active":""}"><td><input type="checkbox" data-action="select-person" data-id="${c.id}" ${state.selectedPeople.includes(c.id)?"checked":""}></td><td><div class="pro-person-cell">${avatar(c)}<div><a href="#/contact/${c.id}" class="person-name-link">${esc(fullName(c))}</a><small>${esc(reason||c.phone||c.email||"Contact information missing")}</small><div>${renderTagChips((c.tags||[]).slice(0,3))}</div></div></div></td><td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span><small class="pro-opportunity-score">Score ${s.score} • ${esc(c.heat)}</small></td><td>${inlineSelect("stage",c.stage,c.type==="Buyer"?buyerStages:sellerStages,c.id)}</td><td><strong>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</strong><small>${c.lastCommunication?`${daysSince(c.lastCommunication)}d ago`:"New relationship"}</small></td><td class="${next.due&&next.due<TODAY()?"overdue":""}"><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small></td><td>${esc(c.source)}</td><td>${money(c.gci)}</td><td><div class="pro-row-actions"><button class="quick" data-action="preview-person" data-id="${c.id}">Preview</button>${contactQuickActions(c)}</div></td></tr>`}
-function mobilePersonCard(c){const s=scoreContact(c),reason=smartListReason(c),next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<article class="mobile-contact-card pro-mobile-person"><div class="pro-mobile-select"><input type="checkbox" data-action="select-person" data-id="${c.id}" ${state.selectedPeople.includes(c.id)?"checked":""}></div><a class="mobile-contact-main" href="#/contact/${c.id}">${avatar(c)}<div class="mobile-contact-copy"><div class="mobile-contact-title"><strong>${esc(fullName(c))}</strong><span class="score ${scoreClass(s.score)}">${s.score}</span></div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><small>${esc(reason||reasonToCall(c))}</small><div class="pro-mobile-next"><label>NEXT</label><strong>${esc(next.title)}</strong><span>${next.due?dateLabel(next.due):"No date"}</span></div></div></a><div class="mobile-contact-actions">${contactQuickActions(c,true)}<a class="ghost-btn compact" href="#/contact/${c.id}">Open</a></div></article>`}
+function renderPeople(){
+  const lists=smartLists(),people=filteredPeople(),active=lists.find(x=>x.id===state.smartList)||lists[0];
+  const selected=selectedPeopleContacts();
+  document.getElementById("view").innerHTML=`<section class="fub-people-screen">
+    ${fubSmartListRail(lists,active)}
+    <main class="fub-people-database">
+      <header class="fub-database-header">
+        <div><span class="fub-database-icon">♙</span><h1>${esc(active?.name||"All People")}</h1></div>
+        <button class="fub-new-button" data-action="open-contact">＋ New Contact</button>
+      </header>
+
+      <div class="fub-database-commandbar">
+        <div class="fub-showing-count">Showing <strong>${people.length}</strong> ${people.length===1?"person":"people"}</div>
+        <div class="fub-selection-actions">
+          <button title="Email selected" ${selected.length?"":"disabled"} data-action="bulk-email-selected">✉</button>
+          <button title="Start call sprint" ${selected.length?"":"disabled"} data-action="start-selected-sprint">☎</button>
+          <button title="Set follow-up" ${selected.length?"":"disabled"} data-action="bulk-people" data-bulk="followup">♙</button>
+          <button title="Add tag" ${selected.length?"":"disabled"} data-action="bulk-people" data-bulk="tag">◇</button>
+          <button title="Export selected" ${selected.length?"":"disabled"} data-action="export-selected-people">⇩</button>
+        </div>
+        <div class="fub-command-spacer"></div>
+        <button class="fub-help-button" data-action="open-setup-center">ⓘ How it works</button>
+        <select id="peopleSort" class="fub-toolbar-select">${peopleSortOptions().map(([id,label])=>`<option value="${id}" ${state.peopleSort===id?"selected":""}>Sort: ${label}</option>`).join("")}</select>
+        <button class="fub-filter-button" data-action="toggle-fub-filters">☷ Filters</button>
+      </div>
+
+      <div class="fub-filter-row ${state.peopleType||state.peopleHeat||state.peopleQuery?"open":""}" id="fubFilterRow">
+        <input id="peopleSearch" value="${esc(state.peopleQuery)}" placeholder="Search this list">
+        <select id="peopleType"><option value="">Everyone</option>${["Seller","Buyer","Sphere","Past Client","Realtor","Lender"].map(x=>`<option ${state.peopleType===x?"selected":""}>${x}</option>`).join("")}</select>
+        <select id="peopleHeat"><option value="">All heat</option>${["Hot","Warm","Cold"].map(x=>`<option ${state.peopleHeat===x?"selected":""}>${x}</option>`).join("")}</select>
+        <button class="ghost-btn compact" data-action="clear-people">Clear</button>
+      </div>
+
+      ${peopleBulkBarHtml()}
+
+      <div class="fub-table-wrap desktop-people">
+        <table class="fub-people-table">
+          <thead><tr>
+            <th><input type="checkbox" data-action="select-all-people" ${people.length&&people.every(c=>state.selectedPeople.includes(c.id))?"checked":""}></th>
+            <th>Name</th><th>Type</th><th>Stage</th><th>Phone</th><th>Email</th><th>Last Communication</th><th>Next Follow-Up</th><th>Source</th><th></th>
+          </tr></thead>
+          <tbody>${people.length?people.map(personRow).join(""):`<tr><td colspan="10"><div class="fub-empty-state"><strong>No people in this list.</strong><span>Clear the filters or add a new relationship.</span></div></td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="mobile-people fub-mobile-people">${people.length?people.map(mobilePersonCard).join(""):`<div class="fub-empty-state"><strong>No people in this list.</strong></div>`}</div>
+    </main>
+  </section>`
+}
+function personRow(c){
+  const next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"))));
+  const last=db.communications.filter(item=>item.contactId===c.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  return `<tr>
+    <td><input type="checkbox" data-action="select-person" data-id="${c.id}" ${state.selectedPeople.includes(c.id)?"checked":""}></td>
+    <td><button class="fub-person-button" data-action="open-contact-peek" data-id="${c.id}">${avatar(c)}<span><strong>${esc(fullName(c))}</strong><small>${esc(smartListReason(c)||propertyDisplay(c)||"Every active relationship")}</small></span></button></td>
+    <td><span class="fub-type-label">${esc(c.type)}</span><small>${esc(c.heat)}</small></td>
+    <td>${inlineSelect("stage",c.stage,c.type==="Buyer"?buyerStages:sellerStages,c.id)}</td>
+    <td>${hasPhone(c)?`<div class="fub-contact-value"><button data-action="quick-launch" data-channel="Call" data-id="${c.id}">☎</button><span>${esc(c.phone)}</span></div>`:`<span class="fub-muted">—</span>`}</td>
+    <td>${hasEmail(c)?`<div class="fub-contact-value"><button data-action="quick-launch" data-channel="Email" data-id="${c.id}">@</button><span>${esc(c.email)}</span></div>`:`<span class="fub-muted">—</span>`}</td>
+    <td><div class="fub-date-cell"><strong>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</strong><small>${last?esc(last.channel):"No contact"}</small></div></td>
+    <td class="${next.due&&next.due<TODAY()?"overdue":""}"><div class="fub-date-cell"><strong>${next.due?dateLabel(next.due):"Not set"}</strong><small>${esc(next.title)}</small></div></td>
+    <td>${esc(c.source||"—")}</td>
+    <td><button class="fub-row-more" data-action="open-contact-peek" data-id="${c.id}" title="Open contact">›</button></td>
+  </tr>`
+}
+function mobilePersonCard(c){
+  const next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"))));
+  return `<article class="fub-mobile-person">
+    <button class="fub-mobile-main" data-action="open-contact-peek" data-id="${c.id}">${avatar(c)}<span><strong>${esc(fullName(c))}</strong><small>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</small><em>${esc(smartListReason(c)||reasonToCall(c))}</em></span><b>›</b></button>
+    <div class="fub-mobile-next"><span>Next</span><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small></div>
+    <div class="fub-mobile-actions">
+      <button data-action="quick-launch" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎ Call</button>
+      <button data-action="quick-launch" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉ Text</button>
+      <button data-action="show-script" data-id="${c.id}">▤ Script</button>
+    </div>
+  </article>`
+}
 
 function cleanPhone(value){return String(value||"").replace(/\D/g,"").slice(-10)}
 function duplicateMatches(c){
@@ -3704,6 +3875,10 @@ function openConversationMode(contactId,context="profile",taskId="",workItemId="
           <div class="discovery-list">${script.questions.map((q,i)=>`<button class="discovery-question" data-action="toggle-script-question"><span>${i+1}</span>${esc(fillScriptText(q,c))}<b>✓</b></button>`).join("")}</div>
         </section>
         <section class="script-block"><div class="script-block-head"><div><span>ASK FOR THE NEXT STEP</span><h3>Close</h3></div><button class="copy-script-btn" data-action="copy-script-section" data-section="close">Copy</button></div><p id="scriptCloseText">${esc(fillScriptText(script.close,c))}</p></section>
+        <section class="script-block suggested-text-callout"><div class="script-block-head"><div><span>FOLLOW UP WITHOUT OVERTHINKING</span><h3>Suggested texts</h3></div><button class="copy-script-btn" data-action="open-suggested-text" data-id="${c.id}">View all</button></div>
+          <p>${esc(suggestedTextsForContact(c)[0]?.body||"Open the text composer for a suggested follow-up.")}</p>
+          <div class="script-inline-actions"><button class="primary-btn compact" data-action="open-suggested-text" data-id="${c.id}">Choose & send text</button></div>
+        </section>
         <section class="script-block voicemail-block"><div class="script-block-head"><div><span>WHEN THEY DO NOT ANSWER</span><h3>Voicemail</h3></div><button class="copy-script-btn" data-action="copy-script-section" data-section="voicemail">Copy</button></div><p id="scriptVoicemailText">${esc(fillScriptText(script.voicemail,c))}</p>
           <div class="script-inline-actions"><button class="ghost-btn compact" data-action="script-voicemail-text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>Send follow-up text</button><button class="ghost-btn compact" data-action="set-script-outcome" data-outcome="Left Voicemail">Mark voicemail</button></div>
         </section>
@@ -3777,6 +3952,8 @@ function launchScriptCall(id){
   location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`
 }
 function launchVoicemailText(id){
+  suggestedTextModal(id,"voicemail");return;
+  
   const c=contact(id),script=db.callScripts.find(s=>s.id===document.getElementById("scriptSelect")?.value);if(!c||!script||!hasPhone(c))return;
   const body=fillScriptText(script.afterVoicemailText,c);
   saveScriptDraftFromFields(false);save(false);
@@ -4697,6 +4874,109 @@ function saveContact(){
   save();closeModal();toast("Person saved",fullName(c));location.hash=`#/contact/${c.id}`
 }
 
+
+function textSuggestionContext(c){
+  const p=primaryProperty(c),first=preferredContactName(c),agent=db.settings.agentName||"Jacob";
+  const property=propertyAddress(p)||c.property||"your real estate plans";
+  const area=c.buyerDetails?.areas||c.preferences?.areas||db.settings.coreMarkets?.split(",")[0]?.trim()||"the area";
+  const timing=c.timeframe&&c.timeframe!=="Unknown"?c.timeframe.toLowerCase():"";
+  return {first,agent,property,area,timing}
+}
+function suggestedTextsForContact(c,reason="general"){
+  const x=textSuggestionContext(c),items=[];
+  const add=(id,label,tone,body)=>items.push({id,label,tone,body});
+  if(reason==="voicemail"){
+    add("vm-simple","Simple voicemail follow-up","Direct",`Hey ${x.first}, it’s ${x.agent} with Holton Homes. I just tried to call you. Nothing urgent—I wanted to follow up about ${x.property}. Text me here when you have a minute.`);
+    add("vm-question","Voicemail with a question","Conversational",`Hey ${x.first}, I just left you a quick voicemail. Are you still thinking about ${c.type==="Seller"?"making a move or learning what the home could sell for":`buying in ${x.area}`}? No pressure either way.`);
+    return items
+  }
+  if(c.type==="Seller"){
+    if(["Valuation Requested","Valuation Delivered"].includes(c.stage)){
+      add("seller-value","Home-value follow-up","Helpful",`Hey ${x.first}, I wanted to follow up about the value of ${x.property}. I can give you a more useful range than an automated estimate if you tell me what updates or changes you’ve made. Would a quick call this week be helpful?`);
+      add("seller-soft","Low-pressure seller check-in","Casual",`Hey ${x.first}, quick check-in—are you mostly curious about the value of ${x.property}, or are you considering a move sometime soon? Either answer is completely fine.`);
+    } else if(c.stage==="Listing Appointment"){
+      add("seller-appt","Listing appointment confirmation","Professional",`Hi ${x.first}, I’m looking forward to meeting about ${x.property}. I’ll come prepared to discuss pricing, likely buyer response, estimated proceeds, and the best timing. Is there anything specific you want me to research beforehand?`);
+      add("seller-decision","Confirm decision makers","Prepared",`Hi ${x.first}, before we meet, will everyone involved in the selling decision be able to join us? I want to make sure everyone has the same information and can ask questions.`);
+    } else if(c.stage==="Active Listing"){
+      add("seller-update","Active listing update","Professional",`Hi ${x.first}, I’m preparing your latest listing update for ${x.property}. I’ll cover activity, feedback, competing homes, and my recommended next move. Is there anything you specifically want included?`);
+      add("seller-feedback","Showing-feedback check-in","Reassuring",`Hi ${x.first}, I’m reviewing the newest activity and feedback on ${x.property}. I’ll separate useful buyer patterns from one-off opinions and let you know what—if anything—I recommend changing.`);
+    } else {
+      add("seller-conversation","Start a seller conversation","Natural",`Hey ${x.first}, I’m reaching out because I’ve been studying the market around ${x.property}. Have you had any thoughts about selling, or are you mainly keeping an eye on what the home may be worth?`);
+      add("seller-timing","Seller timing question","Low pressure",`Hey ${x.first}, if you ever did sell ${x.property}, what would need to happen first? I’m not trying to rush you—I’m trying to understand what a realistic plan would look like.`);
+      add("seller-resource","Offer useful help","Helpful",`Hi ${x.first}, I can put together a simple sell-versus-hold review for ${x.property}, including likely value, estimated proceeds, and current buyer demand. Would that be useful?`);
+    }
+  } else if(c.type==="Buyer"){
+    if(c.stage==="Buyer Consultation"){
+      add("buyer-consult","Buyer consultation confirmation","Professional",`Hi ${x.first}, I’m looking forward to our buyer consultation. We’ll narrow down your monthly-payment comfort, financing, areas, and the type of home that actually fits your life. What is your biggest question going into it?`);
+    } else if(c.stage==="Under Contract"){
+      add("buyer-contract","Under-contract update","Reassuring",`Hi ${x.first}, your purchase is moving forward. I’m reviewing the next contract dates and will keep you focused on the items that need your action. I’ll reach out immediately if anything needs a decision.`);
+    } else {
+      add("buyer-checkin","Buyer check-in","Natural",`Hey ${x.first}, are you still thinking about buying in ${x.area}? I can help you narrow things down by monthly payment instead of sending a pile of random listings.`);
+      add("buyer-payment","Payment-focused question","Helpful",`Hi ${x.first}, what monthly payment would feel comfortable—not merely what a lender says you can qualify for? That answer helps me build a much better search.`);
+      add("buyer-listings","Search reset","Direct",`Hey ${x.first}, I want to make sure the homes I send are actually useful. What are the top two things the next house must have, and what is one thing you refuse to compromise on?`);
+    }
+  } else if(c.type==="Past Client"){
+    add("past-checkin","Past-client check-in","Personal",`Hey ${x.first}, I was thinking about you and wanted to check in. How is everything going with the house?`);
+    add("past-value","Annual home review","Helpful",`Hi ${x.first}, I’m updating homeowners on what has changed in the local market. I’d be happy to send you a simple value and equity check for your home—no sales pitch attached.`);
+    add("past-referral","Referral conversation","Natural",`Hey ${x.first}, I’m growing Holton Homes through people I genuinely enjoy helping. If someone around you starts talking about moving, I’d appreciate an introduction.`);
+  } else if(["Realtor","Lender"].includes(c.type)){
+    add("partner-intro","Partner check-in","Professional",`Hi ${x.first}, I wanted to reconnect and learn more about the clients and situations you handle best. I’d rather build a small group of reliable partners than send people randomly.`);
+    add("partner-referral","Referral partner follow-up","Direct",`Hey ${x.first}, I’m building my business around strong follow-up and clear client communication. What kind of referral would be especially valuable for you right now?`);
+  } else {
+    add("sphere-natural","Natural sphere check-in","Personal",`Hey ${x.first}, I was thinking about you and wanted to see how things are going.`);
+    add("sphere-realestate","Real-estate conversation","Casual",`Hey ${x.first}, random question—have you heard anyone around you talking about moving, buying, or wondering what their house is worth? I’m working hard to grow Holton Homes and be genuinely useful.`);
+    add("sphere-homeowner","Homeowner value offer","Helpful",`Hi ${x.first}, I’m putting together simple local market updates for homeowners. I can send you a quick look at what is happening around your neighborhood if you’d find that useful.`);
+  }
+  add("custom-followup","Simple universal follow-up","Direct",`Hi ${x.first}, it’s ${x.agent} with Holton Homes. I wanted to follow up and see what questions you have or what would be most useful from me right now.`);
+  return items
+}
+function suggestedTextModal(contactId,reason="general"){
+  const c=contact(contactId);if(!c||!hasPhone(c))return toast("Phone number missing","Add a mobile number before composing a text.");
+  const suggestions=suggestedTextsForContact(c,reason);
+  modal(`Suggested texts — ${fullName(c)}`,`<div class="suggested-text-composer">
+    <div class="suggested-text-intro"><div>${avatar(c)}</div><div><strong>Choose a starting point—not a robotic script.</strong><span>Edit it so it sounds like you before sending.</span></div></div>
+    <div class="suggested-text-layout">
+      <div class="suggested-text-list">
+        ${suggestions.map((item,index)=>`<button class="${index===0?"selected":""}" data-action="choose-suggested-text" data-index="${index}">
+          <span>${esc(item.tone)}</span><strong>${esc(item.label)}</strong><small>${esc(item.body)}</small>
+        </button>`).join("")}
+      </div>
+      <div class="suggested-text-editor">
+        <label>MESSAGE</label>
+        <textarea id="suggestedTextBody" rows="10">${esc(suggestions[0]?.body||"")}</textarea>
+        <div class="suggested-text-meta"><span id="suggestedTextCount">${(suggestions[0]?.body||"").length} characters</span><button class="ghost-btn compact" data-action="copy-suggested-text">Copy</button></div>
+        <div class="suggested-text-note">Sending opens your device’s Messages handler. On your Windows PC, Phone Link can hand the text to your connected phone.</div>
+      </div>
+    </div>
+    <script type="application/json" id="suggestedTextData">${JSON.stringify(suggestions).replaceAll("<","\\u003c")}</script>
+    <input type="hidden" id="suggestedTextContactId" value="${c.id}">
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="ghost-btn" data-action="open-blank-text" data-id="${c.id}">Blank message</button><button class="primary-btn" data-action="send-suggested-text" data-id="${c.id}">Open in Messages</button>`)
+}
+function suggestedTextData(){
+  try{return JSON.parse(document.getElementById("suggestedTextData")?.textContent||"[]")}catch{return []}
+}
+function chooseSuggestedText(index){
+  const item=suggestedTextData()[Number(index)],field=document.getElementById("suggestedTextBody");if(!item||!field)return;
+  field.value=item.body;
+  document.querySelectorAll(".suggested-text-list button").forEach((button,i)=>button.classList.toggle("selected",i===Number(index)));
+  updateSuggestedTextCount()
+}
+function updateSuggestedTextCount(){
+  const field=document.getElementById("suggestedTextBody"),count=document.getElementById("suggestedTextCount");
+  if(count)count.textContent=`${field?.value.length||0} characters`
+}
+function launchSmsWithBody(contactId,body=""){
+  const c=contact(contactId);if(!c||!hasPhone(c))return;
+  savePendingTouch({contactId,channel:"Text",startedAt:NOW(),suggestedBody:body});
+  const number=c.phone.replace(/[^\d+]/g,"");
+  location.href=`sms:${number}?&body=${encodeURIComponent(body)}`;
+  setTimeout(()=>showPendingTouchPrompt(),900)
+}
+function sendSuggestedText(contactId){
+  const body=document.getElementById("suggestedTextBody")?.value.trim()||"";
+  closeModal();launchSmsWithBody(contactId,body)
+}
+
 function savePendingTouch(payload){
   sessionStorage.setItem("holtonPendingTouch",JSON.stringify(payload))
 }
@@ -4709,10 +4989,9 @@ function quickLaunch(channel,id){
   const destination=channel==="Email"?c.email:c.phone;
   if(!destination){toast(`No ${channel==="Email"?"email":"phone number"}`,`Add one to ${fullName(c)} first.`);return}
   savePendingTouch({contactId:id,channel,startedAt:NOW()});
-  if(channel==="Call")location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`;
-  if(channel==="Text")location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}`;
-  if(channel==="Email")openEmailComposer(c.email,"Holton Homes follow-up","");
-  setTimeout(()=>showPendingTouchPrompt(),900)
+  if(channel==="Call"){location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`;setTimeout(()=>showPendingTouchPrompt(),900)}
+  if(channel==="Text"){clearPendingTouch();suggestedTextModal(c.id);return}
+  if(channel==="Email"){openEmailComposer(c.email,"Holton Homes follow-up","");setTimeout(()=>showPendingTouchPrompt(),900)}
 }
 function showPendingTouchPrompt(){
   const pending=pendingTouch();
@@ -5055,7 +5334,14 @@ document.addEventListener("click",event=>{
   if(action==="dismiss-notification")dismissNotification(id);
   if(action==="open-setup-center")setupCenterModal();
   if(action==="collapse-setup"){db.settings.onboardingCollapsed=true;save(false);renderToday()}
-  if(action==="preview-person"){state.peoplePreviewId=id;renderPeople()}
+  if(action==="preview-person"||action==="open-contact-peek")openContactPeek(id);
+  if(action==="close-contact-peek")closeContactPeek();
+  if(action==="toggle-fub-filters")document.getElementById("fubFilterRow")?.classList.toggle("open");
+  if(action==="bulk-email-selected"){
+    const contacts=selectedPeopleContacts().filter(hasEmail);
+    if(!contacts.length)return toast("No email addresses","Select contacts with valid email addresses.");
+    openEmailComposer(contacts.map(c=>c.email).join(","),"Holton Homes follow-up","");
+  }
   if(action==="select-person")togglePersonSelected(id,el.checked);
   if(action==="select-all-people"){const ids=filteredPeople().map(c=>c.id);state.selectedPeople=el.checked?[...new Set([...state.selectedPeople,...ids])]:state.selectedPeople.filter(id=>!ids.includes(id));renderPeople()}
   if(action==="clear-selected-people"){state.selectedPeople=[];renderPeople()}
@@ -5149,6 +5435,11 @@ document.addEventListener("click",event=>{
     const c=contact(document.getElementById("scriptContactId")?.value),s=db.callScripts.find(x=>x.id===document.getElementById("scriptSelect")?.value),o=s?.objections?.[Number(el.dataset.index||0)];
     if(c&&o)copyTextValue(fillScriptText(o.response,c),"Objection response copied")
   }
+  if(action==="open-suggested-text")suggestedTextModal(id);
+  if(action==="choose-suggested-text")chooseSuggestedText(el.dataset.index||0);
+  if(action==="copy-suggested-text")copyTextValue(document.getElementById("suggestedTextBody")?.value||"","Text copied");
+  if(action==="send-suggested-text")sendSuggestedText(id);
+  if(action==="open-blank-text"){closeModal();launchSmsWithBody(id,"")}
   if(action==="script-voicemail-text")launchVoicemailText(id);
   if(action==="set-script-outcome")setScriptOutcome(el.dataset.outcome||"Connected");
   if(action==="save-script-outcome")saveConversationOutcome();
@@ -5336,6 +5627,7 @@ document.addEventListener("change",event=>{
   if(event.target.id==="peopleSort"){state.peopleSort=event.target.value;renderPeople()}
 });
 document.addEventListener("input",event=>{
+  if(event.target.id==="suggestedTextBody")updateSuggestedTextCount();
   if(event.target.id==="scriptNotes"){saveScriptDraftFromFields();return}
   if(event.target.id==="peopleSearch"){state.peopleQuery=event.target.value;renderPeople()}
   if(event.target.id==="globalSearch"){

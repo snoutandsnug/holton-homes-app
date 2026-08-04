@@ -1,7 +1,7 @@
 {
-  "name": "Holton Homes CRM Pro",
+  "name": "Holton Homes CRM V3",
   "short_name": "Holton CRM",
-  "description": "A professional seller-focused CRM and daily real estate operating system.",
+  "description": "A Follow Up Boss-inspired relationship CRM for Holton Homes.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
