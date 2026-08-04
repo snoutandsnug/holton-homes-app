@@ -1,7 +1,7 @@
 {
-  "name": "Holton Homes Verified Transaction CRM",
-  "short_name": "Holton CRM",
-  "description": "Seller-focused, buyer-ready real estate relationship CRM.",
+  "name": "Holton Homes Agent OS",
+  "short_name": "Holton Homes",
+  "description": "A seller-focused daily operating system for real estate.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",

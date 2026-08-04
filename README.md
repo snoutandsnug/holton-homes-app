@@ -1,4 +1,4 @@
-# Holton Homes Relationship CRM v25
+# Holton Homes Relationship CRM v26
 
 A static, mobile-responsive CRM built around the strongest workflow ideas from Follow Up Boss, kvCORE, and Lofty.
 
@@ -30,7 +30,7 @@ This is still a static browser application:
 - Live in-app communication, MLS property alerts, authentication, and cross-device sync require a secure backend and provider integrations.
 
 
-## v25 contact workspace
+## v26 contact workspace
 - Communication timeline is the primary workspace.
 - Prominent next-action strip with complete/log and reschedule controls.
 - Inline stage, heat, source, and timeframe editing.
@@ -40,7 +40,7 @@ This is still a static browser application:
 - Collapsible right sidebar and actionable empty states.
 
 
-## v25 — built for Holton Homes
+## v26 — built for Holton Homes
 - Readable typography and larger controls across the entire CRM.
 - Seller-first daily scoreboard tied to Jacob's $100,000 GCI target.
 - Seller share, daily conversation, and market-area goals.
@@ -54,7 +54,7 @@ This is still a static browser application:
 Clearing ordinary cached images/files normally does not erase CRM data. Clearing cookies/site data or all storage for the site can erase browser data. Keep downloaded JSON backups. A secure cloud database remains the next major upgrade.
 
 
-## v25
+## v26
 - Fixed the global top-bar Add Person button with a dedicated direct event listener.
 - Added Realtor and Lender relationship types.
 - Added company, role, license/NMLS, service area, specialties, and referral-note fields.
@@ -63,14 +63,14 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 - Added Add Realtor and Add Lender shortcuts to the Holton Homes daily dashboard.
 
 
-## v25
+## v26
 - Every visible contact name is now the direct profile link.
 - Initials/avatar icons are decorative and no longer act as navigation controls.
 - Name links are consistent across People, Today, Inbox, Pipeline, Tasks, Activity, and search.
 - Added stronger hover and keyboard-focus styling so it is obvious that the real name is clickable.
 
 
-## v25 — Holton Automation Studio
+## v26 — Holton Automation Studio
 
 ### Automation engine
 - Deterministic rule engine with active/disabled controls.
@@ -99,7 +99,7 @@ Clearing ordinary cached images/files normally does not erase CRM data. Clearing
 Scheduled rules and plan steps process when the CRM is open, reopened, or its data changes. True server-side execution while every device is offline requires the future secure cloud backend.
 
 
-## v25 — Household and spouse relationships
+## v26 — Household and spouse relationships
 - Dedicated Household & Decision Makers section on every contact profile.
 - Add spouse, partner, co-owner, parent, adult child, sibling, or another household member.
 - Store phone, email, anniversary, birthday, decision-maker status, and household notes.
@@ -109,7 +109,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 - Contact summaries now mention spouses and decision makers.
 
 
-## v25 — Realtor Daily OS and structured property records
+## v26 — Realtor Daily OS and structured property records
 
 ### Daily lead command center
 - New and untouched leads
@@ -139,7 +139,7 @@ Scheduled rules and plan steps process when the CRM is open, reopened, or its da
 The spouse/household features and Automation Studio remain included.
 
 
-## v25 — Holton Homes, not a CRM demo
+## v26 — Holton Homes, not a CRM demo
 
 - Removed "What a Realtor actually needs today" and similar explanatory copy.
 - Renamed People to Leads & Contacts.
@@ -153,7 +153,7 @@ The spouse/household features and Automation Studio remain included.
 - Kept households, properties, automations, pipelines, backups, and all v17 data.
 
 
-## v25 — Mobile working build
+## v26 — Mobile working build
 
 ### Phone usability
 - Desktop sidebar becomes a fixed, horizontally scrollable bottom navigation.
@@ -182,7 +182,7 @@ The spouse/household features and Automation Studio remain included.
 This remains a browser-based bridge. The native phone/SMS apps perform communication; true two-way in-app communication requires the cloud and phone-provider phase.
 
 
-## v25 — Cloud sync foundation
+## v26 — Cloud sync foundation
 
 - Supabase email/password authentication.
 - One private cloud CRM state per authenticated user.
@@ -200,7 +200,7 @@ This remains a browser-based bridge. The native phone/SMS apps perform communica
 Run `SUPABASE_SETUP.sql` before trying to sign in.
 
 
-## v25 — Daily Operating CRM
+## v26 — Daily Operating CRM
 
 ### Work Today
 - One priority queue combines replies, untouched leads, due tasks, follow-ups, appointments, transaction deadlines, active-listing updates, stale hot leads, and missing next steps.
@@ -230,7 +230,7 @@ Run `SUPABASE_SETUP.sql` before trying to sign in.
 No paid phone provider is required for these features. Native phone, SMS, and email apps still perform the communication.
 
 
-## v25 — Universal Conversation Mode
+## v26 — Universal Conversation Mode
 
 Conversation Mode has the same capabilities on desktop, iPad, and phone. Only the responsive layout changes.
 
@@ -278,10 +278,10 @@ Conversation Mode has the same capabilities on desktop, iPad, and phone. Only th
 - Add custom scripts.
 - Restore the starter library at any time.
 
-No new Supabase SQL is required for v25.
+No new Supabase SQL is required for v26.
 
 
-## v25 — Contact and Mailing Addresses
+## v26 — Contact and Mailing Addresses
 
 The CRM now treats a person's contact address and a real-estate property address as separate records.
 
@@ -312,10 +312,10 @@ The CRM now treats a person's contact address and a real-estate property address
 
 Property addresses remain in Properties & Opportunities and are not overwritten by a mailing address.
 
-No new Supabase SQL is required for v25.
+No new Supabase SQL is required for v26.
 
 
-## v25 — Buyer and Seller Transaction Center
+## v26 — Buyer and Seller Transaction Center
 
 Under Contract is now a full operational workflow instead of one pipeline stage.
 
@@ -364,7 +364,7 @@ The checklists include more than twenty-five operational steps per side and pres
 No new Supabase SQL is required. Deadlines must be entered from the actual signed contract and written amendments.
 
 
-## v25 — Verified Transaction Flow
+## v26 — Verified Transaction Flow
 
 This version was audited against Ohio REALTORS consumer transaction guidance, CFPB closing guidance, and Ohio transaction-record requirements.
 
@@ -428,3 +428,96 @@ Official Ohio REALTORS, CFPB, and Ohio law reference guides are included in the 
 Database initialization now occurs after transaction templates are available. Stored transactions can be normalized safely on refresh and legacy-version migration.
 
 No new Supabase SQL is required.
+
+
+## v26 — Maps, Calendar, and Mail Choices
+
+### Maps
+- Apple Maps is the default.
+- Google Maps and Ask Every Time remain available.
+- Map and Directions buttons use the selected provider throughout contacts, properties, tasks, and transactions.
+
+### Calendar
+- Apple Calendar / standard `.ics` event files.
+- Google Calendar prefilled event handoff.
+- Ask Every Time option.
+- Calendar buttons on tasks, property appointments, transaction critical dates, transaction steps, and closing.
+- Event title, date, time, duration, address, client, and relevant details are prefilled.
+- Configurable default event time, duration, reminder, and time zone.
+
+### Mail
+- Default Mail App uses the device's configured mail client.
+- Gmail opens a prefilled Gmail compose window.
+- Ask Every Time option.
+- Existing contact email actions and transaction-team email actions follow the selected preference.
+- Transaction client updates can be emailed directly.
+
+### Task improvements
+- Start time, duration, location, and details.
+- Add to calendar immediately after saving.
+- Edit task and open directions from the task list.
+
+These are secure app handoffs and require no API key. The CRM does not read Gmail or Google Calendar data. Full two-way Google sync requires Google OAuth and a secure backend connection.
+
+No new Supabase SQL is required.
+
+
+# Holton Homes Agent OS
+
+This release consolidates the daily-use features into one product rather than artificially spacing them across incremental versions.
+
+## Daily Agent Home
+- One dominant next action.
+- Daily production score and finish line.
+- Seller Opportunity Radar.
+- Today’s appointments.
+- Work Today priorities without the old duplicate sections.
+- Business pulse, relationship moments, and fast workspaces.
+
+## Prospecting Sprint
+- Seller, follow-up, new-lead, buyer, sphere, past-client, and open-house queues.
+- One contact at a time.
+- Timer, attempts, conversations, appointments, and remaining count.
+- Call, text, script, profile, relationship memory, voice update, and quick outcomes.
+- Outcome logging and automatic next follow-up.
+
+## Quick Capture
+- Ten-second lead entry.
+- Full contact intake.
+- Voice / field update.
+- Task or appointment.
+- Communication note.
+- Transaction.
+- Open house.
+- Market insight.
+
+## Relationship Memory
+- Preferred name and communication method.
+- Occupation, birthday, and home anniversary.
+- Family, pets, interests, communication style, what to ask about, and what was promised.
+- Shown on contact profiles, scripts, seller radar, and focused call preparation.
+
+## Field Mode
+- Next appointment.
+- Directions through the selected Apple or Google Maps preference.
+- Call, text, script, calendar, and field update.
+- Seven-day route view.
+
+## Open House Mode
+- Event setup.
+- iPad visitor sign-in.
+- Buyer timeline, representation, lender status, homeowner, and possible-seller capture.
+- Automatic CRM contact creation.
+- Visitor follow-up sprint.
+
+## Market Study
+- Daily local-market practice.
+- Actives, reductions, pendings, sales, days on market, list-to-sale relationship, payment example, listing links, and one useful observation.
+- Daily production target integration.
+
+## Cleaner Product
+- Five primary navigation choices: Home, People, Pipeline, Transactions, and More.
+- Stronger visual meaning for sellers, buyers, transactions, relationships, urgency, waiting, and completion.
+- Persistent Quick Capture button.
+
+No new Supabase SQL is required. New datasets continue to sync inside the existing protected JSON state.

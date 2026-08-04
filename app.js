@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v25";
-const LEGACY_KEYS = ["holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_agentOS1";
+const LEGACY_KEYS = ["holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -403,7 +403,9 @@ const defaultAutomationRules = [
 ];
 
 let db = null;
-let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview"};
+let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming"};
+let focusTimerHandle=null;
+let speechRecognizer=null;
 let automationBusy=false,automationTimer=null;
 
 
@@ -466,7 +468,7 @@ function contactAddressPanelHtml(c){
     <div class="contact-address-icon">⌖</div>
     <div class="contact-address-copy"><span>${esc(a.type||"Home")} address${a.sameAsPrimaryProperty?" • synced to primary property":""}</span><strong>${esc(display)}</strong>${a.county?`<small>${esc(a.county)} County</small>`:""}</div>
     <div class="contact-address-actions">
-      <a class="quick" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(display)}">Map</a>
+      <button class="quick" data-action="open-map" data-address="${esc(display)}">Map</button><button class="quick" data-action="open-directions" data-address="${esc(display)}">Directions</button>
       <button class="quick" data-action="copy-contact-address" data-id="${c.id}">Copy</button>
       <button class="quick" data-action="open-contact" data-id="${c.id}">Edit</button>
     </div>
@@ -491,6 +493,125 @@ function fillContactAddressFromPrimaryProperty(){
   const checkbox=document.getElementById("contactAddressSameAsProperty");if(checkbox)checkbox.checked=true;
   if(values.street||values.city)toast("Address copied","The contact address will stay synced to the primary property.");
   else toast("No property address yet","Enter the seller property below, then tap this again—or save with sync turned on.")
+}
+
+
+let pendingExternalAction=null;
+function integrationSettings(){
+  return {
+    mapProvider:db?.settings?.mapProvider||"apple",
+    calendarProvider:db?.settings?.calendarProvider||"ask",
+    emailProvider:db?.settings?.emailProvider||"native",
+    calendarDefaultTime:db?.settings?.calendarDefaultTime||"09:00",
+    calendarDefaultDuration:Number(db?.settings?.calendarDefaultDuration||60),
+    calendarReminderMinutes:Number(db?.settings?.calendarReminderMinutes||30),
+    calendarTimeZone:db?.settings?.calendarTimeZone||"America/New_York"
+  }
+}
+function appleMapsUrl(address,mode="search"){
+  const encoded=encodeURIComponent(address||"");
+  return mode==="directions"?`https://maps.apple.com/?daddr=${encoded}&dirflg=d`:`https://maps.apple.com/?q=${encoded}`
+}
+function googleMapsUrl(address,mode="search"){
+  const encoded=encodeURIComponent(address||"");
+  return mode==="directions"?`https://www.google.com/maps/dir/?api=1&destination=${encoded}`:`https://www.google.com/maps/search/?api=1&query=${encoded}`
+}
+function openMapAddress(address,mode="search",provider=""){
+  if(!address)return toast("Address missing","Add the address before opening maps.");
+  const selected=provider||integrationSettings().mapProvider;
+  if(selected==="ask"){
+    pendingExternalAction={kind:"map",address,mode};
+    modal(mode==="directions"?"Open directions":"Open map",`<div class="provider-choice"><p>${esc(address)}</p><button data-action="choose-map-provider" data-provider="apple"><strong>Apple Maps</strong><span>Native Maps on iPhone, iPad, and Mac</span></button><button data-action="choose-map-provider" data-provider="google"><strong>Google Maps</strong><span>Google Maps app or website</span></button></div>`);return
+  }
+  const url=selected==="google"?googleMapsUrl(address,mode):appleMapsUrl(address,mode);
+  window.open(url,"_blank","noopener")
+}
+function compactDate(date){return String(date||"").replaceAll("-","")}
+function compactLocalDateTime(date,time){return `${compactDate(date)}T${String(time||"09:00").replace(":","")}00`}
+function addMinutesDateTime(date,time,minutes){
+  const d=new Date(`${date}T${time||"09:00"}:00`);d.setMinutes(d.getMinutes()+Number(minutes||60));
+  const pad=n=>String(n).padStart(2,"0");return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`
+}
+function calendarEvent(input={}){
+  const prefs=integrationSettings();
+  return {id:input.id||uid(),title:input.title||"Holton Homes event",date:input.date||TODAY(),time:input.time||"",duration:Number(input.duration||prefs.calendarDefaultDuration),location:input.location||"",description:input.description||"",allDay:input.allDay??!input.time}
+}
+function escapeIcs(value){return String(value||"").replaceAll("\\","\\\\").replaceAll("\n","\\n").replaceAll(",","\\,").replaceAll(";","\\;")}
+function calendarEventIcs(eventInput){
+  const event=calendarEvent(eventInput),prefs=integrationSettings(),stamp=new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");
+  const start=event.allDay?`DTSTART;VALUE=DATE:${compactDate(event.date)}`:`DTSTART:${compactLocalDateTime(event.date,event.time||prefs.calendarDefaultTime)}`;
+  const end=event.allDay?`DTEND;VALUE=DATE:${compactDate(addDays(event.date,1))}`:`DTEND:${addMinutesDateTime(event.date,event.time||prefs.calendarDefaultTime,event.duration)}`;
+  const reminder=Number(prefs.calendarReminderMinutes)>=0?`BEGIN:VALARM\r\nTRIGGER:-PT${Number(prefs.calendarReminderMinutes)}M\r\nACTION:DISPLAY\r\nDESCRIPTION:${escapeIcs(event.title)}\r\nEND:VALARM\r\n`:"";
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Holton Homes//CRM//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\nX-WR-TIMEZONE:${escapeIcs(prefs.calendarTimeZone)}\r\nBEGIN:VEVENT\r\nUID:${escapeIcs(event.id)}@holtonhomes.crm\r\nDTSTAMP:${stamp}\r\n${start}\r\n${end}\r\nSUMMARY:${escapeIcs(event.title)}\r\nLOCATION:${escapeIcs(event.location)}\r\nDESCRIPTION:${escapeIcs(event.description)}\r\n${reminder}END:VEVENT\r\nEND:VCALENDAR\r\n`
+}
+function googleCalendarUrl(eventInput){
+  const event=calendarEvent(eventInput),prefs=integrationSettings();
+  const dates=event.allDay?`${compactDate(event.date)}/${compactDate(addDays(event.date,1))}`:`${compactLocalDateTime(event.date,event.time||prefs.calendarDefaultTime)}/${addMinutesDateTime(event.date,event.time||prefs.calendarDefaultTime,event.duration)}`;
+  const params=new URLSearchParams({action:"TEMPLATE",text:event.title,dates,details:event.description,location:event.location,ctz:prefs.calendarTimeZone});
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+function addCalendarEvent(eventInput,provider=""){
+  const event=calendarEvent(eventInput),selected=provider||integrationSettings().calendarProvider;
+  if(!event.date)return toast("Date missing","Set a date before adding this event.");
+  if(selected==="ask"){
+    pendingExternalAction={kind:"calendar",event};
+    modal("Add to calendar",`<div class="provider-choice"><p><strong>${esc(event.title)}</strong><span>${dateLabel(event.date)}${event.time?` • ${esc(event.time)}`:" • all day"}${event.location?` • ${esc(event.location)}`:""}</span></p><button data-action="choose-calendar-provider" data-provider="apple"><strong>Apple Calendar</strong><span>Open a standard calendar event file</span></button><button data-action="choose-calendar-provider" data-provider="google"><strong>Google Calendar</strong><span>Open a prefilled Google Calendar event</span></button><button data-action="choose-calendar-provider" data-provider="ics"><strong>Download .ics</strong><span>Works with most calendar apps</span></button></div>`);return
+  }
+  if(selected==="google")window.open(googleCalendarUrl(event),"_blank","noopener");
+  else download(`holton-homes-${String(event.title).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"event"}.ics`,"text/calendar;charset=utf-8",calendarEventIcs(event));
+}
+function nativeMailUrl(to,subject,body){return `mailto:${encodeURIComponent(to||"")}?subject=${encodeURIComponent(subject||"")}&body=${encodeURIComponent(body||"")}`}
+function gmailComposeUrl(to,subject,body){const params=new URLSearchParams({view:"cm",fs:"1",to:to||"",su:subject||"",body:body||""});return `https://mail.google.com/mail/?${params.toString()}`}
+function openEmailComposer(to,subject="Holton Homes follow-up",body="",provider=""){
+  const selected=provider||integrationSettings().emailProvider;
+  if(selected==="ask"){
+    pendingExternalAction={kind:"email",to,subject,body};
+    modal("Compose email",`<div class="provider-choice"><p>${to?`To ${esc(to)}`:"Choose an email app"}</p><button data-action="choose-email-provider" data-provider="native"><strong>Default Mail App</strong><span>Apple Mail, Gmail, or whichever app your device uses</span></button><button data-action="choose-email-provider" data-provider="gmail"><strong>Gmail</strong><span>Open a prefilled Gmail compose window</span></button></div>`);return
+  }
+  if(selected==="gmail")window.open(gmailComposeUrl(to,subject,body),"_blank","noopener");
+  else location.href=nativeMailUrl(to,subject,body)
+}
+function appIntegrationsSettingsHtml(){
+  const prefs=integrationSettings();
+  return `<section class="setting-card integration-settings"><div class="setting-card-head"><div><h3>Maps, Calendar & Mail</h3><p>Choose which app opens from every device. Apple Maps is the Holton Homes default.</p></div><span class="integration-free">No paid API</span></div>
+    <div class="integration-setting-grid">
+      <div class="field"><label>Maps</label><select id="settingMapProvider"><option value="apple" ${prefs.mapProvider==="apple"?"selected":""}>Apple Maps</option><option value="google" ${prefs.mapProvider==="google"?"selected":""}>Google Maps</option><option value="ask" ${prefs.mapProvider==="ask"?"selected":""}>Ask every time</option></select></div>
+      <div class="field"><label>Calendar</label><select id="settingCalendarProvider"><option value="apple" ${prefs.calendarProvider==="apple"?"selected":""}>Apple Calendar / .ics</option><option value="google" ${prefs.calendarProvider==="google"?"selected":""}>Google Calendar</option><option value="ask" ${prefs.calendarProvider==="ask"?"selected":""}>Ask every time</option></select></div>
+      <div class="field"><label>Email</label><select id="settingEmailProvider"><option value="native" ${prefs.emailProvider==="native"?"selected":""}>Default Mail App</option><option value="gmail" ${prefs.emailProvider==="gmail"?"selected":""}>Gmail</option><option value="ask" ${prefs.emailProvider==="ask"?"selected":""}>Ask every time</option></select></div>
+      <div class="field"><label>Default event time</label><input id="settingCalendarTime" type="time" value="${esc(prefs.calendarDefaultTime)}"></div>
+      <div class="field"><label>Default duration</label><select id="settingCalendarDuration">${[30,45,60,90,120].map(value=>`<option value="${value}" ${prefs.calendarDefaultDuration===value?"selected":""}>${value} minutes</option>`).join("")}</select></div>
+      <div class="field"><label>Calendar reminder</label><select id="settingCalendarReminder">${[0,10,15,30,60,1440].map(value=>`<option value="${value}" ${prefs.calendarReminderMinutes===value?"selected":""}>${value===0?"At event time":value===1440?"1 day before":`${value} minutes before`}</option>`).join("")}</select></div>
+      <div class="field full"><label>Time zone</label><input id="settingCalendarTimeZone" value="${esc(prefs.calendarTimeZone)}"><small class="field-help">Cincinnati: America/New_York</small></div>
+    </div>
+    <div class="integration-actions"><button class="primary-btn compact" data-action="save-app-integrations">Save app choices</button><button class="ghost-btn compact" data-action="test-map-integration">Test Apple/Google Maps</button><button class="ghost-btn compact" data-action="test-calendar-integration">Test calendar</button><button class="ghost-btn compact" data-action="test-email-integration">Test email</button></div>
+    <div class="integration-note"><strong>What this does:</strong> opens the chosen app with the address, event, recipient, subject, and message already filled in. It does not read your Gmail inbox or scan calendar availability. Full two-way Google sync would require OAuth and a secure Google connection.</div>
+  </section>`
+}
+function saveAppIntegrations(){
+  db.settings.mapProvider=document.getElementById("settingMapProvider").value;
+  db.settings.calendarProvider=document.getElementById("settingCalendarProvider").value;
+  db.settings.emailProvider=document.getElementById("settingEmailProvider").value;
+  db.settings.calendarDefaultTime=document.getElementById("settingCalendarTime").value||"09:00";
+  db.settings.calendarDefaultDuration=Number(document.getElementById("settingCalendarDuration").value||60);
+  db.settings.calendarReminderMinutes=Number(document.getElementById("settingCalendarReminder").value||30);
+  db.settings.calendarTimeZone=document.getElementById("settingCalendarTimeZone").value.trim()||"America/New_York";
+  save();toast("App choices saved",`${db.settings.mapProvider==="apple"?"Apple Maps":db.settings.mapProvider==="google"?"Google Maps":"Map chooser"} is ready.`)
+}
+function taskCalendarEvent(t){
+  const c=contact(t.contactId),location=t.location||propertyDisplay(c||{})||contactAddressDisplay(c||{});
+  return calendarEvent({id:`task-${t.id}`,title:t.title,date:t.due,time:t.time||"",duration:t.duration||integrationSettings().calendarDefaultDuration,location,description:[t.notes,c?`Client: ${fullName(c)}`:"",c?.phone?`Phone: ${c.phone}`:"",c?.email?`Email: ${c.email}`:""].filter(Boolean).join("\n"),allDay:!t.time})
+}
+function transactionDateEvent(tx,label,value,key=""){
+  const c=contact(tx.contactId),address=transactionAddress(tx);
+  return calendarEvent({id:`transaction-${tx.id}-${key||label}`,title:`${label} — ${address||fullName(c||{})}`,date:value,location:address,description:[`${tx.side} transaction`,c?`Client: ${fullName(c)}`:"",`Purchase price: ${money(tx.purchasePrice)}`,`CRM status: ${tx.status}`].filter(Boolean).join("\n"),allDay:true})
+}
+function transactionStepCalendarEvent(tx,step){
+  const c=contact(tx.contactId),address=transactionAddress(tx);
+  return calendarEvent({id:`transaction-step-${tx.id}-${step.id}`,title:step.title,date:step.due,location:address,description:[`${tx.side} transaction for ${address}`,c?`Client: ${fullName(c)}`:"",`Phase: ${step.phase}`,`Responsible: ${step.owner}`,`Date meaning: ${step.deadlineType}`,step.description,step.notes?`Internal note: ${step.notes}`:""].filter(Boolean).join("\n"),allDay:true})
+}
+function propertyCalendarEvent(p){
+  const c=contact(p.contactId),date=p.appointmentDate||p.targetDate;
+  return calendarEvent({id:`property-${p.id}-${date}`,title:`${p.appointmentDate?"Property appointment":"Property target"} — ${propertyAddress(p)||fullName(c||{})}`,date,location:propertyAddress(p),description:c?`Client: ${fullName(c)}\n${p.role}`:p.role,allDay:true})
 }
 
 function primaryProperty(c){
@@ -546,7 +667,7 @@ function propertyCardsHtml(c){
       </div>
       <div class="property-meta">${p.motivation?`<span><b>Motivation:</b> ${esc(p.motivation)}</span>`:""}${p.targetDate?`<span><b>Target:</b> ${dateLabel(p.targetDate)}</span>`:""}${p.appointmentDate?`<span><b>Appointment:</b> ${dateLabel(p.appointmentDate)}</span>`:""}</div>
       <div class="property-actions">
-        ${address!=="Address not completed"?`<a class="quick" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}">Map</a>`:""}
+        ${address!=="Address not completed"?`<button class="quick" data-action="open-map" data-address="${esc(address)}">Map</button><button class="quick" data-action="open-directions" data-address="${esc(address)}">Directions</button>`:""}${p.appointmentDate||p.targetDate?`<button class="quick" data-action="add-property-calendar" data-id="${p.id}">Calendar</button>`:""}
         <button class="quick" data-action="open-property" data-id="${c.id}" data-property="${p.id}">Edit</button>
         ${!p.primary?`<button class="quick" data-action="make-primary-property" data-id="${c.id}" data-property="${p.id}">Make primary</button>`:""}
         <button class="quick" data-action="delete-property" data-id="${c.id}" data-property="${p.id}">Remove</button>
@@ -1279,19 +1400,19 @@ function transactionSetupComplete(tx){
 }
 function transactionCriticalDates(tx){
   return [
-    ["Contract accepted",tx.contractDate],
-    ["Earnest money due",tx.earnestMoneyDue],
-    ["Inspection deadline",tx.inspectionDeadline],
-    ["Inspection response",tx.inspectionResponseDeadline],
-    ["Financing application",tx.financingApplicationDue],
-    ["Appraisal target",tx.appraisalDeadline],
-    ["Loan commitment",tx.loanCommitmentDeadline],
-    ["Title review",tx.titleDeadline],
-    ["Closing Disclosure received",tx.closingDisclosureDue],
-    ["Repairs complete",tx.repairCompletionDate],
-    ["Final walkthrough",tx.finalWalkthroughDate],
-    ["Closing",tx.closingDate],
-    ["Possession",tx.possessionDate]
+    ["Contract accepted",tx.contractDate,"contractDate"],
+    ["Earnest money due",tx.earnestMoneyDue,"earnestMoneyDue"],
+    ["Inspection deadline",tx.inspectionDeadline,"inspectionDeadline"],
+    ["Inspection response",tx.inspectionResponseDeadline,"inspectionResponseDeadline"],
+    ["Financing application",tx.financingApplicationDue,"financingApplicationDue"],
+    ["Appraisal target",tx.appraisalDeadline,"appraisalDeadline"],
+    ["Loan commitment",tx.loanCommitmentDeadline,"loanCommitmentDeadline"],
+    ["Title review",tx.titleDeadline,"titleDeadline"],
+    ["Closing Disclosure received",tx.closingDisclosureDue,"closingDisclosureDue"],
+    ["Repairs complete",tx.repairCompletionDate,"repairCompletionDate"],
+    ["Final walkthrough",tx.finalWalkthroughDate,"finalWalkthroughDate"],
+    ["Closing",tx.closingDate,"closingDate"],
+    ["Possession",tx.possessionDate,"possessionDate"]
   ]
 }
 
@@ -1433,7 +1554,7 @@ function renderTransactions(){
     <section class="transaction-grid">${items.length?items.map(transactionCardHtml).join(""):`<div class="empty transaction-empty"><strong>No transactions in this view.</strong><span>Move a buyer or seller under contract, or start a transaction manually.</span><button class="primary-btn" data-action="open-transaction">Start transaction</button></div>`}</section>`
 }
 function transactionCriticalDatesHtml(tx){
-  return `<div class="critical-date-grid">${transactionCriticalDates(tx).map(([label,value])=>`<div class="${value&&value<TODAY()&&!["Closing","Possession"].includes(label)?"past":""}"><label>${esc(label)}</label><strong>${value?dateLabel(value):"Not set"}</strong></div>`).join("")}</div>`
+  return `<div class="critical-date-grid">${transactionCriticalDates(tx).map(([label,value,key])=>`<div class="${value&&value<TODAY()&&!["Closing","Possession"].includes(label)?"past":""}"><label>${esc(label)}</label><strong>${value?dateLabel(value):"Not set"}</strong>${value?`<button data-action="add-tx-date-calendar" data-id="${tx.id}" data-date-key="${key}">＋ Calendar</button>`:""}</div>`).join("")}</div>`
 }
 function transactionPeopleHtml(tx){
   const groups=[
@@ -1444,7 +1565,7 @@ function transactionPeopleHtml(tx){
   ];
   return groups.map(([role,name,company,phone,email])=>`<div class="tx-person">
     <label>${esc(role)}</label><strong>${esc(name||company||"Not added")}</strong>${name&&company?`<span>${esc(company)}</span>`:""}
-    <div>${phone?`<a href="tel:${esc(phone.replace(/[^\d+]/g,""))}">☎ ${esc(phone)}</a>`:""}${email?`<a href="mailto:${esc(email)}">@ ${esc(email)}</a>`:""}</div>
+    <div>${phone?`<a href="tel:${esc(phone.replace(/[^\d+]/g,""))}">☎ ${esc(phone)}</a>`:""}${email?`<button data-action="compose-email" data-email="${esc(email)}" data-subject="Holton Homes transaction follow-up">@ ${esc(email)}</button>`:""}</div>
   </div>`).join("")
 }
 function transactionChecklistHtml(tx){
@@ -1464,6 +1585,7 @@ function transactionChecklistHtml(tx){
             <input type="date" value="${esc(step.due||"")}" data-action="tx-step-due" data-id="${tx.id}" data-step="${step.id}">
             <select data-action="tx-step-owner" data-id="${tx.id}" data-step="${step.id}">${transactionOwners.map(owner=>`<option ${step.owner===owner?"selected":""}>${owner}</option>`).join("")}</select>
             <button class="quick ${isNext?"active-next":""}" data-action="make-tx-next" data-id="${tx.id}" data-step="${step.id}">${isNext?"Pinned":"Make next"}</button>
+            ${step.due?`<button class="quick" data-action="add-tx-step-calendar" data-id="${tx.id}" data-step="${step.id}">Calendar</button>`:""}
             <button class="quick" data-action="edit-tx-step" data-id="${tx.id}" data-step="${step.id}">Edit</button>
           </div>
         </article>`
@@ -1517,7 +1639,7 @@ function renderTransaction(id){
     backupWarningHtml()+
     `<section class="transaction-detail-hero">
       <div><div class="eyebrow">${esc(tx.side)} TRANSACTION</div><h1>${esc(transactionAddress(tx)||"Property address needed")}</h1><p>${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Contact missing"} • ${money(tx.purchasePrice)} • ${esc(tx.financingType||"Financing not set")}</p></div>
-      <div class="transaction-detail-actions"><span class="tx-health ${health.className}">${health.label}</span><button class="ghost-btn" data-action="print-transaction">Print</button><button class="ghost-btn" data-action="open-transaction" data-id="${tx.id}">Edit setup</button><button class="primary-btn" data-action="transaction-status-menu" data-id="${tx.id}">Update status</button></div>
+      <div class="transaction-detail-actions"><span class="tx-health ${health.className}">${health.label}</span>${transactionAddress(tx)?`<button class="ghost-btn" data-action="open-map" data-address="${esc(transactionAddress(tx))}">Map</button><button class="ghost-btn" data-action="open-directions" data-address="${esc(transactionAddress(tx))}">Directions</button>`:""}${tx.closingDate?`<button class="ghost-btn" data-action="add-tx-date-calendar" data-id="${tx.id}" data-date-key="closingDate">Add closing</button>`:""}<button class="ghost-btn" data-action="print-transaction">Print</button><button class="ghost-btn" data-action="open-transaction" data-id="${tx.id}">Edit setup</button><button class="primary-btn" data-action="transaction-status-menu" data-id="${tx.id}">Update status</button></div>
     </section>
     <section class="transaction-warning"><strong>Protect every deadline.</strong><span>Contract Deadline means a date entered from the signed agreement or amendment. Suggested Target is an editable operational goal and must never be treated as a contractual deadline.</span></section>
     ${transactionNextCommandHtml(tx)}
@@ -1530,7 +1652,7 @@ function renderTransaction(id){
     </section>
     <div class="transaction-detail-layout">
       <main class="transaction-main">
-        <section class="card transaction-update-card"><div class="section-head"><div><h2>Client update</h2><p>Copy a clear status update without exposing internal notes.</p></div><div><button class="ghost-btn compact" data-action="copy-transaction-update" data-id="${tx.id}">Copy update</button>${c&&hasPhone(c)?`<button class="primary-btn compact" data-action="text-transaction-update" data-id="${tx.id}">Text client</button>`:""}</div></div><blockquote>${esc(transactionUpdateText(tx))}</blockquote></section>
+        <section class="card transaction-update-card"><div class="section-head"><div><h2>Client update</h2><p>Copy a clear status update without exposing internal notes.</p></div><div><button class="ghost-btn compact" data-action="copy-transaction-update" data-id="${tx.id}">Copy update</button>${c&&hasPhone(c)?`<button class="primary-btn compact" data-action="text-transaction-update" data-id="${tx.id}">Text client</button>`:""}${c&&hasEmail(c)?`<button class="ghost-btn compact" data-action="email-transaction-update" data-id="${tx.id}">Email client</button>`:""}</div></div><blockquote>${esc(transactionUpdateText(tx))}</blockquote></section>
         ${transactionChecklistHtml(tx)}
         <button class="ghost-btn full-width add-tx-step" data-action="add-tx-step" data-id="${tx.id}">＋ Add custom transaction step</button>
       </main>
@@ -1901,7 +2023,7 @@ function mergeCollection(localItems=[],cloudItems=[]){
 function mergeStates(localState,cloudState){
   const merged=normalize(cloudState||{});
   const local=normalize(localState||{});
-  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory","callScripts","transactions","transactionResources"].forEach(key=>{
+  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory","callScripts","transactions","transactionResources","openHouses","marketStudies","focusSessions"].forEach(key=>{
     merged[key]=mergeCollection(local[key],merged[key])
   });
   merged.automationHistory=[...new Set([...(merged.automationHistory||[]),...(local.automationHistory||[])])].slice(-5000);
@@ -2152,6 +2274,19 @@ function normalize(raw){
       buyerDetails:p.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""},
       sphereDetails:p.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""},
       professionalDetails:p.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""},
+      relationshipMemory:{
+        preferredName:p.relationshipMemory?.preferredName||p.preferredName||"",
+        preferredContact:p.relationshipMemory?.preferredContact||"No preference",
+        occupation:p.relationshipMemory?.occupation||"",
+        birthday:p.relationshipMemory?.birthday||"",
+        homeAnniversary:p.relationshipMemory?.homeAnniversary||"",
+        family:p.relationshipMemory?.family||"",
+        pets:p.relationshipMemory?.pets||"",
+        interests:p.relationshipMemory?.interests||"",
+        askAbout:p.relationshipMemory?.askAbout||"",
+        promise:p.relationshipMemory?.promise||"",
+        communicationStyle:p.relationshipMemory?.communicationStyle||""
+      },
       cleanupSnoozedUntil:p.cleanupSnoozedUntil||"",
       alertSettings:p.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},
       behaviors:Array.isArray(p.behaviors)?p.behaviors:[]
@@ -2200,7 +2335,7 @@ function normalize(raw){
     direction:a.direction||"outbound",outcome:a.outcome||"",body:a.body||a.summary||"",date:a.date?.includes("T")?a.date:`${a.date||TODAY()}T12:00:00`,
     unread:Boolean(a.unread),threadStatus:a.threadStatus||"open",scriptId:a.scriptId||"",createdAt:a.createdAt||NOW()
   }));
-  const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
+  const tasks=(raw.tasks||[]).map(t=>({id:t.id||uid(),contactId:t.contactId||t.personId||"",title:t.title||"Follow up",type:t.type||"Follow Up",due:t.due||TODAY(),time:t.time||"",duration:Number(t.duration||60),location:t.location||"",notes:t.notes||"",status:t.status||"Open",priority:t.priority||"Normal",planRunId:t.planRunId||"",completedAt:t.completedAt||"",createdAt:t.createdAt||TODAY()}));
   const planRuns=(raw.planRuns||[]).map(r=>({...r,id:r.id||uid(),status:r.status||"Active",startedAt:r.startedAt||TODAY(),stepStates:r.stepStates||{},sourceRuleId:r.sourceRuleId||"",completedAt:r.completedAt||""}));
   const automationRules=Array.isArray(raw.automationRules)?raw.automationRules:defaultAutomationRules.map(rule=>JSON.parse(JSON.stringify(rule)));
   const actionPlans=Array.isArray(raw.actionPlans)?raw.actionPlans:[];
@@ -2226,9 +2361,33 @@ function normalize(raw){
     url:resource.url||"",official:Boolean(resource.official),notes:resource.notes||""
   }));
   defaultTransactionResources.filter(resource=>resource.official&&!transactionResources.some(item=>item.id===resource.id)).forEach(resource=>transactionResources.push({...resource}));
+  const openHouses=(Array.isArray(raw.openHouses)?raw.openHouses:[]).map(item=>({
+    id:item.id||uid(),propertyId:item.propertyId||"",contactId:item.contactId||"",title:item.title||"Open House",
+    address:item.address||"",date:item.date||TODAY(),time:item.time||"12:00",duration:Number(item.duration||120),
+    notes:item.notes||"",status:item.status||"Upcoming",visitors:Array.isArray(item.visitors)?item.visitors.map(v=>({
+      id:v.id||uid(),firstName:v.firstName||"",lastName:v.lastName||"",phone:v.phone||"",email:v.email||"",
+      represented:v.represented||"Unknown",lenderStatus:v.lenderStatus||"Unknown",timeline:v.timeline||"Unknown",
+      interest:v.interest||"",homeowner:Boolean(v.homeowner),maySell:Boolean(v.maySell),notes:v.notes||"",
+      contactId:v.contactId||"",createdAt:v.createdAt||NOW()
+    })):[],createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
+  }));
+  const marketStudies=(Array.isArray(raw.marketStudies)?raw.marketStudies:[]).map(item=>({
+    id:item.id||uid(),date:item.date||TODAY(),area:item.area||"",active:Number(item.active||0),
+    reductions:Number(item.reductions||0),pending:Number(item.pending||0),sold:Number(item.sold||0),
+    averageDom:Number(item.averageDom||0),listSaleRatio:Number(item.listSaleRatio||0),
+    paymentExample:item.paymentExample||"",observation:item.observation||"",links:item.links||"",
+    createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
+  }));
+  const focusSessions=(Array.isArray(raw.focusSessions)?raw.focusSessions:[]).map(item=>({
+    id:item.id||uid(),mode:item.mode||"seller",contactIds:Array.isArray(item.contactIds)?item.contactIds:[],
+    startedAt:item.startedAt||NOW(),durationMinutes:Number(item.durationMinutes||30),
+    outcomes:Array.isArray(item.outcomes)?item.outcomes:[],endedAt:item.endedAt||""
+  }));
   const transactions=(Array.isArray(raw.transactions)?raw.transactions:[]).map(normalizeTransaction);
   contacts.filter(c=>["Buyer","Seller"].includes(c.type)&&c.stage==="Under Contract"&&!transactions.some(tx=>tx.contactId===c.id&&!["Closed","Terminated"].includes(tx.status))).forEach(c=>{const tx=blankTransaction(c.id,c.type),p=properties.find(item=>item.contactId===c.id&&item.primary)||properties.find(item=>item.contactId===c.id);if(p){tx.propertyId=p.id;Object.assign(tx,{street:p.street,unit:p.unit,city:p.city,state:p.state,zip:p.zip,county:p.county,purchasePrice:Number(p.expectedSalePrice||p.listPrice||0)})}tx.gci=c.gci;buildTransactionChecklist(tx,false);transactions.push(tx)});
-  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",...(raw.settings||{})}};
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,openHouses,marketStudies,focusSessions,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",mapProvider:"apple",calendarProvider:"ask",emailProvider:"native",calendarDefaultTime:"09:00",calendarDefaultDuration:60,calendarReminderMinutes:30,calendarTimeZone:"America/New_York",
+    dailyAttemptTarget:10,dailySellerConversationTarget:1,dailyAppointmentTarget:1,dailyMarketStudyTarget:1,
+    activeFocusSessionId:"",showCelebrations:true,homeDensity:"comfortable",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -2243,7 +2402,463 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,openHouses:[],marketStudies:[],focusSessions:[],settings:{}});
+}
+
+
+const moreRoutes=new Set(["more","inbox","call-queue","tasks","automations","activity","reports","settings","focus","field","open-houses","market-study"]);
+function preferredContactName(c){return c?.relationshipMemory?.preferredName||c?.firstName||fullName(c)}
+function relationshipReminder(c){
+  const m=c?.relationshipMemory||{};
+  return [m.askAbout&&`Ask about ${m.askAbout}`,m.promise&&`Promised: ${m.promise}`,m.family&&`Family: ${m.family}`,m.pets&&`Pets: ${m.pets}`,m.interests&&`Interests: ${m.interests}`].filter(Boolean).join(" • ")
+}
+function todayCommunications(){
+  return db.communications.filter(item=>String(item.date).slice(0,10)===TODAY())
+}
+function dailyProduction(){
+  const comms=todayCommunications();
+  const attempts=comms.filter(item=>item.direction==="outbound"&&["Call","Text","Email"].includes(item.channel)).length;
+  const conversationOutcomes=new Set(["Connected","Appointment Set","Replied"]);
+  const conversations=comms.filter(item=>item.direction==="inbound"||conversationOutcomes.has(item.outcome)).length;
+  const sellerConversations=comms.filter(item=>{
+    const c=contact(item.contactId);
+    return c?.type==="Seller"&&(item.direction==="inbound"||conversationOutcomes.has(item.outcome))
+  }).length;
+  const appointments=comms.filter(item=>item.outcome==="Appointment Set").length;
+  const newLeads=db.contacts.filter(c=>String(c.createdAt).slice(0,10)===TODAY()).length;
+  const marketStudy=db.marketStudies.some(item=>item.date===TODAY())?1:0;
+  const targets={
+    attempts:Number(db.settings.dailyAttemptTarget||10),
+    conversations:Number(db.settings.dailyConversationTarget||5),
+    sellers:Number(db.settings.dailySellerConversationTarget||1),
+    appointments:Number(db.settings.dailyAppointmentTarget||1),
+    marketStudy:Number(db.settings.dailyMarketStudyTarget||1)
+  };
+  const metrics=[
+    {id:"attempts",label:"Attempts",value:attempts,target:targets.attempts,icon:"☎"},
+    {id:"conversations",label:"Real conversations",value:conversations,target:targets.conversations,icon:"◉"},
+    {id:"sellers",label:"Seller conversations",value:sellerConversations,target:targets.sellers,icon:"⌂"},
+    {id:"appointments",label:"Appointments set",value:appointments,target:targets.appointments,icon:"◆"},
+    {id:"market",label:"Market study",value:marketStudy,target:targets.marketStudy,icon:"↗"}
+  ];
+  const score=Math.round(metrics.reduce((sum,m)=>sum+Math.min(1,m.value/Math.max(1,m.target)),0)/metrics.length*100);
+  return {attempts,conversations,sellerConversations,appointments,newLeads,marketStudy,metrics,score}
+}
+function dailyProgressHtml(){
+  const production=dailyProduction();
+  return `<section class="daily-score-card">
+    <div class="daily-score-ring" style="--score:${production.score}"><div><strong>${production.score}%</strong><span>day complete</span></div></div>
+    <div class="daily-score-body"><div class="daily-score-title"><div><span>YOUR DAILY FINISH LINE</span><h2>${production.score>=100?"Today is under control.":"Move the business forward."}</h2></div><button class="ghost-btn compact" data-action="open-day-briefing">Brief me</button></div>
+      <div class="daily-goal-grid">${production.metrics.map(metric=>`<div class="${metric.value>=metric.target?"complete":""}"><span>${metric.icon}</span><div><strong>${metric.value}<small> / ${metric.target}</small></strong><label>${esc(metric.label)}</label></div></div>`).join("")}</div>
+    </div>
+  </section>`
+}
+function homeNextActionHtml(){
+  const item=workQueueItems()[0];
+  if(!item)return `<section class="agent-next-card complete"><div><span>DO THIS NEXT</span><h1>Your urgent work is cleared.</h1><p>Start a seller prospecting sprint or complete today’s market study.</p></div><div><button class="primary-btn" data-action="start-focus-modal">Start seller sprint</button><a class="ghost-btn" href="#/market-study">Study the market</a></div></section>`;
+  const c=contact(item.contactId);
+  return `<section class="agent-next-card ${c?.type==="Seller"?"seller":c?.type==="Buyer"?"buyer":item.kind==="transaction-step"?"transaction":""}">
+    <div class="agent-next-copy"><span>DO THIS NEXT</span><h1>${esc(item.title)}</h1><p>${esc(item.reason)}</p>${c&&relationshipReminder(c)?`<small>${esc(relationshipReminder(c))}</small>`:""}</div>
+    <div class="agent-next-actions">
+      ${c&&hasPhone(c)?`<button class="agent-action call" data-action="work-launch" data-id="${item.id}" data-channel="Call">☎ Call</button><button class="agent-action text" data-action="work-launch" data-id="${item.id}" data-channel="Text">✉ Text</button>`:""}
+      ${c?`<button class="agent-action script" data-action="show-script" data-id="${c.id}" data-context="today" data-work="${item.id}">▤ Script</button>`:""}
+      <button class="primary-btn" data-action="work-primary" data-id="${item.id}">${workPrimaryLabel(item)} →</button>
+      <button class="ghost-btn compact" data-action="work-snooze" data-id="${item.id}">Snooze</button>
+    </div>
+  </section>`
+}
+function sellerOpportunityScore(c){
+  let score=scoreContact(c).score,reasons=[];
+  const stageWeight={"Valuation Requested":20,"Valuation Delivered":25,"Listing Appointment":35,"Follow-Up":20,"Listing Agreement Signed":40,"Coming Soon":38,"Active Listing":30,"New":10,"Contacted":12,"Nurture":4}[c.stage]||0;
+  score+=stageWeight;if(stageWeight)reasons.push(c.stage);
+  const p=primaryProperty(c);
+  if(p?.motivation||c.sellerDetails?.motivation){score+=10;reasons.push("motivation known")}
+  if(c.timeframe==="Now — 0–3 months"){score+=15;reasons.push("near-term")}
+  if(c.heat==="Hot"){score+=15;reasons.push("hot")}
+  if(daysSince(c.lastCommunication)>=7){score+=8;reasons.push("needs attention")}
+  if((c.behaviors||[]).some(b=>b.type==="Home Valuation"&&daysSince(b.date)<=30)){score+=18;reasons.push("valuation activity")}
+  return {score:Math.min(150,score),reasons:reasons.slice(0,3)}
+}
+function sellerRadar(){
+  return db.contacts.filter(c=>isOpen(c)&&c.type==="Seller").map(c=>({c,...sellerOpportunityScore(c)})).sort((a,b)=>b.score-a.score)
+}
+function sellerRadarHtml(){
+  const items=sellerRadar().slice(0,5);
+  return `<section class="agent-panel seller-radar"><div class="agent-panel-head"><div><span>SELLER OPPORTUNITY RADAR</span><h2>Where your next listing may come from</h2></div><a href="#/people" class="ghost-btn compact">All sellers</a></div>
+    <div class="radar-list">${items.length?items.map(({c,score,reasons},index)=>`<article>
+      <b>${index+1}</b>${avatar(c)}<div><a href="#/contact/${c.id}" class="person-name-link">${esc(fullName(c))}</a><small>${esc(propertyDisplay(c)||"Property not completed")}</small><span>${reasons.map(esc).join(" • ")||"Build the relationship"}</span></div>
+      <div class="radar-score"><strong>${score}</strong><small>opportunity</small></div>${contactQuickActions(c)}
+    </article>`).join(""):`<div class="empty">Add seller contacts and their motivation to build the radar.</div>`}</div>
+  </section>`
+}
+function todayAppointments(){
+  return db.tasks.filter(t=>t.status!=="Done"&&t.type==="Appointment"&&t.due===TODAY()).sort((a,b)=>String(a.time||"23:59").localeCompare(String(b.time||"23:59")))
+}
+function appointmentRailHtml(){
+  const appointments=todayAppointments();
+  return `<section class="agent-panel appointment-rail"><div class="agent-panel-head"><div><span>TODAY’S CALENDAR</span><h2>${appointments.length?`${appointments.length} appointment${appointments.length===1?"":"s"}`:"No appointments scheduled"}</h2></div><button class="ghost-btn compact" data-action="open-task">＋ Add</button></div>
+    <div>${appointments.length?appointments.map(t=>{const c=contact(t.contactId);return `<article><time>${esc(t.time||"All day")}</time><div><strong>${esc(t.title)}</strong><small>${c?esc(fullName(c)):"No contact"}${t.location?` • ${esc(t.location)}`:""}</small></div>${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Directions</button>`:""}<button class="quick" data-action="add-task-calendar" data-id="${t.id}">Calendar</button></article>`}).join(""):`<div class="empty">Use Field Mode when appointments are added.</div>`}</div>
+  </section>`
+}
+function relationshipMoments(){
+  const items=[];
+  db.contacts.forEach(c=>{
+    const m=c.relationshipMemory||{};
+    [["Birthday",m.birthday],["Home anniversary",m.homeAnniversary]].forEach(([label,date])=>{
+      if(!date)return;
+      const monthDay=String(date).slice(5),todayMd=TODAY().slice(5);
+      if(monthDay===todayMd)items.push({c,label,date})
+    })
+  });
+  return items
+}
+function relationshipMomentsHtml(){
+  const items=relationshipMoments();
+  return `<section class="agent-panel relationship-moments"><div class="agent-panel-head"><div><span>RELATIONSHIP MOMENTS</span><h2>${items.length?`${items.length} reason${items.length===1?"":"s"} to reach out`:"Nothing special due today"}</h2></div></div>
+    <div>${items.length?items.map(({c,label})=>`<article>${avatar(c)}<div><a href="#/contact/${c.id}" class="person-name-link">${esc(fullName(c))}</a><small>${esc(label)} today</small></div>${contactQuickActions(c)}</article>`).join(""):`<p class="panel-note">Birthdays and home anniversaries will surface here automatically.</p>`}</div>
+  </section>`
+}
+function dayBriefingModal(){
+  const production=dailyProduction(),work=workQueueItems(),appointments=todayAppointments(),tx=transactionDeadlineItems();
+  modal("Your Holton Homes day",`<div class="day-briefing">
+    <div class="briefing-score"><strong>${production.score}%</strong><span>of today’s production target complete</span></div>
+    <div class="briefing-grid">
+      <div><label>Appointments</label><strong>${appointments.length}</strong><span>${appointments[0]?.title||"None scheduled"}</span></div>
+      <div><label>Priority actions</label><strong>${work.length}</strong><span>${work[0]?.title||"Urgent work cleared"}</span></div>
+      <div><label>Transaction issues</label><strong>${tx.length}</strong><span>${tx[0]?.step.title||"No due transaction steps"}</span></div>
+      <div><label>Seller opportunities</label><strong>${sellerRadar().length}</strong><span>${sellerRadar()[0]?.c?fullName(sellerRadar()[0].c):"Add seller leads"}</span></div>
+    </div>
+    <div class="briefing-recommendation"><span>RECOMMENDED START</span><strong>${work[0]?.title||"Complete a seller prospecting sprint"}</strong><p>${work[0]?.reason||"Create conversations before doing administrative work."}</p></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Not now</button><a class="ghost-btn" href="#/field" data-action="close-modal">Field mode</a><button class="primary-btn" data-action="start-focus-modal">Start prospecting sprint</button>`)
+}
+function moreTile(route,icon,title,description,count=0,className=""){
+  return `<a class="more-tile ${className}" href="#/${route}"><span>${icon}</span><div><strong>${esc(title)}</strong><small>${esc(description)}</small></div>${count?`<b>${count}</b>`:""}</a>`
+}
+function renderMore(){
+  const unread=db.communications.filter(x=>x.unread).length,dueTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length;
+  document.getElementById("view").innerHTML=backupWarningHtml()+pageHead("Everything else","More","Tools you need without crowding the daily workspace.",`<button class="primary-btn" data-action="open-quick-capture">＋ Quick capture</button>`)+
+  `<section class="more-grid">
+    ${moreTile("focus","⚡","Prospecting Sprint","Work one relationship at a time.",callQueue().length,"seller")}
+    ${moreTile("field","⌖","Field Mode","Appointments, directions, calls, and notes.","","field")}
+    ${moreTile("inbox","▣","Inbox","Replies and logged conversations.",unread,"inbox")}
+    ${moreTile("call-queue","☎","Call Queue","Resume your due calls.",callQueue().length,"calls")}
+    ${moreTile("tasks","✓","Tasks","Promises and appointments.",dueTasks,"tasks")}
+    ${moreTile("open-houses","⌂","Open Houses","Capture visitors and follow up.","","openhouse")}
+    ${moreTile("market-study","↗","Market Study","Build daily local expertise.","","market")}
+    ${moreTile("automations","⚡","Automations","Action plans and review queues.","","automation")}
+    ${moreTile("activity","◉","Lead Activity","Behavior and property signals.","","activity")}
+    ${moreTile("reports","▥","Reports","Pipeline, source, and production.","","reports")}
+    ${moreTile("settings","⚙","Settings","Apps, goals, scripts, and backups.","","settings")}
+  </section>`
+}
+function quickCaptureModal(){
+  modal("Quick capture",`<div class="quick-capture-grid">
+    <button data-action="quick-lead"><span>◎</span><strong>New lead</strong><small>Name, contact info, source, next step</small></button>
+    <button data-action="open-contact"><span>＋</span><strong>Full contact</strong><small>Complete buyer, seller, or partner intake</small></button>
+    <button data-action="open-voice-update"><span>◉</span><strong>Voice / field update</strong><small>Dictate what just happened</small></button>
+    <button data-action="open-task"><span>✓</span><strong>Task or appointment</strong><small>Protect a promise or calendar event</small></button>
+    <button data-action="open-communication" data-channel="Note"><span>✎</span><strong>Log touch</strong><small>Call, text, email, or note</small></button>
+    <button data-action="open-transaction"><span>⌛</span><strong>Transaction</strong><small>Start contract-to-close workflow</small></button>
+    <button data-action="open-open-house"><span>⌂</span><strong>Open house</strong><small>Create event and visitor capture</small></button>
+    <button data-action="open-market-study"><span>↗</span><strong>Market insight</strong><small>Save today’s local market lesson</small></button>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>`)
+}
+function quickLeadModal(){
+  modal("Add a lead in ten seconds",`<div class="quick-lead-intro"><strong>Only capture what keeps the opportunity safe.</strong><span>Complete the deeper intake after you make contact.</span></div><div class="form-grid">
+    <div class="field"><label>First name</label><input id="quickLeadFirst" autocomplete="given-name"></div>
+    <div class="field"><label>Last name</label><input id="quickLeadLast" autocomplete="family-name"></div>
+    <div class="field"><label>Phone</label><input id="quickLeadPhone" type="tel" autocomplete="tel"></div>
+    <div class="field"><label>Email</label><input id="quickLeadEmail" type="email" autocomplete="email"></div>
+    <div class="field"><label>Lead type</label><select id="quickLeadType"><option>Seller</option><option>Buyer</option><option>Sphere</option><option>Past Client</option><option>Realtor</option><option>Lender</option></select></div>
+    <div class="field"><label>Source</label><select id="quickLeadSource">${sources.map(x=>`<option>${esc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label>Heat</label><select id="quickLeadHeat"><option>Hot</option><option selected>Warm</option><option>Cold</option></select></div>
+    <div class="field"><label>Next follow-up</label><input id="quickLeadFollowUp" type="date" value="${TODAY()}"></div>
+    <div class="field full"><label>What do you know?</label><textarea id="quickLeadNote" placeholder="Motivation, property, area, where you met them..."></textarea></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-quick-lead">Save & open</button>`)
+}
+function saveQuickLead(){
+  const first=document.getElementById("quickLeadFirst").value.trim(),last=document.getElementById("quickLeadLast").value.trim(),phone=document.getElementById("quickLeadPhone").value.trim(),email=document.getElementById("quickLeadEmail").value.trim();
+  if(!first||!last)return alert("Add a first and last name.");
+  if(!phone&&!email)return alert("Add a phone number or email.");
+  const type=document.getElementById("quickLeadType").value,id=uid(),c=normalize({contacts:[{
+    id,firstName:first,lastName:last,phone,email,type,stage:"New",heat:document.getElementById("quickLeadHeat").value,
+    timeframe:"Unknown",followUp:document.getElementById("quickLeadFollowUp").value||TODAY(),source:document.getElementById("quickLeadSource").value,
+    notes:document.getElementById("quickLeadNote").value.trim(),createdAt:NOW(),updatedAt:NOW()
+  }]}).contacts[0];
+  db.contacts.unshift(c);save();closeModal();toast("Lead captured",`${fullName(c)} is protected with a next step.`);location.hash=`#/contact/${id}`
+}
+function voiceUpdateModal(contactId=""){
+  modal("Field update",`<div class="voice-update">
+    <div class="voice-update-hero"><span>◉</span><div><strong>Talk or type while it is fresh.</strong><small>On iPad or iPhone, the keyboard microphone also works inside the notes field.</small></div></div>
+    <div class="field"><label>Person</label><select id="voiceContact">${contactOptions(contactId)}</select></div>
+    <div class="field"><label>What happened?</label><textarea id="voiceUpdateText" rows="9" placeholder="Talked with Amy. They want to sell after the roof is replaced. Mark needs to be included. Follow up next Friday."></textarea></div>
+    <div class="voice-buttons"><button class="ghost-btn" data-action="start-voice-dictation">◉ Start dictation</button><button class="ghost-btn" data-action="stop-voice-dictation">Stop</button></div>
+    <div class="form-grid">
+      <div class="field"><label>Outcome</label><select id="voiceOutcome"><option>Connected</option><option>Left Voicemail</option><option>No Answer</option><option>Appointment Set</option><option>Follow-Up Needed</option><option>Note Only</option></select></div>
+      <div class="field"><label>Next follow-up</label><input id="voiceFollowUp" type="date" value="${addDays(TODAY(),3)}"></div>
+      <div class="field"><label>Channel</label><select id="voiceChannel"><option>Note</option><option>Call</option><option>Text</option><option>Email</option><option>Appointment</option></select></div>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-voice-update">Save update</button>`)
+}
+function startVoiceDictation(){
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const field=document.getElementById("voiceUpdateText");
+  if(!Recognition){field?.focus();toast("Use the keyboard microphone","This browser does not expose live speech recognition, but Apple keyboard dictation works in this field.");return}
+  speechRecognizer=new Recognition();speechRecognizer.continuous=true;speechRecognizer.interimResults=true;
+  speechRecognizer.onresult=event=>{let finalText="",interim="";for(let i=event.resultIndex;i<event.results.length;i++){const text=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=text;else interim+=text}if(field){field.value=(field.dataset.final||field.value||"")+finalText+interim;if(finalText)field.dataset.final=field.value+" "}};
+  speechRecognizer.onerror=()=>toast("Dictation stopped","Use the keyboard microphone if browser dictation is unavailable.");
+  speechRecognizer.start();toast("Listening","Speak naturally. Tap Stop when finished.")
+}
+function stopVoiceDictation(){try{speechRecognizer?.stop()}catch{}speechRecognizer=null}
+function saveVoiceUpdate(){
+  const c=contact(document.getElementById("voiceContact").value),body=document.getElementById("voiceUpdateText").value.trim();
+  if(!c)return alert("Choose a person.");
+  if(!body)return alert("Add what happened.");
+  const outcome=document.getElementById("voiceOutcome").value,channel=document.getElementById("voiceChannel").value,followUp=document.getElementById("voiceFollowUp").value;
+  db.communications.unshift({id:uid(),contactId:c.id,channel,direction:"outbound",outcome,body,date:NOW(),unread:false,threadStatus:"open",scriptId:"",createdAt:NOW()});
+  c.lastCommunication=TODAY();if(followUp)c.followUp=followUp;c.updatedAt=TODAY();
+  if(outcome==="Appointment Set")c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";
+  save();stopVoiceDictation();closeModal();toast("Update saved",`${fullName(c)} • ${outcome}`);location.hash=`#/contact/${c.id}`
+}
+function focusCandidates(mode){
+  const open=db.contacts.filter(isOpen);
+  if(mode==="seller")return sellerRadar().map(item=>item.c);
+  if(mode==="new")return untouchedLeads();
+  if(mode==="past")return open.filter(c=>["Past Client","Sphere"].includes(c.type)).sort((a,b)=>daysSince(b.lastCommunication)-daysSince(a.lastCommunication));
+  if(mode==="buyer")return open.filter(c=>c.type==="Buyer").sort((a,b)=>scoreContact(b).score-scoreContact(a).score);
+  if(mode==="followup")return dueContacts().sort((a,b)=>String(a.followUp).localeCompare(String(b.followUp)));
+  return callQueue().map(item=>item.c)
+}
+function activeFocusSession(){
+  return db.focusSessions.find(item=>item.id===db.settings.activeFocusSessionId&&!item.endedAt)||null
+}
+function focusStartModal(){
+  modal("Start a focused sprint",`<div class="focus-start">
+    <p>Pick one business outcome. The CRM will hide everything else and move one relationship at a time.</p>
+    <div class="focus-mode-grid">
+      ${[["seller","⌂","Seller opportunities","Listing-focused calls first"],["followup","✓","Follow-ups due","Promises and overdue touches"],["new","★","New leads","No lead left untouched"],["past","♡","Sphere & past clients","Relationship and referral conversations"],["buyer","⌖","Active buyers","Consultations, financing, and searches"]].map(([id,icon,title,desc])=>`<label><input type="radio" name="focusMode" value="${id}" ${id==="seller"?"checked":""}><span>${icon}</span><strong>${title}</strong><small>${desc}</small></label>`).join("")}
+    </div>
+    <div class="field"><label>Sprint length</label><select id="focusDuration"><option value="15">15 minutes</option><option value="30" selected>30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="start-focus-session">Start sprint</button>`)
+}
+function startFocusSession(contactIds=null,mode=""){
+  const selected=mode||document.querySelector('input[name="focusMode"]:checked')?.value||"seller",duration=Number(document.getElementById("focusDuration")?.value||30);
+  const ids=contactIds||focusCandidates(selected).map(c=>c.id);
+  if(!ids.length)return alert("There are no contacts in that sprint yet.");
+  const session={id:uid(),mode:selected,contactIds:ids,startedAt:NOW(),durationMinutes:duration,outcomes:[],endedAt:""};
+  db.focusSessions.unshift(session);db.settings.activeFocusSessionId=session.id;state.focusIndex=0;save();closeModal();location.hash="#/focus"
+}
+function focusElapsed(session){return Math.max(0,Math.floor((Date.now()-new Date(session.startedAt).getTime())/1000))}
+function focusRemaining(session){return Math.max(0,session.durationMinutes*60-focusElapsed(session))}
+function focusTimeLabel(seconds){const m=Math.floor(seconds/60),s=seconds%60;return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`}
+function focusCurrent(session){
+  const remaining=session.contactIds.filter(id=>!session.outcomes.some(outcome=>outcome.contactId===id));
+  const id=remaining[Math.min(state.focusIndex,Math.max(0,remaining.length-1))];
+  return {c:contact(id),remaining}
+}
+function renderFocus(){
+  clearInterval(focusTimerHandle);
+  let session=activeFocusSession();
+  if(!session){
+    document.getElementById("view").innerHTML=pageHead("Focused production","Prospecting Sprint","Work one relationship at a time.",`<button class="primary-btn" data-action="start-focus-modal">Start sprint</button>`)+
+      `<section class="focus-empty-state"><span>⚡</span><h2>No active sprint</h2><p>Choose seller opportunities, new leads, follow-ups, buyers, or relationships.</p><button class="primary-btn" data-action="start-focus-modal">Choose a sprint</button></section>`;
+    return
+  }
+  const current=focusCurrent(session),c=current.c,remaining=current.remaining,attempts=session.outcomes.length,conversations=session.outcomes.filter(o=>["Connected","Appointment Set"].includes(o.outcome)).length,appointments=session.outcomes.filter(o=>o.outcome==="Appointment Set").length;
+  if(!c){finishFocusSession(false);return}
+  const memory=relationshipReminder(c),last=lastConversationPreview(c),p=primaryProperty(c);
+  document.getElementById("view").innerHTML=`<section class="focus-screen">
+    <header class="focus-header"><div><span>PROSPECTING SPRINT • ${esc(session.mode.toUpperCase())}</span><h1>Move one relationship forward.</h1></div><div class="focus-timer" id="focusTimer">${focusTimeLabel(focusRemaining(session))}</div><button class="ghost-btn" data-action="finish-focus-session">Finish</button></header>
+    <section class="focus-stats"><div><strong>${attempts}</strong><span>attempts</span></div><div><strong>${conversations}</strong><span>conversations</span></div><div><strong>${appointments}</strong><span>appointments</span></div><div><strong>${remaining.length}</strong><span>remaining</span></div></section>
+    <div class="focus-layout">
+      <main class="focus-contact">
+        <div class="focus-person">${avatar(c)}<div><span>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.heat)}</span><h2>${esc(fullName(c))}</h2><p>${esc(c.phone||c.email||"Contact information missing")}</p></div></div>
+        <div class="focus-reason"><label>WHY NOW</label><strong>${esc(reasonToCall(c))}</strong></div>
+        <div class="focus-facts">
+          <div><label>${c.type==="Seller"?"Property":"Target"}</label><strong>${esc(c.type==="Seller"?(propertyAddress(p)||"Property needed"):(c.buyerDetails?.areas||c.property||"Areas needed"))}</strong></div>
+          <div><label>Motivation</label><strong>${esc(p?.motivation||c.sellerDetails?.motivation||c.notes||"Not learned yet")}</strong></div>
+          <div><label>Timing</label><strong>${esc(c.timeframe||"Unknown")}</strong></div>
+          <div><label>Last conversation</label><strong>${esc(last)}</strong></div>
+        </div>
+        ${memory?`<div class="focus-memory"><span>REMEMBER</span><strong>${esc(memory)}</strong></div>`:""}
+        <div class="focus-primary-actions">
+          <button class="primary-btn call-big" data-action="quick-launch" data-channel="Call" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>☎ Call ${esc(preferredContactName(c))}</button>
+          <button class="ghost-btn" data-action="quick-launch" data-channel="Text" data-id="${c.id}" ${hasPhone(c)?"":"disabled"}>✉ Text</button>
+          <button class="ghost-btn" data-action="show-script" data-id="${c.id}" data-context="focus">▤ Show script</button>
+          <a class="ghost-btn" href="#/contact/${c.id}">Open profile</a>
+        </div>
+        <div class="focus-outcomes">
+          <button data-action="focus-outcome" data-id="${c.id}" data-outcome="Connected">Connected</button>
+          <button data-action="focus-outcome" data-id="${c.id}" data-outcome="Appointment Set">Appointment set</button>
+          <button data-action="focus-outcome" data-id="${c.id}" data-outcome="Left Voicemail">Voicemail</button>
+          <button data-action="focus-outcome" data-id="${c.id}" data-outcome="No Answer">No answer</button>
+          <button data-action="focus-skip" data-id="${c.id}">Skip</button>
+        </div>
+      </main>
+      <aside class="focus-side">
+        <div class="focus-queue-preview"><span>UP NEXT</span>${remaining.slice(1,5).map(id=>{const person=contact(id);return person?`<div>${avatar(person)}<span><strong>${esc(fullName(person))}</strong><small>${esc(person.type)} • ${esc(reasonToCall(person))}</small></span></div>`:""}).join("")||`<p>Last person in the queue.</p>`}</div>
+        <button class="ghost-btn full-width" data-action="open-voice-update" data-id="${c.id}">◉ Field note / dictation</button>
+      </aside>
+    </div>
+  </section>`;
+  focusTimerHandle=setInterval(()=>{const el=document.getElementById("focusTimer");if(!el){clearInterval(focusTimerHandle);return}const remaining=focusRemaining(session);el.textContent=focusTimeLabel(remaining);if(remaining<=0){el.classList.add("expired");clearInterval(focusTimerHandle)}},1000)
+}
+function logFocusOutcome(contactId,outcome){
+  const session=activeFocusSession(),c=contact(contactId);if(!session||!c)return;
+  db.communications.unshift({id:uid(),contactId,channel:"Call",direction:"outbound",outcome,body:`Prospecting Sprint — ${session.mode}`,date:NOW(),unread:false,threadStatus:"open",scriptId:"",createdAt:NOW()});
+  c.lastCommunication=TODAY();c.followUp=outcome==="Appointment Set"?addDays(TODAY(),1):["Left Voicemail","No Answer"].includes(outcome)?addDays(TODAY(),2):addDays(TODAY(),7);c.updatedAt=TODAY();
+  if(outcome==="Appointment Set"){c.stage=c.type==="Buyer"?"Buyer Consultation":"Listing Appointment";db.tasks.unshift({id:uid(),contactId,title:`Schedule details with ${fullName(c)}`,type:"Appointment",due:addDays(TODAY(),1),time:"",duration:60,location:propertyDisplay(c),notes:"Appointment set during Prospecting Sprint.",status:"Open",priority:"High",planRunId:"",completedAt:"",createdAt:TODAY()})}
+  session.outcomes.push({contactId,outcome,date:NOW()});save();state.focusIndex=0;renderFocus();toast("Relationship moved",`${fullName(c)} • ${outcome}`)
+}
+function skipFocusContact(contactId){
+  const session=activeFocusSession();if(!session)return;
+  session.contactIds=session.contactIds.filter(id=>id!==contactId).concat(contactId);save(false);renderFocus()
+}
+function finishFocusSession(showToast=true){
+  const session=activeFocusSession();if(!session)return;
+  session.endedAt=NOW();db.settings.activeFocusSessionId="";save();clearInterval(focusTimerHandle);
+  const conversations=session.outcomes.filter(o=>["Connected","Appointment Set"].includes(o.outcome)).length,appointments=session.outcomes.filter(o=>o.outcome==="Appointment Set").length;
+  if(showToast)toast("Sprint complete",`${session.outcomes.length} attempts • ${conversations} conversations • ${appointments} appointments`);
+  renderFocus()
+}
+function nextFieldAppointment(){
+  return db.tasks.filter(t=>t.status!=="Done"&&t.type==="Appointment"&&t.due>=TODAY()).sort((a,b)=>String(`${a.due} ${a.time||"23:59"}`).localeCompare(String(`${b.due} ${b.time||"23:59"}`)))[0]||null
+}
+function renderField(){
+  const next=nextFieldAppointment(),c=contact(next?.contactId),appointments=db.tasks.filter(t=>t.status!=="Done"&&t.type==="Appointment"&&t.due>=TODAY()&&t.due<=addDays(TODAY(),7)).sort((a,b)=>String(`${a.due} ${a.time||""}`).localeCompare(String(`${b.due} ${b.time||""}`)));
+  document.getElementById("view").innerHTML=`<section class="field-mode">
+    <header><div><span>FIELD MODE</span><h1>${next?esc(next.title):"You are ready for the road."}</h1><p>${next?`${dateLabel(next.due)}${next.time?` at ${next.time}`:""}${next.location?` • ${esc(next.location)}`:""}`:"Add an appointment to build your field dashboard."}</p></div><a class="ghost-btn" href="#/more">Exit</a></header>
+    ${next?`<section class="field-primary">
+      <div class="field-client">${c?avatar(c):`<span class="avatar">HH</span>`}<div><span>NEXT APPOINTMENT</span><h2>${c?esc(fullName(c)):esc(next.title)}</h2><p>${esc(next.notes||relationshipReminder(c)||"Review the client and property before arriving.")}</p></div></div>
+      <div class="field-buttons">
+        ${next.location?`<button data-action="open-directions" data-address="${esc(next.location)}">⌖ Directions</button>`:""}
+        ${c&&hasPhone(c)?`<button data-action="quick-launch" data-channel="Call" data-id="${c.id}">☎ Call</button><button data-action="quick-launch" data-channel="Text" data-id="${c.id}">✉ Text</button>`:""}
+        ${c?`<button data-action="show-script" data-id="${c.id}" data-context="field">▤ Script</button><button data-action="open-voice-update" data-id="${c.id}">◉ Update</button>`:""}
+        <button data-action="add-task-calendar" data-id="${next.id}">Calendar</button>
+      </div>
+    </section>`:`<section class="field-empty"><span>⌖</span><h2>No upcoming appointment</h2><button class="primary-btn" data-action="open-task">Add appointment</button></section>`}
+    <section class="field-schedule"><div class="agent-panel-head"><div><span>NEXT 7 DAYS</span><h2>Your route</h2></div></div>${appointments.map(t=>{const person=contact(t.contactId);return `<article><time>${dateLabel(t.due)}<b>${esc(t.time||"All day")}</b></time><div><strong>${esc(t.title)}</strong><small>${person?esc(fullName(person)):"No contact"}${t.location?` • ${esc(t.location)}`:""}</small></div>${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Go</button>`:""}<button class="quick" data-action="complete-task-button" data-id="${t.id}">Done</button></article>`}).join("")||`<div class="empty">No appointments in the next seven days.</div>`}</section>
+  </section>`
+}
+function openHouse(id){return db.openHouses.find(item=>item.id===id)}
+function openHouseAddress(item){
+  const p=db.properties.find(property=>property.id===item?.propertyId);
+  return propertyAddress(p)||item?.address||""
+}
+function renderOpenHouses(){
+  const items=[...db.openHouses].sort((a,b)=>String(`${a.date} ${a.time}`).localeCompare(String(`${b.date} ${b.time}`)));
+  document.getElementById("view").innerHTML=pageHead("Lead generation","Open Houses","Capture visitors, identify buyers and homeowners, and start follow-up before you leave.",`<button class="primary-btn" data-action="open-open-house">＋ New open house</button>`)+
+    `<section class="open-house-grid">${items.length?items.map(item=>`<article class="open-house-card"><div class="open-house-date"><strong>${String(item.date).slice(5)}</strong><span>${esc(item.time)}</span></div><div><span>${esc(item.status)}</span><h2>${esc(item.title)}</h2><p>${esc(openHouseAddress(item)||"Address needed")}</p><small>${item.visitors.length} visitor${item.visitors.length===1?"":"s"} • ${item.visitors.filter(v=>v.maySell).length} possible seller${item.visitors.filter(v=>v.maySell).length===1?"":"s"}</small></div><a class="primary-btn compact" href="#/open-house/${item.id}">Open event</a></article>`).join(""):`<div class="empty open-house-empty"><strong>Your first open house can become a lead engine.</strong><span>Create the event, then use the iPad as a sign-in station.</span><button class="primary-btn" data-action="open-open-house">Create open house</button></div>`}</section>`
+}
+function renderOpenHouse(id){
+  const item=openHouse(id);if(!item){location.hash="#/open-houses";return}
+  document.getElementById("view").innerHTML=`<section class="open-house-hero"><div><span>OPEN HOUSE MODE</span><h1>${esc(item.title)}</h1><p>${dateLabel(item.date)} • ${esc(item.time)} • ${esc(openHouseAddress(item)||"Address needed")}</p></div><div>${openHouseAddress(item)?`<button class="ghost-btn" data-action="open-directions" data-address="${esc(openHouseAddress(item))}">Directions</button>`:""}<button class="ghost-btn" data-action="open-open-house" data-id="${item.id}">Edit</button><button class="primary-btn" data-action="open-house-visitor" data-id="${item.id}">＋ Add visitor</button></div></section>
+    <section class="open-house-metrics"><div><strong>${item.visitors.length}</strong><span>Visitors</span></div><div><strong>${item.visitors.filter(v=>v.timeline!=="Unknown").length}</strong><span>Active timelines</span></div><div><strong>${item.visitors.filter(v=>v.homeowner).length}</strong><span>Homeowners</span></div><div><strong>${item.visitors.filter(v=>v.maySell).length}</strong><span>Possible sellers</span></div></section>
+    <div class="open-house-layout"><main><section class="open-house-signin"><span>IPAD SIGN-IN</span><h2>Hand them the screen.</h2><p>Capture permission and the details needed for useful follow-up.</p><button class="primary-btn" data-action="open-house-visitor" data-id="${item.id}">Start visitor sign-in</button></section>
+      <section class="agent-panel"><div class="agent-panel-head"><div><span>VISITORS</span><h2>Follow-up list</h2></div>${item.visitors.some(v=>v.contactId)?`<button class="ghost-btn compact" data-action="start-open-house-followup" data-id="${item.id}">Start follow-up sprint</button>`:""}</div>
+      <div class="visitor-list">${item.visitors.length?item.visitors.map(v=>`<article><div><strong>${esc(`${v.firstName} ${v.lastName}`)}</strong><small>${esc(v.timeline)} • ${esc(v.lenderStatus)}${v.maySell?" • Possible seller":""}</small><span>${esc(v.interest||v.notes||"No notes")}</span></div>${v.contactId?`<a class="ghost-btn compact" href="#/contact/${v.contactId}">Profile</a>`:""}<button class="quick" data-action="open-house-visitor" data-id="${item.id}" data-visitor="${v.id}">Edit</button></article>`).join(""):`<div class="empty">No visitors signed in yet.</div>`}</div></section>
+    </main><aside><section class="card card-pad"><h2>Property notes</h2><p class="panel-note">${esc(item.notes||"Add property talking points, showing instructions, and seller-approved details.")}</p></section></aside></div>`
+}
+function openHouseModal(id=""){
+  const item=openHouse(id)||{id:"",propertyId:"",contactId:"",title:"Open House",address:"",date:TODAY(),time:"12:00",duration:120,notes:"",status:"Upcoming",visitors:[]};
+  modal(item.id?"Edit open house":"New open house",`<div class="form-grid">
+    <input id="openHouseId" type="hidden" value="${esc(item.id)}">
+    <div class="field"><label>Title</label><input id="openHouseTitle" value="${esc(item.title)}"></div>
+    <div class="field"><label>Status</label><select id="openHouseStatus">${["Upcoming","Live","Completed","Cancelled"].map(x=>`<option ${item.status===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field full"><label>Property address</label><input id="openHouseAddress" value="${esc(openHouseAddress(item))}"></div>
+    <div class="field"><label>Date</label><input id="openHouseDate" type="date" value="${esc(item.date)}"></div>
+    <div class="field"><label>Start time</label><input id="openHouseTime" type="time" value="${esc(item.time)}"></div>
+    <div class="field"><label>Duration</label><select id="openHouseDuration">${[60,90,120,180,240].map(value=>`<option value="${value}" ${item.duration===value?"selected":""}>${value} minutes</option>`).join("")}</select></div>
+    <div class="field full"><label>Property talking points and instructions</label><textarea id="openHouseNotes">${esc(item.notes)}</textarea></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house">Save event</button>`)
+}
+function saveOpenHouse(){
+  const id=document.getElementById("openHouseId").value||uid(),old=openHouse(id),item={id,propertyId:old?.propertyId||"",contactId:old?.contactId||"",title:document.getElementById("openHouseTitle").value.trim()||"Open House",address:document.getElementById("openHouseAddress").value.trim(),date:document.getElementById("openHouseDate").value,time:document.getElementById("openHouseTime").value||"12:00",duration:Number(document.getElementById("openHouseDuration").value||120),notes:document.getElementById("openHouseNotes").value.trim(),status:document.getElementById("openHouseStatus").value,visitors:old?.visitors||[],createdAt:old?.createdAt||NOW(),updatedAt:NOW()};
+  const index=db.openHouses.findIndex(x=>x.id===id);if(index>=0)db.openHouses[index]=item;else db.openHouses.unshift(item);
+  save();closeModal();location.hash=`#/open-house/${id}`;toast("Open house saved",`${dateLabel(item.date)} • ${item.time}`)
+}
+function openHouseVisitorModal(openHouseId,visitorId=""){
+  const item=openHouse(openHouseId),visitor=item?.visitors.find(v=>v.id===visitorId)||{id:"",firstName:"",lastName:"",phone:"",email:"",represented:"Unknown",lenderStatus:"Unknown",timeline:"Unknown",interest:"",homeowner:false,maySell:false,notes:"",contactId:""};
+  if(!item)return;
+  modal(visitor.id?"Edit visitor":"Open house sign-in",`<div class="visitor-signin">
+    <input id="visitorOpenHouseId" type="hidden" value="${item.id}"><input id="visitorId" type="hidden" value="${visitor.id}">
+    <div class="visitor-brand"><span class="brand-mark">HH</span><div><strong>Welcome in.</strong><small>Tell us a little about your move so Jacob can be useful.</small></div></div>
+    <div class="form-grid">
+      <div class="field"><label>First name</label><input id="visitorFirst" value="${esc(visitor.firstName)}"></div>
+      <div class="field"><label>Last name</label><input id="visitorLast" value="${esc(visitor.lastName)}"></div>
+      <div class="field"><label>Phone</label><input id="visitorPhone" type="tel" value="${esc(visitor.phone)}"></div>
+      <div class="field"><label>Email</label><input id="visitorEmail" type="email" value="${esc(visitor.email)}"></div>
+      <div class="field"><label>Already represented?</label><select id="visitorRepresented">${["Unknown","No","Yes"].map(x=>`<option ${visitor.represented===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Financing</label><select id="visitorLender">${["Unknown","Need a lender","Pre-approved","Cash"].map(x=>`<option ${visitor.lenderStatus===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Move timeline</label><select id="visitorTimeline">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${visitor.timeline===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field full"><label>What caught your attention?</label><input id="visitorInterest" value="${esc(visitor.interest)}"></div>
+      <div class="field full visitor-checks"><label class="checkbox-row"><input id="visitorHomeowner" type="checkbox" ${visitor.homeowner?"checked":""}> I currently own a home</label><label class="checkbox-row"><input id="visitorMaySell" type="checkbox" ${visitor.maySell?"checked":""}> I may need to sell a home</label></div>
+      <div class="field full"><label>Anything else?</label><textarea id="visitorNotes">${esc(visitor.notes)}</textarea></div>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-open-house-visitor">Save sign-in</button>`)
+}
+function saveOpenHouseVisitor(){
+  const item=openHouse(document.getElementById("visitorOpenHouseId").value);if(!item)return;
+  const id=document.getElementById("visitorId").value||uid(),old=item.visitors.find(v=>v.id===id),first=document.getElementById("visitorFirst").value.trim(),last=document.getElementById("visitorLast").value.trim(),phone=document.getElementById("visitorPhone").value.trim(),email=document.getElementById("visitorEmail").value.trim();
+  if(!first||!last)return alert("Add first and last name.");
+  if(!phone&&!email)return alert("Add a phone number or email.");
+  let contactId=old?.contactId||"";
+  if(!contactId){
+    const existing=db.contacts.find(c=>(phone&&normalizePhone(c.phone)===normalizePhone(phone))||(email&&String(c.email).toLowerCase()===email.toLowerCase()));
+    if(existing)contactId=existing.id;
+    else{
+      const c=normalize({contacts:[{id:uid(),firstName:first,lastName:last,phone,email,type:"Buyer",stage:"New",heat:"Warm",timeframe:document.getElementById("visitorTimeline").value,followUp:TODAY(),source:"Open House",tags:["Open House",document.getElementById("visitorMaySell").checked?"Potential Seller":""].filter(Boolean),notes:`Visited ${item.title} at ${openHouseAddress(item)}. ${document.getElementById("visitorNotes").value.trim()}`,createdAt:NOW(),updatedAt:NOW()}]}).contacts[0];
+      db.contacts.unshift(c);contactId=c.id
+    }
+  }
+  const visitor={id,firstName:first,lastName:last,phone,email,represented:document.getElementById("visitorRepresented").value,lenderStatus:document.getElementById("visitorLender").value,timeline:document.getElementById("visitorTimeline").value,interest:document.getElementById("visitorInterest").value.trim(),homeowner:document.getElementById("visitorHomeowner").checked,maySell:document.getElementById("visitorMaySell").checked,notes:document.getElementById("visitorNotes").value.trim(),contactId,createdAt:old?.createdAt||NOW()};
+  const index=item.visitors.findIndex(v=>v.id===id);if(index>=0)item.visitors[index]=visitor;else item.visitors.push(visitor);
+  item.updatedAt=NOW();save();closeModal();renderOpenHouse(item.id);toast("Visitor captured",`${first} ${last} is in follow-up.`)
+}
+function startOpenHouseFollowup(id){
+  const item=openHouse(id),ids=[...new Set((item?.visitors||[]).map(v=>v.contactId).filter(Boolean))];
+  if(!ids.length)return alert("No visitor contacts are available yet.");
+  startFocusSession(ids,"open-house")
+}
+function openMarketStudyModal(id=""){
+  const item=db.marketStudies.find(x=>x.id===id)||{id:"",date:TODAY(),area:(db.settings.coreMarkets||"").split(",")[0]?.trim()||"",active:0,reductions:0,pending:0,sold:0,averageDom:0,listSaleRatio:0,paymentExample:"",observation:"",links:""};
+  modal(item.id?"Edit market study":"Today’s market study",`<div class="market-study-form">
+    <div class="market-study-prompt"><strong>Do not memorize the whole market.</strong><span>Find one pattern you could explain simply to a buyer or seller today.</span></div><div class="form-grid">
+      <input id="marketStudyId" type="hidden" value="${item.id}">
+      <div class="field"><label>Date</label><input id="marketStudyDate" type="date" value="${item.date}"></div>
+      <div class="field"><label>Area / school district</label><input id="marketStudyArea" value="${esc(item.area)}"></div>
+      <div class="field"><label>Active listings reviewed</label><input id="marketStudyActive" type="number" value="${item.active||""}"></div>
+      <div class="field"><label>Price reductions</label><input id="marketStudyReductions" type="number" value="${item.reductions||""}"></div>
+      <div class="field"><label>Pending reviewed</label><input id="marketStudyPending" type="number" value="${item.pending||""}"></div>
+      <div class="field"><label>Recent sales reviewed</label><input id="marketStudySold" type="number" value="${item.sold||""}"></div>
+      <div class="field"><label>Average days on market</label><input id="marketStudyDom" type="number" value="${item.averageDom||""}"></div>
+      <div class="field"><label>List-to-sale ratio %</label><input id="marketStudyRatio" type="number" step=".1" value="${item.listSaleRatio||""}"></div>
+      <div class="field full"><label>Monthly payment example</label><input id="marketStudyPayment" value="${esc(item.paymentExample)}" placeholder="$300,000 at today’s example assumptions..."></div>
+      <div class="field full"><label>One useful market observation</label><textarea id="marketStudyObservation" rows="5" placeholder="Updated ranches under $300k are moving faster than larger rural homes priced above recent acreage comps.">${esc(item.observation)}</textarea></div>
+      <div class="field full"><label>MLS / listing links</label><textarea id="marketStudyLinks" placeholder="One link per line">${esc(item.links)}</textarea></div>
+    </div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-market-study">Save study</button>`)
+}
+function saveMarketStudy(){
+  const id=document.getElementById("marketStudyId").value||uid(),old=db.marketStudies.find(x=>x.id===id),item={id,date:document.getElementById("marketStudyDate").value,area:document.getElementById("marketStudyArea").value.trim(),active:Number(document.getElementById("marketStudyActive").value||0),reductions:Number(document.getElementById("marketStudyReductions").value||0),pending:Number(document.getElementById("marketStudyPending").value||0),sold:Number(document.getElementById("marketStudySold").value||0),averageDom:Number(document.getElementById("marketStudyDom").value||0),listSaleRatio:Number(document.getElementById("marketStudyRatio").value||0),paymentExample:document.getElementById("marketStudyPayment").value.trim(),observation:document.getElementById("marketStudyObservation").value.trim(),links:document.getElementById("marketStudyLinks").value.trim(),createdAt:old?.createdAt||NOW(),updatedAt:NOW()};
+  if(!item.area||!item.observation)return alert("Add the area and one useful observation.");
+  const index=db.marketStudies.findIndex(x=>x.id===id);if(index>=0)db.marketStudies[index]=item;else db.marketStudies.unshift(item);
+  save();closeModal();renderMarketStudy();toast("Market study saved",item.area)
+}
+function renderMarketStudy(){
+  const studies=[...db.marketStudies].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  document.getElementById("view").innerHTML=pageHead("Become the local expert","Market Study","Twenty focused minutes a day creates better conversations, pricing judgment, and content.",`<button class="primary-btn" data-action="open-market-study">＋ Add today’s study</button>`)+
+    `<section class="market-study-hero ${studies.some(x=>x.date===TODAY())?"complete":""}"><div><span>${studies.some(x=>x.date===TODAY())?"TODAY COMPLETE":"TODAY’S 20-MINUTE ASSIGNMENT"}</span><h1>${studies.some(x=>x.date===TODAY())?"You learned something useful today.":"Review a small slice of your market."}</h1><p>Actives, reductions, pendings, recent sales, payment context, and one clear observation.</p></div><button class="primary-btn" data-action="open-market-study">${studies.some(x=>x.date===TODAY())?"Add another area":"Start study"}</button></section>
+    <section class="market-insight-grid">${studies.length?studies.map(item=>`<article><div><span>${dateLabel(item.date)} • ${esc(item.area)}</span><h2>${esc(item.observation)}</h2></div><div class="study-numbers"><span><strong>${item.active}</strong> active</span><span><strong>${item.reductions}</strong> reductions</span><span><strong>${item.pending}</strong> pending</span><span><strong>${item.sold}</strong> sold</span></div>${item.paymentExample?`<p><b>Payment example:</b> ${esc(item.paymentExample)}</p>`:""}<button class="ghost-btn compact" data-action="open-market-study" data-id="${item.id}">Edit study</button></article>`).join(""):`<div class="empty"><strong>No market studies yet.</strong><span>Start with one city or school district—not the whole Cincinnati market.</span></div>`}</section>`
+}
+function relationshipMemoryHtml(c){
+  const m=c.relationshipMemory||{},items=[
+    ["Preferred name",m.preferredName],["Preferred contact",m.preferredContact],["Occupation",m.occupation],
+    ["Family",m.family],["Pets",m.pets],["Interests",m.interests],["Ask about",m.askAbout],
+    ["What I promised",m.promise],["Communication style",m.communicationStyle],
+    ["Birthday",m.birthday?dateLabel(m.birthday):""],["Home anniversary",m.homeAnniversary?dateLabel(m.homeAnniversary):""]
+  ].filter(([,value])=>value&&value!=="No preference");
+  return items.length?`<div class="relationship-memory-grid">${items.map(([label,value])=>`<div><label>${esc(label)}</label><strong>${esc(value)}</strong></div>`).join("")}</div>`:`<div class="contact-address-empty"><div><strong>No relationship memory saved.</strong><span>Add details that help every conversation feel personal and prepared.</span></div><button class="primary-btn compact" data-action="open-contact" data-id="${c.id}">Add memory</button></div>`
 }
 
 function route(){
@@ -2253,13 +2868,14 @@ function route(){
   renderNav();
   if(name==="contact"&&id)return renderContact(id);
   if(name==="transaction"&&id)return renderTransaction(id);
-  const renderers={today:renderToday,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
+  if(name==="open-house"&&id)return renderOpenHouse(id);
+  const renderers={today:renderToday,more:renderMore,focus:renderFocus,field:renderField,"open-houses":renderOpenHouses,"market-study":renderMarketStudy,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
   (renderers[state.route]||renderToday)();
 }
 function renderNav(){
-  document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")));
+  document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")||(moreRoutes.has(state.route)&&a.dataset.route==="more")));
   const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length,transactionDeadlines=transactionDeadlineItems().length;
-  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("pipNavCount",pipNotices().length)
+  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("navMoreCount",unread+openTasks+calls);setCount("pipNavCount",pipNotices().length)
 }
 function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.textContent=n||"";el.style.display=n?"grid":"none"}
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
@@ -2331,36 +2947,27 @@ function holtonPlanHtml(){
 }
 
 function renderToday(){
-  const open=db.contacts.filter(isOpen),sellers=open.filter(c=>c.type==="Seller"),buyers=open.filter(c=>c.type==="Buyer"),due=dueContacts(),unread=db.communications.filter(x=>x.unread),openTasks=db.tasks.filter(t=>t.status!=="Done"),gci=open.reduce((sum,c)=>sum+c.gci,0),next=bestNext();
-  const queue=[...due].sort((a,b)=>(b.type==="Seller")-(a.type==="Seller")||scoreContact(b).score-scoreContact(a).score).slice(0,7);
+  clearInterval(focusTimerHandle);
+  const production=dailyProduction(),work=workQueueItems(),open=db.contacts.filter(isOpen),gci=open.reduce((sum,c)=>sum+c.gci,0);
   document.getElementById("view").innerHTML=
-    backupWarningHtml() +
-    pageHead("",`Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${db.settings.agentName||"Jacob"}`,"Here is what needs your attention today.","") +
-    `<section class="focus-card"><div><label>NEXT UP</label><h2>${esc(next.title)}</h2><p>${esc(next.detail)}</p></div><a class="primary-btn" href="${next.route}">${esc(next.action)} →</a></section>
-    ${workQueueHtml()}
-    ${holtonPlanHtml()}
-    <section class="metric-grid">
-      <div class="metric"><label>New leads</label><strong>${untouchedLeads().length}</strong><small>No communication logged yet</small></div>
-      <div class="metric"><label>Follow-ups</label><strong>${due.length}</strong><small>Due today or overdue</small></div>
-      <div class="metric"><label>Unread</label><strong>${unread.length}</strong><small>Unread conversations</small></div>
-      <div class="metric"><label>Hot seller leads</label><strong>${sellers.filter(c=>c.heat==="Hot").length}</strong><small>Seller leads marked hot</small></div>
-      <div class="metric"><label>Active buyer leads</label><strong>${buyers.filter(c=>!["New","Attempted Contact","Contacted","Nurture"].includes(c.stage)).length}</strong><small>Consultation stage or later</small></div>
-      <div class="metric"><label>Estimated from open opportunities GCI</label><strong>${money(gci)}</strong><small>Estimated from open opportunities</small></div>
-    </section>
-    <div class="grid two">
-      <section class="card"><div class="card-pad card-head"><div><h2>Leads needing attention</h2><small>Sorted by urgency, stage, and last communication.</small></div><a class="ghost-btn compact" href="#/people">All people</a></div>
-        <div class="queue">${queue.length?queue.map(c=>queueRow(c)).join(""):`<div class="empty">Your follow-up list is clear. Create a seller conversation.</div>`}</div>
-      </section>
-      <section class="grid">
-        <div class="card card-pad"><div class="card-head"><div><h2>Recent lead activity</h2><small>Saved homes, repeat views, valuations, and showing requests.</small></div><a class="ghost-btn compact" href="#/activity">All activity</a></div>${behaviorAlertsHtml(5)}</div>
-        <div class="card card-pad"><div class="card-head"><div><h2>Tasks</h2><small>Calls and follow-ups waiting for you.</small></div></div>
-          <div class="queue">
-            <div class="queue-row"><span class="avatar">☎</span><div><strong>Call Queue</strong><small>${callQueue().length} due calls ready</small></div><a class="ghost-btn compact" href="#/call-queue">Start</a></div>
-            <div class="queue-row"><span class="avatar">✓</span><div><strong>Open tasks</strong><small>${openTasks.length} actions waiting</small></div><a class="ghost-btn compact" href="#/tasks">Work</a></div>
-          </div>
-        </div>
-      </section>
-    </div>`;
+    backupWarningHtml()+
+    `<section class="agent-home-head"><div><span>HOLTON HOMES AGENT OS</span><h1>Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${esc(db.settings.agentName||"Jacob")}.</h1><p>${work.length?`${work.length} relationship${work.length===1?"":"s"} or deadline${work.length===1?"":"s"} need movement.`:"Your urgent work is clear. Create conversations and study the market."}</p></div><div><button class="ghost-btn" data-action="open-day-briefing">☀ Brief me</button><button class="primary-btn" data-action="start-focus-modal">⚡ Start sprint</button></div></section>
+    ${homeNextActionHtml()}
+    ${dailyProgressHtml()}
+    <section class="agent-home-grid">
+      <main>
+        ${sellerRadarHtml()}
+        <section class="agent-panel work-today-clean"><div class="agent-panel-head"><div><span>WORK TODAY</span><h2>${work.length?`${work.length} priority item${work.length===1?"":"s"}`:"Cleared"}</h2></div><a href="#/more" class="ghost-btn compact">All tools</a></div><div class="clean-work-list">${work.length?work.slice(0,6).map(workQueueRow).join(""):`<div class="empty">No urgent work remains. Start a prospecting sprint.</div>`}</div></section>
+      </main>
+      <aside>
+        ${appointmentRailHtml()}
+        <section class="agent-panel business-pulse"><div class="agent-panel-head"><div><span>BUSINESS PULSE</span><h2>What you are building</h2></div><a class="ghost-btn compact" href="#/reports">Reports</a></div>
+          <div class="pulse-grid"><div class="seller"><strong>${open.filter(c=>c.type==="Seller").length}</strong><span>open sellers</span></div><div class="buyer"><strong>${open.filter(c=>c.type==="Buyer").length}</strong><span>open buyers</span></div><div class="transaction"><strong>${activeTransactions().length}</strong><span>active deals</span></div><div class="gci"><strong>${money(gci)}</strong><span>open GCI</span></div></div>
+        </section>
+        ${relationshipMomentsHtml()}
+        <section class="agent-panel home-shortcuts"><div class="agent-panel-head"><div><span>KEEP MOVING</span><h2>Fast workspaces</h2></div></div><div><a href="#/field">⌖ Field Mode</a><a href="#/open-houses">⌂ Open Houses</a><a href="#/market-study">↗ Market Study</a><button data-action="open-quick-capture">＋ Quick Capture</button></div></section>
+      </aside>
+    </section>`;
 }
 function queueRow(c){
   const s=scoreContact(c);return `<div class="queue-row">${avatar(c)}<div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.type)} • ${esc(c.stage)} • ${c.followUp?`Follow up ${dateLabel(c.followUp)}`:"No next step"} • Score ${s.score}</small></div>${contactQuickActions(c)}</div>`
@@ -2569,7 +3176,7 @@ function personRow(c){
   const s=scoreContact(c),reason=smartListReason(c);
   return `<tr>
     <td><a class="contact-cell contact-cell-link" href="#/contact/${c.id}">${avatar(c)}<div><strong>${esc(fullName(c))}</strong><small>${esc(reason||c.phone||c.email||"No contact information")}</small>${renderTagChips(c.tags)}</div></a>${state.smartList==="cleanup"?cleanupBadges(c):""}</td>
-    <td class="people-address-cell">${contactAddressDisplay(c)?`<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactAddressDisplay(c))}">${esc(contactAddressDisplay(c))}</a><small>${esc(contactAddressObject(c).type||"Home")}${contactAddressObject(c).sameAsPrimaryProperty?" • property synced":""}</small>`:`<button class="missing-address-button" data-action="open-contact" data-id="${c.id}">＋ Add address</button>`}</td>
+    <td class="people-address-cell">${contactAddressDisplay(c)?`<button class="address-map-link" data-action="open-map" data-address="${esc(contactAddressDisplay(c))}">${esc(contactAddressDisplay(c))}</button><small>${esc(contactAddressObject(c).type||"Home")}${contactAddressObject(c).sameAsPrimaryProperty?" • property synced":""}</small>`:`<button class="missing-address-button" data-action="open-contact" data-id="${c.id}">＋ Add address</button>`}</td>
     <td><span class="badge type-${c.type.toLowerCase().replace(" ","-")}">${esc(c.type)}</span></td><td>${esc(c.stage)}</td>
     <td><span class="score ${scoreClass(s.score)}">${s.score}</span></td><td>${c.lastCommunication?dateLabel(c.lastCommunication):"Never"}</td>
     <td class="${c.followUp&&c.followUp<TODAY()?"overdue":""}">${dateLabel(c.followUp)}</td><td>${esc(c.source)}</td><td>${money(c.gci)}</td>
@@ -2805,6 +3412,7 @@ function scriptPrepFacts(c){
   const p=primaryProperty(c),facts=[];
   facts.push({label:"Reason now",value:reasonToCall(c)});
   facts.push({label:"Contact address",value:contactAddressDisplay(c)||"Not saved yet"});
+  if(relationshipReminder(c))facts.push({label:"Remember",value:relationshipReminder(c)});
   if(c.type==="Seller"){
     facts.push({label:"Property",value:propertyAddress(p)||c.property||"Address needed"});
     facts.push({label:"Motivation",value:p?.motivation||c.sellerDetails?.motivation||"Not learned yet"});
@@ -3271,7 +3879,7 @@ function renderContact(id){
           ${hasEmail(c)?`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`:`<span class="missing">No email</span>`}
         </div>
         <div class="contact-hero-address">
-          ${contactAddressDisplay(c)?`<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactAddressDisplay(c))}">⌖ ${esc(contactAddressDisplay(c))}</a><button data-action="copy-contact-address" data-id="${c.id}">Copy</button>`:`<button class="missing-address-hero" data-action="open-contact" data-id="${c.id}">＋ Add contact address</button>`}
+          ${contactAddressDisplay(c)?`<button class="contact-map-button" data-action="open-map" data-address="${esc(contactAddressDisplay(c))}">⌖ ${esc(contactAddressDisplay(c))}</button><button data-action="open-directions" data-address="${esc(contactAddressDisplay(c))}">Directions</button><button data-action="copy-contact-address" data-id="${c.id}">Copy</button>`:`<button class="missing-address-hero" data-action="open-contact" data-id="${c.id}">＋ Add contact address</button>`}
         </div>
         <div class="inline-fields">
           <span class="field-label">Stage ${inlineSelect("stage",c.stage,stages,c.id)}</span>
@@ -3311,6 +3919,8 @@ function renderContact(id){
         <details class="compact-panel" open><summary>Contact & lead details <span>Edit inline above</span></summary><div class="compact-body detail-grid">
           ${detail("Phone",c.phone||"Missing")}${detail("Email",c.email||"Missing")}${detail("Next follow-up",dateLabel(c.followUp))}${detail("Last communication",c.lastCommunication?dateLabel(c.lastCommunication):"Never")}${detail("Estimated from open opportunities GCI",money(c.gci))}<div class="detail tag-detail"><label>Tags</label>${renderTagChips(c.tags,c.id)}<button class="add-tag-inline" data-action="open-tag" data-id="${c.id}">＋ Add tag</button></div>
         </div></details>
+
+        <details class="compact-panel" open><summary>Relationship memory <span>${relationshipReminder(c)?"Ready":"Add details"}</span></summary><div class="compact-body">${relationshipMemoryHtml(c)}</div></details>
 
         <details class="compact-panel" open><summary>Contact / mailing address <span>${contactAddressComplete(c)?"Complete":"Missing"}</span></summary><div class="compact-body">${contactAddressPanelHtml(c)}</div></details>
 
@@ -3746,7 +4356,7 @@ function renderTasks(){
   document.getElementById("view").innerHTML=
     pageHead("Specific commitments","Tasks","Use tasks for promises and transaction deadlines; use Smart Lists for general follow-up.",`<button class="primary-btn" data-action="open-task">＋ Add task</button>`) +
     `<div class="toolbar">${["open","overdue","today","upcoming","done"].map(x=>`<button class="${state.taskFilter===x?"primary-btn":"ghost-btn"} compact" data-action="task-filter" data-id="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join("")}</div>
-    <section class="card">${tasks.length?tasks.map(t=>{const c=contact(t.contactId);return `<div class="task-row ${t.status==="Done"?"done":""}"><input type="checkbox" ${t.status==="Done"?"checked":""} data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` • <a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}${t.planRunId?" • Action plan":""}</small></div><span class="task-date ${t.status!=="Done"&&t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}</span><button class="quick" data-action="delete-task" data-id="${t.id}">×</button></div>`}).join(""):`<div class="empty">No tasks in this view.</div>`}</section>`;
+    <section class="card">${tasks.length?tasks.map(t=>{const c=contact(t.contactId);return `<div class="task-row ${t.status==="Done"?"done":""}"><input type="checkbox" ${t.status==="Done"?"checked":""} data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` • <a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}${t.time?` • ${esc(t.time)}`:""}${t.location?` • ${esc(t.location)}`:""}${t.planRunId?" • Action plan":""}</small></div><span class="task-date ${t.status!=="Done"&&t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}</span><div class="task-app-actions">${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Map</button>`:""}<button class="quick" data-action="add-task-calendar" data-id="${t.id}">Calendar</button><button class="quick" data-action="edit-task" data-id="${t.id}">Edit</button><button class="quick" data-action="delete-task" data-id="${t.id}">×</button></div></div>`}).join(""):`<div class="empty">No tasks in this view.</div>`}</section>`;
 }
 
 function renderAutomations(){
@@ -3797,9 +4407,10 @@ function barChart(data){const max=Math.max(1,...data.map(x=>Number(x.value)||0))
 
 function renderSettings(){
   document.getElementById("view").innerHTML=
-    pageHead("Data and preferences","Settings","Manage cloud sync, templates, recovery, goals, and backups.") +
+    pageHead("Data and preferences","Settings","Manage cloud sync, app preferences, templates, recovery, goals, and backups.") +
     `<div class="settings-grid">
       ${cloudSettingsHtml()}
+      ${appIntegrationsSettingsHtml()}
       ${templatesSettingsHtml()}
       ${callScriptsSettingsHtml()}
       ${transactionResourcesSettingsHtml()}
@@ -3812,12 +4423,15 @@ function renderSettings(){
       <section class="setting-card"><h3>Holton Homes goals</h3><p>These targets shape the Today dashboard and keep the CRM focused on production.</p>
         <div class="field"><label>Annual GCI target</label><input id="settingGciTarget" type="number" value="${esc(db.settings.annualGciTarget||100000)}"></div>
         <div class="field" style="margin-top:8px"><label>Seller share goal (%)</label><input id="settingSellerShare" type="number" min="0" max="100" value="${esc(db.settings.sellerShareGoal||60)}"></div>
+        <div class="field" style="margin-top:8px"><label>Daily attempt target</label><input id="settingAttemptTarget" type="number" min="1" value="${esc(db.settings.dailyAttemptTarget||10)}"></div>
         <div class="field" style="margin-top:8px"><label>Daily conversation target</label><input id="settingConversationTarget" type="number" min="1" value="${esc(db.settings.dailyConversationTarget||5)}"></div>
+        <div class="field" style="margin-top:8px"><label>Daily seller-conversation target</label><input id="settingSellerConversationTarget" type="number" min="1" value="${esc(db.settings.dailySellerConversationTarget||1)}"></div>
+        <div class="field" style="margin-top:8px"><label>Daily appointment target</label><input id="settingAppointmentTarget" type="number" min="0" value="${esc(db.settings.dailyAppointmentTarget||1)}"></div>
         <div class="field" style="margin-top:8px"><label>Core markets</label><textarea id="settingCoreMarkets">${esc(db.settings.coreMarkets||"")}</textarea></div>
         <button class="primary-btn compact" style="margin-top:9px" data-action="save-goals">Save goals</button>
       </section>
       <section class="setting-card"><h3>Data protection</h3><p>The cloud is the shared source of truth. This browser also keeps a local recovery copy for offline use.</p><div class="warning"><strong>Still recommended:</strong> download a JSON backup monthly. Free cloud plans do not replace your own exports.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
-      <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Universal Conversation Mode</span><span>✓ Synced call-note drafts</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
+      <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Universal Conversation Mode</span><span>✓ Apple / Google Maps choice</span><span>✓ Apple / Google calendar handoff</span><span>✓ Default Mail / Gmail compose</span><span>✓ Synced call-note drafts</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
       <section class="setting-card"><h3>Device cache</h3><p>Clear only this device’s local cache. Your signed-in cloud data will download again.</p><button class="danger-btn compact" data-action="clear-data">Clear device cache</button></section>
     </div>`;
 }
@@ -3912,6 +4526,18 @@ function openContactModal(id=""){
     <div class="field"><label>Estimated from open opportunities GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
     <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="Type tags separated by commas: farm, referral partner, hot lead"><small class="field-help">Tags appear as clickable bubbles throughout the CRM.</small></div>
     <div id="contactSpecificFields" class="field full specific-fields-grid">${contactSpecificForm(c,type)}</div>
+    <div class="field full section-label">Relationship memory <small>Details that make the next conversation feel prepared—not creepy.</small></div>
+    <div class="field"><label>Preferred name</label><input id="memoryPreferredName" value="${esc(c.relationshipMemory?.preferredName||"")}"></div>
+    <div class="field"><label>Preferred contact</label><select id="memoryPreferredContact">${["No preference","Call","Text","Email"].map(x=>`<option ${(c.relationshipMemory?.preferredContact||"No preference")===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Occupation</label><input id="memoryOccupation" value="${esc(c.relationshipMemory?.occupation||"")}"></div>
+    <div class="field"><label>Birthday</label><input id="memoryBirthday" type="date" value="${esc(c.relationshipMemory?.birthday||"")}"></div>
+    <div class="field"><label>Home anniversary</label><input id="memoryHomeAnniversary" type="date" value="${esc(c.relationshipMemory?.homeAnniversary||"")}"></div>
+    <div class="field"><label>Communication style</label><input id="memoryCommunicationStyle" value="${esc(c.relationshipMemory?.communicationStyle||"")}" placeholder="Direct, wants details, text first..."></div>
+    <div class="field full"><label>Family / important people</label><input id="memoryFamily" value="${esc(c.relationshipMemory?.family||"")}"></div>
+    <div class="field"><label>Pets</label><input id="memoryPets" value="${esc(c.relationshipMemory?.pets||"")}"></div>
+    <div class="field"><label>Interests</label><input id="memoryInterests" value="${esc(c.relationshipMemory?.interests||"")}"></div>
+    <div class="field full"><label>Ask about next time</label><input id="memoryAskAbout" value="${esc(c.relationshipMemory?.askAbout||"")}"></div>
+    <div class="field full"><label>What did you promise?</label><input id="memoryPromise" value="${esc(c.relationshipMemory?.promise||"")}" placeholder="Send net sheet, call after roof estimate, introduce lender..."></div>
     <div class="field full"><label>Relationship notes</label><textarea id="contactNotes">${esc(c.notes||"")}</textarea></div>
   </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-contact">Save person</button>`);
 }
@@ -3939,6 +4565,7 @@ function saveContact(){
   buyerDetails:type==="Buyer"?{preapproval:document.getElementById("buyerPreapproval")?.value||"Unknown",lender:document.getElementById("buyerLender")?.value.trim()||"",budget:document.getElementById("buyerBudget")?.value||"",desiredPayment:document.getElementById("buyerDesiredPayment")?.value||"",areas:document.getElementById("buyerAreas")?.value.trim()||"",beds:document.getElementById("buyerBeds")?.value||"",baths:document.getElementById("buyerBaths")?.value||"",leaseExpiration:document.getElementById("buyerLeaseExpiration")?.value||""}:(old?.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""}),
   sphereDetails:["Sphere","Past Client"].includes(type)?{relationship:document.getElementById("sphereRelationship")?.value.trim()||"",homeowner:document.getElementById("sphereHomeowner")?.value||"Unknown",neighborhood:document.getElementById("sphereNeighborhood")?.value.trim()||"",birthday:document.getElementById("sphereBirthday")?.value||"",likelyOpportunity:document.getElementById("sphereLikelyOpportunity")?.value.trim()||""}:(old?.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""}),
   professionalDetails:["Realtor","Lender"].includes(type)?{company:document.getElementById("professionalCompany")?.value.trim()||"",role:document.getElementById("professionalRole")?.value.trim()||type,licenseNumber:document.getElementById("professionalLicenseNumber")?.value.trim()||"",serviceArea:document.getElementById("professionalServiceArea")?.value.trim()||"",specialties:document.getElementById("professionalSpecialties")?.value.trim()||"",referralNotes:document.getElementById("professionalReferralNotes")?.value.trim()||""}:(old?.professionalDetails||{company:"",role:"",licenseNumber:"",serviceArea:"",specialties:"",referralNotes:""}),
+  relationshipMemory:{preferredName:document.getElementById("memoryPreferredName")?.value.trim()||"",preferredContact:document.getElementById("memoryPreferredContact")?.value||"No preference",occupation:document.getElementById("memoryOccupation")?.value.trim()||"",birthday:document.getElementById("memoryBirthday")?.value||"",homeAnniversary:document.getElementById("memoryHomeAnniversary")?.value||"",family:document.getElementById("memoryFamily")?.value.trim()||"",pets:document.getElementById("memoryPets")?.value.trim()||"",interests:document.getElementById("memoryInterests")?.value.trim()||"",askAbout:document.getElementById("memoryAskAbout")?.value.trim()||"",promise:document.getElementById("memoryPromise")?.value.trim()||"",communicationStyle:document.getElementById("memoryCommunicationStyle")?.value.trim()||""},
   alertSettings:old?.alertSettings||{propertyAlert:false,marketSnapshot:false,criteria:"",frequency:"Weekly",lastSent:""},behaviors:old?.behaviors||[]};
   const i=db.contacts.findIndex(x=>x.id===id);if(i>=0)db.contacts[i]=c;else db.contacts.unshift(c);
   applyStageWorkflow(c,old?.stage||"",c.stage);
@@ -3965,7 +4592,7 @@ function quickLaunch(channel,id){
   savePendingTouch({contactId:id,channel,startedAt:NOW()});
   if(channel==="Call")location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`;
   if(channel==="Text")location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}`;
-  if(channel==="Email")location.href=`mailto:${c.email}?subject=${encodeURIComponent("Holton Homes follow-up")}`;
+  if(channel==="Email")openEmailComposer(c.email,"Holton Homes follow-up","");
   setTimeout(()=>showPendingTouchPrompt(),900)
 }
 function showPendingTouchPrompt(){
@@ -4047,12 +4674,18 @@ function launchChannel(channel,id){
   const body=document.getElementById("commBody")?.value||"",subject=document.getElementById("commSubject")?.value||"Holton Homes follow-up";
   if(channel==="Call"&&hasPhone(c))location.href=`tel:${c.phone.replace(/[^\d+]/g,"")}`;
   if(channel==="Text"&&hasPhone(c))location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(body)}`;
-  if(channel==="Email"&&hasEmail(c))location.href=`mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  if(channel==="Email"&&hasEmail(c))openEmailComposer(c.email,subject,body);
 }
-function openTaskModal(contactId=""){
-  modal("Add task",`<div class="form-grid"><div class="field full"><label>Task</label><input id="taskTitle"></div><div class="field"><label>Person</label><select id="taskContact">${contactOptions(contactId)}</select></div><div class="field"><label>Type</label><select id="taskType"><option>Follow Up</option><option>Call</option><option>Text</option><option>Email</option><option>Appointment</option><option>Transaction</option><option>Admin</option></select></div><div class="field"><label>Due date</label><input id="taskDue" type="date" value="${TODAY()}"></div><div class="field"><label>Priority</label><select id="taskPriority"><option>Normal</option><option>High</option><option>Low</option></select></div></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-task">Save task</button>`)
+function openTaskModal(contactId="",taskId=""){
+  const existing=task(taskId)||{id:"",contactId,title:"",type:"Follow Up",due:TODAY(),time:"",duration:integrationSettings().calendarDefaultDuration,location:"",notes:"",priority:"Normal",status:"Open",planRunId:"",createdAt:TODAY()};
+  modal(existing.id?"Edit task":"Add task",`<div class="form-grid"><input id="taskId" type="hidden" value="${esc(existing.id)}"><div class="field full"><label>Task</label><input id="taskTitle" value="${esc(existing.title)}"></div><div class="field"><label>Person</label><select id="taskContact">${contactOptions(existing.contactId||contactId)}</select></div><div class="field"><label>Type</label><select id="taskType">${["Follow Up","Call","Text","Email","Appointment","Transaction","Admin"].map(value=>`<option ${existing.type===value?"selected":""}>${value}</option>`).join("")}</select></div><div class="field"><label>Due date</label><input id="taskDue" type="date" value="${esc(existing.due||TODAY())}"></div><div class="field"><label>Start time</label><input id="taskTime" type="time" value="${esc(existing.time||"")}"></div><div class="field"><label>Duration</label><select id="taskDuration">${[30,45,60,90,120].map(value=>`<option value="${value}" ${Number(existing.duration||60)===value?"selected":""}>${value} minutes</option>`).join("")}</select></div><div class="field"><label>Priority</label><select id="taskPriority">${["Normal","High","Low"].map(value=>`<option ${existing.priority===value?"selected":""}>${value}</option>`).join("")}</select></div><div class="field full"><label>Location / address</label><input id="taskLocation" value="${esc(existing.location||"")}" placeholder="Property, office, title company, or video link"></div><div class="field full"><label>Details</label><textarea id="taskNotes">${esc(existing.notes||"")}</textarea></div><div class="field full"><label class="checkbox-row"><input id="taskAddCalendar" type="checkbox"> Add to my preferred calendar after saving</label></div></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-task">${existing.id?"Save changes":"Save task"}</button>`)
 }
-function saveTask(){const title=document.getElementById("taskTitle").value.trim();if(!title){alert("Add a task title.");return}db.tasks.unshift({id:uid(),contactId:document.getElementById("taskContact").value,title,type:document.getElementById("taskType").value,due:document.getElementById("taskDue").value||TODAY(),status:"Open",priority:document.getElementById("taskPriority").value,planRunId:"",createdAt:TODAY()});save();closeModal();toast("Task created",title);route()}
+function saveTask(){
+  const title=document.getElementById("taskTitle").value.trim();if(!title){alert("Add a task title.");return}
+  const id=document.getElementById("taskId").value||uid(),existing=task(id),record={id,contactId:document.getElementById("taskContact").value,title,type:document.getElementById("taskType").value,due:document.getElementById("taskDue").value||TODAY(),time:document.getElementById("taskTime").value,duration:Number(document.getElementById("taskDuration").value||60),location:document.getElementById("taskLocation").value.trim(),notes:document.getElementById("taskNotes").value.trim(),status:existing?.status||"Open",priority:document.getElementById("taskPriority").value,planRunId:existing?.planRunId||"",completedAt:existing?.completedAt||"",createdAt:existing?.createdAt||TODAY()};
+  const index=db.tasks.findIndex(item=>item.id===id);if(index>=0)db.tasks[index]=record;else db.tasks.unshift(record);
+  const addToCalendar=document.getElementById("taskAddCalendar").checked;save();closeModal();toast(existing?"Task updated":"Task created",title);route();if(addToCalendar)addCalendarEvent(taskCalendarEvent(record))
+}
 
 function saveInlineActivity(id){
   const c=contact(id);if(!c)return;
@@ -4296,6 +4929,42 @@ document.addEventListener("click",event=>{
   }
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
+  if(action==="open-quick-capture")quickCaptureModal();
+  if(action==="open-day-briefing")dayBriefingModal();
+  if(action==="quick-lead")quickLeadModal();
+  if(action==="save-quick-lead")saveQuickLead();
+  if(action==="open-voice-update")voiceUpdateModal(id||"");
+  if(action==="start-voice-dictation")startVoiceDictation();
+  if(action==="stop-voice-dictation")stopVoiceDictation();
+  if(action==="save-voice-update")saveVoiceUpdate();
+  if(action==="start-focus-modal")focusStartModal();
+  if(action==="start-focus-session")startFocusSession();
+  if(action==="focus-outcome")logFocusOutcome(id,el.dataset.outcome||"Connected");
+  if(action==="focus-skip")skipFocusContact(id);
+  if(action==="finish-focus-session")finishFocusSession();
+  if(action==="open-open-house")openHouseModal(id||"");
+  if(action==="save-open-house")saveOpenHouse();
+  if(action==="open-house-visitor")openHouseVisitorModal(id,el.dataset.visitor||"");
+  if(action==="save-open-house-visitor")saveOpenHouseVisitor();
+  if(action==="start-open-house-followup")startOpenHouseFollowup(id);
+  if(action==="open-market-study")openMarketStudyModal(id||"");
+  if(action==="save-market-study")saveMarketStudy();
+  if(action==="open-map")openMapAddress(el.dataset.address||"","search");
+  if(action==="open-directions")openMapAddress(el.dataset.address||"","directions");
+  if(action==="choose-map-provider"){const p=pendingExternalAction;if(p?.kind==="map"){closeModal();openMapAddress(p.address,p.mode,el.dataset.provider)}pendingExternalAction=null}
+  if(action==="choose-calendar-provider"){const p=pendingExternalAction;if(p?.kind==="calendar"){closeModal();addCalendarEvent(p.event,el.dataset.provider)}pendingExternalAction=null}
+  if(action==="choose-email-provider"){const p=pendingExternalAction;if(p?.kind==="email"){closeModal();openEmailComposer(p.to,p.subject,p.body,el.dataset.provider)}pendingExternalAction=null}
+  if(action==="compose-email")openEmailComposer(el.dataset.email||"",el.dataset.subject||"Holton Homes follow-up",el.dataset.body||"");
+  if(action==="save-app-integrations")saveAppIntegrations();
+  if(action==="test-map-integration")openMapAddress("Cincinnati, OH","search");
+  if(action==="test-calendar-integration")addCalendarEvent(calendarEvent({id:`test-${TODAY()}`,title:"Holton Homes calendar test",date:TODAY(),time:integrationSettings().calendarDefaultTime,duration:30,location:"Cincinnati, OH",description:"This test confirms the CRM calendar handoff works.",allDay:false}));
+  if(action==="test-email-integration")openEmailComposer(db.settings.agentEmail||"","Holton Homes email test","This test confirms the CRM email handoff works.");
+  if(action==="add-task-calendar"){const t=task(id);if(t)addCalendarEvent(taskCalendarEvent(t))}
+  if(action==="edit-task")openTaskModal("",id);
+  if(action==="add-property-calendar"){const p=db.properties.find(item=>item.id===id);if(p)addCalendarEvent(propertyCalendarEvent(p))}
+  if(action==="add-tx-date-calendar"){const tx=transaction(id),entry=tx?transactionCriticalDates(tx).find(item=>item[2]===el.dataset.dateKey):null;if(tx&&entry&&entry[1])addCalendarEvent(transactionDateEvent(tx,entry[0],entry[1],entry[2]))}
+  if(action==="add-tx-step-calendar"){const tx=transaction(id),step=tx?.checklist.find(item=>item.id===el.dataset.step);if(tx&&step?.due)addCalendarEvent(transactionStepCalendarEvent(tx,step))}
+  if(action==="email-transaction-update"){const tx=transaction(id),c=contact(tx?.contactId);if(tx&&c&&hasEmail(c))openEmailComposer(c.email,`Holton Homes transaction update — ${transactionAddress(tx)||"your transaction"}`,transactionUpdateText(tx))}
   if(action==="cloud-sign-in")cloudSignIn();
   if(action==="cloud-sign-up")cloudSignUp();
   if(action==="cloud-reset-password")cloudResetPassword();
@@ -4459,7 +5128,10 @@ document.addEventListener("click",event=>{
   if(action==="save-goals"){
     db.settings.annualGciTarget=Number(document.getElementById("settingGciTarget").value||100000);
     db.settings.sellerShareGoal=Number(document.getElementById("settingSellerShare").value||60);
+    db.settings.dailyAttemptTarget=Number(document.getElementById("settingAttemptTarget").value||10);
     db.settings.dailyConversationTarget=Number(document.getElementById("settingConversationTarget").value||5);
+    db.settings.dailySellerConversationTarget=Number(document.getElementById("settingSellerConversationTarget").value||1);
+    db.settings.dailyAppointmentTarget=Number(document.getElementById("settingAppointmentTarget").value||1);
     db.settings.coreMarkets=document.getElementById("settingCoreMarkets").value.trim();
     save();toast("Goals saved","Your dashboard now reflects how Holton Homes should operate.")
   }
@@ -4547,7 +5219,7 @@ document.addEventListener("drop",event=>{const col=event.target.closest(".kanban
 document.getElementById("globalAddPerson")?.addEventListener("click",event=>{
   event.preventDefault();
   event.stopPropagation();
-  openContactModal("");
+  quickCaptureModal();
 });
 
 window.addEventListener("focus",()=>{
