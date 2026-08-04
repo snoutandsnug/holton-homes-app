@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v23";
-const LEGACY_KEYS = ["holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v25";
+const LEGACY_KEYS = ["holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -402,8 +402,8 @@ const defaultAutomationRules = [
   }
 ];
 
-let db = loadDatabase();
-let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview"};
+let db = null;
+let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview"};
 let automationBusy=false,automationTimer=null;
 
 
@@ -796,6 +796,11 @@ function workQueueItems(){
     reason:`Open ${c.type.toLowerCase()} has no next follow-up`,priority:72+(c.type==="Seller"?4:0),due:TODAY(),channel:"Note"
   }));
 
+  transactionDeadlineItems().forEach(({tx,c,step})=>addWorkItem(items,{
+    id:`transaction-${tx.id}-${step.id}`,kind:"transaction-step",contactId:c?.id||"",transactionId:tx.id,stepId:step.id,
+    title:step.title,reason:`${step.status==="Problem"?"PROBLEM":step.due<TODAY()?"Overdue":step.due===TODAY()?"Due today":"Transaction step"} • ${transactionAddress(tx)||"address needed"} • ${tx.side} side`,
+    priority:step.status==="Problem"?125:step.due<TODAY()?118:106,due:step.due||TODAY(),channel:"Note"
+  }));
   const sorted=items.sort((a,b)=>b.priority-a.priority||String(a.due).localeCompare(String(b.due)));
   const seen=new Set();
   return sorted.filter(item=>{
@@ -819,6 +824,7 @@ function workIcon(item){
 }
 function workPrimaryLabel(item){
   if(item.kind==="reply")return "Open reply";
+  if(item.kind==="transaction-step")return "Open deal";
   if(item.kind==="missing-next")return "Set date";
   if(["task","appointment","deadline"].includes(item.kind))return "Complete";
   return item.channel==="Call"?"Call":item.channel==="Email"?"Email":"Log touch"
@@ -883,6 +889,7 @@ function completeWorkItem(item){
 function launchWorkItem(id,channel=""){
   const item=findWorkItem(id);if(!item)return;
   const c=contact(item.contactId);
+  if(item.kind==="transaction-step"){location.hash=`#/transaction/${item.transactionId}`;return}
   if(item.kind==="reply"){state.activeThread=item.contactId;location.hash="#/inbox";setTimeout(renderInbox,0);return}
   if(item.kind==="missing-next"){rescheduleModal(item.contactId);return}
   if(item.taskId&&["task","appointment","deadline"].includes(item.kind)){completeWorkItem(item);return}
@@ -921,9 +928,880 @@ function task(id){return db.tasks.find(t=>t.id===id)}
 function hasPhone(c){return Boolean((c?.phone||"").replace(/\D/g,""))}
 function hasEmail(c){return Boolean(c?.email && c.email.includes("@"))}
 
+
+const transactionStepStatuses=["Not Started","In Progress","Waiting","Problem","Done","Skipped"];
+const transactionOwners=["Agent","Client","Lender","Title","Inspector","Appraiser","Other"];
+const transactionPhases=["Contract & Handoff","Inspection & Due Diligence","Financing & Appraisal","Title & Closing Prep","Final Walkthrough & Closing","Post-Closing"];
+
+const buyerTransactionSteps=[
+  {key:"signed-contract",phase:"Contract & Handoff",title:"Verify the fully signed contract is complete",description:"Confirm all signatures, initials, addenda, agency documents, and copies required by the brokerage file.",owner:"Agent",dateField:"contractDate",required:true},
+  {key:"deliver-contract",phase:"Contract & Handoff",title:"Send the contract to lender and title company",description:"Deliver the ratified contract and confirm both parties opened the file.",owner:"Agent",base:"contractDate",offset:0,required:true},
+  {key:"earnest-money",phase:"Contract & Handoff",title:"Confirm earnest money was delivered",description:"Track the exact contract deadline, amount, holder, and receipt. Do not guess the deadline.",owner:"Client",dateField:"earnestMoneyDue",required:true},
+  {key:"loan-application",phase:"Contract & Handoff",title:"Confirm full loan application and lender documents",description:"Buyer submits requested income, asset, identification, and financing documents.",owner:"Client",dateField:"financingApplicationDue",required:true},
+  {key:"open-title",phase:"Contract & Handoff",title:"Confirm title / escrow file is open",description:"Verify title contact, file number, and communication expectations.",owner:"Title",base:"contractDate",offset:1,required:true},
+
+  {key:"schedule-inspection",phase:"Inspection & Due Diligence",title:"Schedule the home inspection immediately",description:"Leave enough time for the inspection report, specialists, negotiation, and written response.",owner:"Client",base:"contractDate",offset:1,required:true},
+  {key:"inspection-complete",phase:"Inspection & Due Diligence",title:"Complete home inspection",description:"Confirm buyer attendance, access instructions, utilities, and report delivery.",owner:"Inspector",dateField:"inspectionDeadline",required:true},
+  {key:"specialist-inspections",phase:"Inspection & Due Diligence",title:"Complete any specialist inspections",description:"Examples may include sewer scope, septic, well, radon, structural, chimney, pest, or environmental reviews when applicable.",owner:"Client",dateField:"inspectionDeadline",required:false},
+  {key:"inspection-response",phase:"Inspection & Due Diligence",title:"Submit the inspection response before the deadline",description:"Document the buyer decision exactly as permitted by the contract and brokerage forms.",owner:"Agent",dateField:"inspectionResponseDeadline",required:true},
+  {key:"repair-agreement",phase:"Inspection & Due Diligence",title:"Obtain the fully executed repair / credit agreement",description:"Confirm every negotiated repair, credit, price change, or termination document is signed and delivered.",owner:"Agent",dateField:"inspectionResponseDeadline",required:true},
+
+  {key:"insurance",phase:"Financing & Appraisal",title:"Bind homeowner insurance",description:"Buyer selects coverage that satisfies lender requirements and provides evidence before closing.",owner:"Client",base:"closingDate",offset:-14,required:true},
+  {key:"appraisal-ordered",phase:"Financing & Appraisal",title:"Confirm appraisal was ordered",description:"Monitor lender ordering and appraiser access without attempting to influence value.",owner:"Lender",base:"contractDate",offset:2,required:true},
+  {key:"appraisal-complete",phase:"Financing & Appraisal",title:"Confirm appraisal is complete and received",description:"Track value, required repairs, and any reconsideration or amendment needed.",owner:"Lender",dateField:"appraisalDeadline",required:true},
+  {key:"appraisal-resolution",phase:"Financing & Appraisal",title:"Resolve appraisal or lender-required repairs",description:"Document any price, credit, repair, or financing resolution in writing.",owner:"Agent",dateField:"appraisalDeadline",required:false},
+  {key:"loan-commitment",phase:"Financing & Appraisal",title:"Confirm financing commitment / clear-to-close progress",description:"Get a direct lender update and identify outstanding underwriting conditions.",owner:"Lender",dateField:"loanCommitmentDeadline",required:true},
+
+  {key:"title-commitment",phase:"Title & Closing Prep",title:"Review title commitment and exceptions",description:"Confirm the buyer receives title information and any title issue is escalated to the proper professional.",owner:"Title",dateField:"titleDeadline",required:true},
+  {key:"survey-title-insurance",phase:"Title & Closing Prep",title:"Confirm survey and owner’s title-insurance decisions",description:"Track selections required by the contract, lender, or buyer.",owner:"Client",dateField:"titleDeadline",required:false},
+  {key:"closing-disclosure",phase:"Title & Closing Prep",title:"Confirm buyer received and reviewed the Closing Disclosure",description:"For most financed purchases, the buyer must receive the Closing Disclosure at least three business days before closing. Enter the lender-confirmed delivery date.",owner:"Lender",dateField:"closingDisclosureDue",required:true},
+  {key:"cash-to-close",phase:"Title & Closing Prep",title:"Confirm cash to close and independently verify wire instructions",description:"Buyer confirms final funds, acceptable payment method, and wire instructions using a known trusted phone number—not an unexpected email.",owner:"Client",base:"closingDate",offset:-2,required:true},
+  {key:"utilities-address",phase:"Title & Closing Prep",title:"Arrange utilities, insurance start, and address changes",description:"Coordinate service transfers for the possession date.",owner:"Client",base:"possessionDate",offset:-2,required:false},
+
+  {key:"repairs-verified",phase:"Final Walkthrough & Closing",title:"Verify agreed repairs and receipts",description:"Confirm work promised in the contract or amendment is complete before the final walkthrough.",owner:"Agent",dateField:"repairCompletionDate",required:true},
+  {key:"final-walkthrough",phase:"Final Walkthrough & Closing",title:"Complete final walkthrough",description:"Verify condition, agreed repairs, included items, vacancy, and possession expectations.",owner:"Agent",dateField:"finalWalkthroughDate",required:true},
+  {key:"closing-prep",phase:"Final Walkthrough & Closing",title:"Confirm closing appointment, identification, and final instructions",description:"Buyer knows when, where, how to sign, and what verified funds or identification are required.",owner:"Agent",base:"closingDate",offset:-1,required:true},
+  {key:"closing-signing",phase:"Final Walkthrough & Closing",title:"Buyer signs closing documents",description:"Confirm questions are directed to the lender, title company, attorney, or other proper professional.",owner:"Client",dateField:"closingDate",required:true},
+  {key:"funding-recording",phase:"Final Walkthrough & Closing",title:"Confirm funding and deed recording",description:"Do not promise keys or possession until the applicable funding, recording, and contract requirements are satisfied.",owner:"Title",dateField:"closingDate",required:true},
+  {key:"keys-possession",phase:"Final Walkthrough & Closing",title:"Deliver keys and possession as agreed",description:"Track the exact possession date and any post-closing occupancy terms.",owner:"Agent",dateField:"possessionDate",required:true},
+
+  {key:"closing-docs",phase:"Post-Closing",title:"Send and securely store the closing package",description:"Confirm the client has final documents and the brokerage file contains required records.",owner:"Agent",base:"closingDate",offset:1,required:true},
+  {key:"seven-day-check",phase:"Post-Closing",title:"Complete the 7-day client check-in",description:"Confirm the move, utilities, keys, and immediate ownership questions are settled.",owner:"Agent",base:"closingDate",offset:7,required:false},
+  {key:"thirty-day-check",phase:"Post-Closing",title:"Complete the 30-day relationship follow-up",description:"Provide value, request an honest review when appropriate, and remain available after closing.",owner:"Agent",base:"closingDate",offset:30,required:false}
+];
+
+const sellerTransactionSteps=[
+  {key:"signed-contract",phase:"Contract & Handoff",title:"Verify the fully signed contract is complete",description:"Confirm signatures, initials, addenda, disclosures, agency forms, and copies required by the brokerage file.",owner:"Agent",dateField:"contractDate",required:true},
+  {key:"deliver-contract",phase:"Contract & Handoff",title:"Send the contract to title and the buyer’s lender",description:"Confirm both files are open and all parties have current contact information.",owner:"Agent",base:"contractDate",offset:0,required:true},
+  {key:"earnest-money",phase:"Contract & Handoff",title:"Confirm earnest money receipt status",description:"Track receipt through the proper holder in accordance with the purchase contract and brokerage procedure.",owner:"Agent",dateField:"earnestMoneyDue",required:true},
+  {key:"seller-title-package",phase:"Contract & Handoff",title:"Collect seller payoff, marital, trust, estate, HOA, and title information",description:"Send requested seller information securely to the title company.",owner:"Client",base:"contractDate",offset:2,required:true},
+  {key:"contract-summary",phase:"Contract & Handoff",title:"Send the seller a plain-language transaction summary",description:"Review price, concessions, contingencies, critical dates, closing, possession, and what happens next.",owner:"Agent",base:"contractDate",offset:1,required:true},
+
+  {key:"inspection-access",phase:"Inspection & Due Diligence",title:"Coordinate inspection access",description:"Confirm access, utilities, pets, security, and seller preparation without interfering with the inspector.",owner:"Agent",dateField:"inspectionDeadline",required:true},
+  {key:"inspection-response",phase:"Inspection & Due Diligence",title:"Review the buyer’s inspection response",description:"Explain the business choices while using proper forms and escalating legal or technical questions.",owner:"Agent",dateField:"inspectionResponseDeadline",required:true},
+  {key:"repair-agreement",phase:"Inspection & Due Diligence",title:"Obtain the fully executed repair / credit agreement",description:"Confirm every repair, credit, price change, or other resolution is written and signed.",owner:"Agent",dateField:"inspectionResponseDeadline",required:true},
+  {key:"repair-work",phase:"Inspection & Due Diligence",title:"Track repairs, invoices, permits, and receipts",description:"Monitor completion and retain evidence required by the agreement.",owner:"Client",dateField:"repairCompletionDate",required:true},
+
+  {key:"appraisal-access",phase:"Financing & Appraisal",title:"Coordinate appraiser access and property readiness",description:"Provide lawful access and factual property information without pressuring the appraiser.",owner:"Agent",dateField:"appraisalDeadline",required:true},
+  {key:"appraisal-result",phase:"Financing & Appraisal",title:"Confirm appraisal status and resolve required issues",description:"Track value, lender-required repairs, or written amendments when applicable.",owner:"Agent",dateField:"appraisalDeadline",required:true},
+  {key:"loan-status",phase:"Financing & Appraisal",title:"Obtain a direct buyer-loan status update",description:"Monitor financing progress and unresolved conditions without requesting protected financial details.",owner:"Lender",dateField:"loanCommitmentDeadline",required:true},
+
+  {key:"title-clearance",phase:"Title & Closing Prep",title:"Resolve title, lien, payoff, probate, trust, or HOA requirements",description:"Track title-company requirements and refer legal questions to the appropriate professional.",owner:"Title",dateField:"titleDeadline",required:true},
+  {key:"deed-payoff",phase:"Title & Closing Prep",title:"Confirm deed, payoff, HOA, and seller identity documents",description:"Verify title has everything required to prepare closing.",owner:"Client",base:"closingDate",offset:-7,required:true},
+  {key:"seller-closing-statement",phase:"Title & Closing Prep",title:"Review the seller closing statement and estimated net",description:"Verify price, payoffs, taxes, credits, commissions, fees, and proceeds with title before signing.",owner:"Agent",base:"closingDate",offset:-3,required:true},
+  {key:"proceeds-security",phase:"Title & Closing Prep",title:"Independently verify seller proceeds instructions",description:"Use known contact information to confirm any wire or proceeds instructions and warn the seller about impersonation scams.",owner:"Client",base:"closingDate",offset:-3,required:true},
+  {key:"move-possession",phase:"Title & Closing Prep",title:"Confirm moving, utilities, occupancy, and possession plan",description:"Seller understands when the property must be vacant, clean, and delivered under the contract.",owner:"Client",base:"possessionDate",offset:-3,required:true},
+
+  {key:"repair-completion",phase:"Final Walkthrough & Closing",title:"Confirm repairs and receipts are complete",description:"Verify agreed work is complete before the buyer’s final walkthrough.",owner:"Agent",dateField:"repairCompletionDate",required:true},
+  {key:"property-delivery",phase:"Final Walkthrough & Closing",title:"Prepare property for final walkthrough and delivery",description:"Clean the property, remove excluded belongings, leave included items, and gather keys, codes, remotes, warranties, and receipts.",owner:"Client",base:"closingDate",offset:-1,required:true},
+  {key:"final-walkthrough",phase:"Final Walkthrough & Closing",title:"Confirm buyer final walkthrough result",description:"Address any last-minute condition or repair issue using proper written instructions.",owner:"Agent",dateField:"finalWalkthroughDate",required:true},
+  {key:"seller-signing",phase:"Final Walkthrough & Closing",title:"Seller completes closing signatures",description:"Confirm signing time, location or remote arrangement, identification, and title instructions.",owner:"Client",dateField:"closingDate",required:true},
+  {key:"funding-recording",phase:"Final Walkthrough & Closing",title:"Confirm funding, recording, and authorized possession",description:"Do not release keys or possession before the applicable closing requirements are satisfied.",owner:"Title",dateField:"closingDate",required:true},
+  {key:"keys-possession",phase:"Final Walkthrough & Closing",title:"Transfer keys and possession as agreed",description:"Track exact possession terms, including any post-closing occupancy.",owner:"Agent",dateField:"possessionDate",required:true},
+
+  {key:"proceeds-confirmed",phase:"Post-Closing",title:"Confirm seller proceeds were received",description:"Have the seller contact title directly if expected funds are delayed or incorrect.",owner:"Agent",base:"closingDate",offset:1,required:true},
+  {key:"closed-file",phase:"Post-Closing",title:"Complete the brokerage closed file and commission check",description:"Confirm final documents, accounting, commission, referral obligations, and required transaction records.",owner:"Agent",base:"closingDate",offset:1,required:true},
+  {key:"seven-day-check",phase:"Post-Closing",title:"Complete the 7-day seller check-in",description:"Confirm the move, possession, proceeds, and remaining questions are settled.",owner:"Agent",base:"closingDate",offset:7,required:false},
+  {key:"thirty-day-check",phase:"Post-Closing",title:"Complete the 30-day relationship follow-up",description:"Provide continued value and request a review or introduction when appropriate.",owner:"Agent",base:"closingDate",offset:30,required:false}
+];
+
+
+const defaultTransactionResources = [
+  {id:"ohio-buyer-guide",name:"Ohio REALTORS — Buyer transaction steps",category:"Official Guidance",url:"https://www.ohiorealtors.org/consumers-home-buying-steps/",official:true,notes:"Ohio transaction overview: contract, earnest money, title, inspections, financing, insurance, closing, and recording."},
+  {id:"ohio-seller-guide",name:"Ohio REALTORS — Selling and closing",category:"Official Guidance",url:"https://www.ohiorealtors.org/consumers-selling-your-home/",official:true,notes:"Seller overview including offers, inspection negotiation, final walkthrough preparation, and closing."},
+  {id:"cfpb-closing",name:"CFPB — Closing process",category:"Official Guidance",url:"https://www.consumerfinance.gov/owning-a-home/close/",official:true,notes:"Federal consumer guidance for underwriting requests, inspection, insurance, title services, documents, closing, and after closing."},
+  {id:"cfpb-inspection",name:"CFPB — Home inspection",category:"Official Guidance",url:"https://www.consumerfinance.gov/owning-a-home/close/schedule-a-home-inspection/",official:true,notes:"Inspection timing, independence, appraisal distinction, and contingency considerations."},
+  {id:"cfpb-disclosure",name:"CFPB — Closing Disclosure",category:"Official Guidance",url:"https://www.consumerfinance.gov/owning-a-home/closing-disclosure/",official:true,notes:"For most financed purchases, lender delivery and the three-business-day review requirement."},
+  {id:"ohio-records",name:"Ohio law — Transaction records",category:"Official Guidance",url:"https://codes.ohio.gov/ohio-revised-code/section-4735.18",official:true,notes:"Ohio transaction-record retention and document-copy requirements."},
+
+  {id:"brokeragePortal",name:"Brokerage compliance / transaction system",category:"Work Portal",url:"",official:false,notes:"Examples may include the system required by your brokerage."},
+  {id:"documentPortal",name:"Forms and e-signature",category:"Work Portal",url:"",official:false,notes:"Your approved contract, form, signature, or document-management platform."},
+  {id:"mlsUrl",name:"MLS listing / transaction record",category:"Work Portal",url:"",official:false,notes:"Your MLS or the specific listing record."},
+  {id:"showingPortal",name:"Showing / lockbox platform",category:"Work Portal",url:"",official:false,notes:"Showing scheduling, feedback, access, or offer-management platform."},
+  {id:"lenderPortal",name:"Lender portal",category:"Work Portal",url:"",official:false,notes:"Secure lender status or document portal."},
+  {id:"titlePortal",name:"Title / escrow portal",category:"Work Portal",url:"",official:false,notes:"Secure title, escrow, payoff, signing, or closing portal."},
+  {id:"inspectionPortal",name:"Inspection / report portal",category:"Work Portal",url:"",official:false,notes:"Inspection scheduling or report access."},
+  {id:"auditorUrl",name:"County auditor property search",category:"Public Records",url:"",official:false,notes:"County property, tax, legal-description, and parcel research."},
+  {id:"recorderUrl",name:"County recorder search",category:"Public Records",url:"",official:false,notes:"Recorded deeds, mortgages, liens, releases, and land records."},
+  {id:"hoaPortal",name:"HOA / condominium portal",category:"Work Portal",url:"",official:false,notes:"Resale certificates, governing documents, fees, and association contacts."},
+  {id:"utilityUrl",name:"Utilities / service transfer",category:"Work Portal",url:"",official:false,notes:"Utility or municipal service-transfer resources."}
+];
+
+const financingStepKeys = new Set([
+  "loan-application","loan-commitment","closing-disclosure","loan-status"
+]);
+const appraisalStepKeys = new Set([
+  "appraisal-ordered","appraisal-complete","appraisal-resolution","appraisal-access","appraisal-result"
+]);
+const inspectionStepKeys = new Set([
+  "schedule-inspection","inspection-complete","specialist-inspections","inspection-response","inspection-access","repair-agreement"
+]);
+
+buyerTransactionSteps.push(
+  {key:"buyer-home-sale",phase:"Contract & Handoff",title:"Track the buyer’s current-home sale contingency",description:"Monitor the exact contingency terms, required status updates, notices, and written deadline from the purchase contract.",owner:"Agent",dateField:"buyerHomeSaleDeadline",required:true,condition:"buyerHomeSaleContingency"},
+  {key:"hoa-review",phase:"Inspection & Due Diligence",title:"Receive and review HOA / condominium documents",description:"Track the contract deadline for resale certificates, governing documents, budgets, insurance, fees, assessments, and the buyer’s written decision.",owner:"Agent",dateField:"hoaReviewDeadline",required:true,condition:"hoaCondo"},
+  {key:"well-septic-review",phase:"Inspection & Due Diligence",title:"Complete well, septic, and water-quality due diligence",description:"Schedule applicable inspections or tests, review reports, and complete any contract response before the due-diligence deadline.",owner:"Client",dateField:"inspectionDeadline",required:true,condition:"wellSeptic"},
+  {key:"home-warranty",phase:"Title & Closing Prep",title:"Confirm home-warranty selection and ordering",description:"Verify coverage, provider, payer, cost limit, and delivery when the contract includes a home warranty.",owner:"Agent",base:"closingDate",offset:-5,required:false,condition:"homeWarranty"},
+  {key:"occupancy-agreement",phase:"Final Walkthrough & Closing",title:"Verify post-closing occupancy terms and protections",description:"Confirm written occupancy terms, insurance, deposit or holdback, utilities, keys, condition documentation, and final possession.",owner:"Agent",dateField:"possessionDate",required:true,condition:"postClosingOccupancy"}
+);
+sellerTransactionSteps.push(
+  {key:"buyer-home-sale",phase:"Contract & Handoff",title:"Monitor the buyer’s home-sale contingency",description:"Track required notices, status evidence, removal terms, and the exact written deadline in the purchase contract.",owner:"Agent",dateField:"buyerHomeSaleDeadline",required:true,condition:"buyerHomeSaleContingency"},
+  {key:"hoa-order",phase:"Contract & Handoff",title:"Order and deliver HOA / condominium resale documents",description:"Track association contacts, fees, governing documents, assessments, insurance information, and delivery evidence.",owner:"Client",dateField:"hoaReviewDeadline",required:true,condition:"hoaCondo"},
+  {key:"well-septic-docs",phase:"Inspection & Due Diligence",title:"Provide well, septic, and water records and access",description:"Collect service records, permits, test results, and coordinate access for any contract-required inspections.",owner:"Client",dateField:"inspectionDeadline",required:true,condition:"wellSeptic"},
+  {key:"home-warranty",phase:"Title & Closing Prep",title:"Order the agreed home warranty",description:"Confirm provider, coverage, payer, cost limit, and proof of ordering when required by the contract.",owner:"Agent",base:"closingDate",offset:-5,required:false,condition:"homeWarranty"},
+  {key:"occupancy-agreement",phase:"Final Walkthrough & Closing",title:"Administer post-closing occupancy and final possession",description:"Track written occupancy terms, insurance, deposit or holdback, utilities, keys, condition evidence, and possession release.",owner:"Agent",dateField:"possessionDate",required:true,condition:"postClosingOccupancy"}
+);
+
+function blankTransaction(contactId="",side="Seller"){
+  return {
+    id:uid(),contactId,propertyId:"",side,status:"Under Contract",
+    street:"",unit:"",city:"",state:"OH",zip:"",county:"",
+    purchasePrice:0,contractDate:TODAY(),closingDate:"",possessionDate:"",
+    earnestMoneyAmount:0,earnestMoneyHolder:"",earnestMoneyDue:"",
+    inspectionDeadline:"",inspectionResponseDeadline:"",financingApplicationDue:"",
+    appraisalDeadline:"",loanCommitmentDeadline:"",titleDeadline:"",
+    closingDisclosureDue:"",repairCompletionDate:"",finalWalkthroughDate:"",
+    financingType:"Conventional",cashTransaction:false,
+    inspectionApplies:true,financingApplies:true,appraisalApplies:true,
+    hoaCondo:false,wellSeptic:false,repairsNegotiated:false,postClosingOccupancy:false,
+    buyerHomeSaleContingency:false,homeWarranty:false,buyerHomeSaleDeadline:"",hoaReviewDeadline:"",
+    pinnedNextStepId:"",
+    brokeragePortal:"",documentPortal:"",mlsUrl:"",showingPortal:"",lenderPortal:"",titlePortal:"",
+    inspectionPortal:"",auditorUrl:"",recorderUrl:"",hoaPortal:"",utilityUrl:"",
+    lenderCompany:"",lenderName:"",lenderPhone:"",lenderEmail:"",
+    titleCompany:"",titleName:"",titlePhone:"",titleEmail:"",
+    inspectorCompany:"",inspectorName:"",inspectorPhone:"",inspectorEmail:"",
+    cooperatingAgentName:"",cooperatingAgentPhone:"",cooperatingAgentEmail:"",
+    gci:0,referralFee:0,brokerageSplit:0,notes:"",checklist:[],
+    createdAt:NOW(),updatedAt:NOW(),closedAt:""
+  }
+}
+function transaction(id){return (db.transactions||[]).find(tx=>tx.id===id)}
+function transactionsForContact(contactId){return (db.transactions||[]).filter(tx=>tx.contactId===contactId)}
+function activeTransactions(){return (db.transactions||[]).filter(tx=>!["Closed","Terminated"].includes(tx.status))}
+function transactionProperty(tx){
+  return db.properties.find(p=>p.id===tx?.propertyId)||null
+}
+function transactionAddress(tx){
+  const p=transactionProperty(tx);
+  if(p&&propertyAddress(p))return propertyAddress(p);
+  const line=[tx?.street,tx?.unit].filter(Boolean).join(" ");
+  const locality=[tx?.city,tx?.state,tx?.zip].filter(Boolean).join(" ");
+  return [line,locality].filter(Boolean).join(", ")
+}
+function transactionAddressObject(tx){
+  const p=transactionProperty(tx);
+  return p?{street:p.street||"",unit:p.unit||"",city:p.city||"",state:p.state||"OH",zip:p.zip||"",county:p.county||""}:
+    {street:tx?.street||"",unit:tx?.unit||"",city:tx?.city||"",state:tx?.state||"OH",zip:tx?.zip||"",county:tx?.county||""}
+}
+function transactionDaysToClose(tx){
+  if(!tx?.closingDate)return null;
+  const today=new Date(`${TODAY()}T12:00:00`),close=new Date(`${tx.closingDate}T12:00:00`);
+  return Math.ceil((close-today)/86400000)
+}
+function transactionTemplate(tx){return tx.side==="Buyer"?buyerTransactionSteps:sellerTransactionSteps}
+function transactionDueForTemplate(template,tx){
+  if(template.dateField&&tx[template.dateField])return tx[template.dateField];
+  if(template.base&&tx[template.base])return addDays(tx[template.base],template.offset||0);
+  return ""
+}
+function transactionDeadlineType(template){
+  if(template.dateField)return template.dateField==="closingDisclosureDue"?"Confirmed / Regulatory":"Contract Deadline";
+  if(template.base)return "Suggested Target";
+  return "Milestone"
+}
+function transactionTemplateApplies(template,tx){
+  if(template.condition&&!tx[template.condition])return false;
+  if(financingStepKeys.has(template.key)&&(!tx.financingApplies||tx.cashTransaction))return false;
+  if(appraisalStepKeys.has(template.key)&&!tx.appraisalApplies)return false;
+  if(inspectionStepKeys.has(template.key)&&!tx.inspectionApplies)return false;
+  if(["repair-agreement","repair-work","repairs-verified","repair-completion"].includes(template.key)&&!tx.repairsNegotiated&&template.key!=="repair-agreement")return false;
+  return true
+}
+function buildTransactionChecklist(tx,preserve=true){
+  const existing=new Map((tx.checklist||[]).map(step=>[step.key,step]));
+  const generated=transactionTemplate(tx).map((template,index)=>{
+    const old=existing.get(template.key)||{},applicable=transactionTemplateApplies(template,tx);
+    let status=old.status||"Not Started";
+    if(!applicable&&!["Done","Problem"].includes(status))status="Skipped";
+    if(applicable&&old.autoSkipped&&status==="Skipped")status="Not Started";
+    return {
+      id:old.id||uid(),key:template.key,phase:template.phase,title:template.title,
+      description:template.description,due:old.customDue?old.due:transactionDueForTemplate(template,tx),
+      customDue:Boolean(old.customDue),deadlineType:old.customDue?(old.deadlineType||"Custom Date"):transactionDeadlineType(template),
+      status,owner:old.owner||template.owner,required:template.required!==false,
+      notes:old.notes||"",completedAt:old.completedAt||"",resourceUrl:old.resourceUrl||"",
+      applicable,autoSkipped:!applicable,sort:index,custom:false
+    }
+  });
+  const custom=(tx.checklist||[]).filter(step=>step.custom).map(step=>({...step,applicable:step.applicable!==false,autoSkipped:false}));
+  tx.checklist=[...generated,...custom].sort((a,b)=>(transactionPhases.indexOf(a.phase)-transactionPhases.indexOf(b.phase))||(a.sort||0)-(b.sort||0));
+  if(tx.pinnedNextStepId&&!tx.checklist.some(step=>step.id===tx.pinnedNextStepId&&!["Done","Skipped"].includes(step.status)))tx.pinnedNextStepId=""
+}
+function normalizeTransaction(tx){
+  const normalized={...blankTransaction(tx.contactId||"",tx.side||"Seller"),...tx,id:tx.id||uid(),
+    purchasePrice:Number(tx.purchasePrice||0),earnestMoneyAmount:Number(tx.earnestMoneyAmount||0),
+    gci:Number(tx.gci||0),referralFee:Number(tx.referralFee||0),brokerageSplit:Number(tx.brokerageSplit||0),
+    checklist:Array.isArray(tx.checklist)?tx.checklist.map((step,index)=>({
+      id:step.id||uid(),key:step.key||`custom-${uid()}`,phase:step.phase||"Contract & Handoff",
+      title:step.title||"Transaction step",description:step.description||"",due:step.due||"",
+      customDue:Boolean(step.customDue),deadlineType:step.deadlineType||"Custom Date",
+      status:step.status||"Not Started",owner:step.owner||"Agent",
+      required:step.required!==false,notes:step.notes||"",completedAt:step.completedAt||"",
+      resourceUrl:step.resourceUrl||"",applicable:step.applicable!==false,autoSkipped:Boolean(step.autoSkipped),
+      sort:Number(step.sort??index),custom:Boolean(step.custom)
+    })):[]
+  };
+  buildTransactionChecklist(normalized,true);
+  return normalized
+}
+function ensureTransactionForContact(c){
+  if(!c||!["Buyer","Seller"].includes(c.type))return null;
+  let tx=transactionsForContact(c.id).find(item=>!["Closed","Terminated"].includes(item.status));
+  if(tx)return tx;
+  tx=blankTransaction(c.id,c.type);
+  const p=primaryProperty(c);
+  if(p){
+    tx.propertyId=p.id;
+    const a={street:p.street||"",unit:p.unit||"",city:p.city||"",state:p.state||"OH",zip:p.zip||"",county:p.county||""};
+    Object.assign(tx,a);
+    tx.purchasePrice=Number(p.expectedSalePrice||p.listPrice||0)
+  }
+  tx.gci=Number(c.gci||0);
+  buildTransactionChecklist(tx,false);
+  db.transactions.unshift(tx);
+  return tx
+}
+function transactionStepState(step){
+  if(["Done","Skipped"].includes(step.status))return step.status.toLowerCase();
+  if(step.status==="Problem")return "problem";
+  if(step.due&&step.due<TODAY()&&["Contract Deadline","Confirmed / Regulatory","Custom Date"].includes(step.deadlineType))return "overdue";
+  if(step.due&&step.due<TODAY()&&step.deadlineType==="Suggested Target")return "attention";
+  if(step.due===TODAY())return "today";
+  if(step.due&&step.due<=addDays(TODAY(),3))return "soon";
+  return "open"
+}
+function transactionProgress(tx){
+  const applicable=(tx.checklist||[]).filter(step=>step.status!=="Skipped");
+  const done=applicable.filter(step=>step.status==="Done").length;
+  return {done,total:applicable.length,pct:applicable.length?Math.round(done/applicable.length*100):0}
+}
+function transactionAudit(tx){
+  const issues=[],add=(severity,label,detail)=>issues.push({severity,label,detail});
+  if(!transactionAddress(tx))add("error","Property address missing","Link or enter the property under contract.");
+  if(!tx.contractDate)add("error","Contract date missing","Enter the fully accepted contract date.");
+  if(!tx.closingDate)add("error","Closing date missing","Enter the signed contract closing date.");
+  if(tx.contractDate&&tx.closingDate&&tx.closingDate<tx.contractDate)add("error","Closing precedes contract","Recheck the dates against the signed agreement.");
+  if(!tx.possessionDate)add("warning","Possession date missing","Closing and possession are not always the same.");
+  if(!tx.earnestMoneyDue)add("warning","Earnest-money deadline missing","Enter the exact contract deadline or mark the step skipped if none applies.");
+  if(tx.inspectionApplies&&!tx.inspectionDeadline)add("warning","Inspection deadline missing","Use the contract—not a default number of days.");
+  if(tx.inspectionDeadline&&tx.inspectionResponseDeadline&&tx.inspectionResponseDeadline<tx.inspectionDeadline)add("warning","Inspection response precedes inspection deadline","Verify the sequence in the contract.");
+  if(tx.financingApplies&&!tx.cashTransaction&&!tx.loanCommitmentDeadline)add("warning","Financing deadline missing","Enter the contract’s financing or commitment deadline when applicable.");
+  if(tx.side==="Buyer"&&tx.financingApplies&&!tx.cashTransaction&&!tx.lenderName&&!tx.lenderCompany)add("warning","Lender contact missing","Add the loan officer or lender portal.");
+  if(!tx.titleName&&!tx.titleCompany)add("warning","Title contact missing","Add the title or settlement contact handling the file.");
+  if(tx.side==="Buyer"&&tx.financingApplies&&!tx.cashTransaction&&tx.closingDate&&tx.closingDate<=addDays(TODAY(),7)&&!tx.closingDisclosureDue)add("warning","Closing Disclosure receipt not confirmed","Track the lender-confirmed receipt date for most financed purchases.");
+  if(tx.closingDisclosureDue&&tx.closingDate&&tx.closingDisclosureDue>tx.closingDate)add("error","Closing Disclosure date is after closing","Correct the date and immediately check with the lender.");
+  if(tx.closingDate&&!tx.finalWalkthroughDate)add("warning","Final walkthrough not scheduled","Set the client-confirmed date and time.");
+  if(tx.postClosingOccupancy&&!tx.possessionDate)add("error","Occupancy deal lacks possession date","Enter the written possession date and verify the occupancy agreement.");
+  return issues
+}
+function transactionHealth(tx){
+  if(tx.status==="Closed")return {label:"Closed",className:"closed"};
+  if(tx.status==="Terminated")return {label:"Terminated",className:"terminated"};
+  if(tx.status==="Clear to Close")return {label:"Clear to Close",className:"clear"};
+  const audit=transactionAudit(tx);
+  if(audit.some(issue=>issue.severity==="error"))return {label:"Setup / Error",className:"setup"};
+  const open=(tx.checklist||[]).filter(step=>!["Done","Skipped"].includes(step.status));
+  if(open.some(step=>step.status==="Problem"))return {label:"Problem",className:"problem"};
+  if(open.some(step=>step.required&&step.due&&step.due<TODAY()&&["Contract Deadline","Confirmed / Regulatory","Custom Date"].includes(step.deadlineType)))return {label:"At Risk",className:"risk"};
+  if(open.some(step=>step.due===TODAY()&&["Contract Deadline","Confirmed / Regulatory","Custom Date"].includes(step.deadlineType)))return {label:"Due Today",className:"today"};
+  if(audit.some(issue=>issue.severity==="warning")||open.some(step=>step.due&&step.due<TODAY()&&step.deadlineType==="Suggested Target"))return {label:"Needs Attention",className:"attention"};
+  return {label:"On Track",className:"track"}
+}
+function nextTransactionStep(tx){
+  const open=(tx.checklist||[]).filter(step=>!["Done","Skipped"].includes(step.status));
+  const pinned=open.find(step=>step.id===tx.pinnedNextStepId);
+  if(pinned)return pinned;
+  return open.sort((a,b)=>{
+      if(a.status==="Problem"&&b.status!=="Problem")return -1;
+      if(b.status==="Problem"&&a.status!=="Problem")return 1;
+      const aContract=["Contract Deadline","Confirmed / Regulatory","Custom Date"].includes(a.deadlineType);
+      const bContract=["Contract Deadline","Confirmed / Regulatory","Custom Date"].includes(b.deadlineType);
+      if(aContract!==bContract)return aContract?-1:1;
+      const ad=a.due||"9999-12-31",bd=b.due||"9999-12-31";
+      return ad.localeCompare(bd)||(a.sort||0)-(b.sort||0)
+    })[0]||null
+}
+function setTransactionNextStep(txId,stepId){
+  const tx=transaction(txId),step=tx?.checklist.find(item=>item.id===stepId);if(!tx||!step)return;
+  tx.pinnedNextStepId=stepId;tx.updatedAt=NOW();save();renderTransaction(txId);toast("Next step changed",step.title)
+}
+function clearTransactionNextStep(txId){
+  const tx=transaction(txId);if(!tx)return;
+  tx.pinnedNextStepId="";tx.updatedAt=NOW();save();renderTransaction(txId);toast("Automatic next step restored","The earliest urgent open step is now shown.")
+}
+function transactionNextStepModal(txId){
+  const tx=transaction(txId);if(!tx)return;
+  const open=(tx.checklist||[]).filter(step=>!["Done","Skipped"].includes(step.status));
+  modal("Change next step",`<div class="next-step-picker">
+    <p>Pin the exact action you want at the top of this transaction. You can change it again at any time.</p>
+    ${open.map(step=>`<button class="next-step-choice ${step.id===tx.pinnedNextStepId?"active":""}" data-action="choose-tx-next" data-id="${tx.id}" data-step="${step.id}">
+      <span>${esc(step.phase)}</span><strong>${esc(step.title)}</strong><small>${step.due?`${esc(step.deadlineType)} • ${dateLabel(step.due)}`:"No date"} • ${esc(step.owner)}</small>
+    </button>`).join("")||`<div class="empty">No open steps remain.</div>`}
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="ghost-btn" data-action="clear-tx-next" data-id="${tx.id}">Use automatic next</button><button class="primary-btn" data-action="add-tx-step" data-id="${tx.id}">＋ Add custom step</button>`)
+}
+function completeTransactionNext(txId){
+  const tx=transaction(txId),step=tx?nextTransactionStep(tx):null;if(!tx||!step)return;
+  step.status="Done";step.completedAt=NOW();if(tx.pinnedNextStepId===step.id)tx.pinnedNextStepId="";
+  tx.updatedAt=NOW();save();renderTransaction(txId);toast("Step completed",step.title)
+}
+function moveTransactionNextDate(txId,days){
+  const tx=transaction(txId),step=tx?nextTransactionStep(tx):null;if(!step)return;
+  step.due=addDays(step.due||TODAY(),Number(days||1));step.customDue=true;step.deadlineType="Custom Date";
+  tx.pinnedNextStepId=step.id;tx.updatedAt=NOW();save();renderTransaction(txId);toast("Next step rescheduled",dateLabel(step.due))
+}
+function transactionDeadlineItems(){
+  const items=[];
+  activeTransactions().forEach(tx=>{
+    const c=contact(tx.contactId);
+    (tx.checklist||[]).filter(step=>!["Done","Skipped"].includes(step.status)&&(step.status==="Problem"||(step.due&&step.due<=TODAY()))).forEach(step=>{
+      items.push({tx,c,step})
+    })
+  });
+  return items.sort((a,b)=>{
+    if(a.step.status==="Problem"&&b.step.status!=="Problem")return -1;
+    if(b.step.status==="Problem"&&a.step.status!=="Problem")return 1;
+    return String(a.step.due||"").localeCompare(String(b.step.due||""))
+  })
+}
+function transactionSetupComplete(tx){
+  return Boolean(tx.contactId&&tx.contractDate&&tx.closingDate&&transactionAddress(tx))
+}
+function transactionCriticalDates(tx){
+  return [
+    ["Contract accepted",tx.contractDate],
+    ["Earnest money due",tx.earnestMoneyDue],
+    ["Inspection deadline",tx.inspectionDeadline],
+    ["Inspection response",tx.inspectionResponseDeadline],
+    ["Financing application",tx.financingApplicationDue],
+    ["Appraisal target",tx.appraisalDeadline],
+    ["Loan commitment",tx.loanCommitmentDeadline],
+    ["Title review",tx.titleDeadline],
+    ["Closing Disclosure received",tx.closingDisclosureDue],
+    ["Repairs complete",tx.repairCompletionDate],
+    ["Final walkthrough",tx.finalWalkthroughDate],
+    ["Closing",tx.closingDate],
+    ["Possession",tx.possessionDate]
+  ]
+}
+
+function transactionResource(id){return (db.transactionResources||[]).find(resource=>resource.id===id)}
+function effectiveTransactionResource(tx,id){
+  const direct=String(tx?.[id]||"").trim();
+  if(direct)return direct;
+  return String(transactionResource(id)?.url||"").trim()
+}
+function stepResourceKey(step){
+  const key=step?.key||"",title=String(step?.title||"").toLowerCase();
+  if(step?.resourceUrl)return "custom";
+  if(["loan-application","loan-commitment","loan-status","appraisal-ordered","appraisal-complete","appraisal-resolution","appraisal-access","appraisal-result","closing-disclosure"].includes(key))return "lenderPortal";
+  if(["open-title","title-commitment","title-clearance","deed-payoff","seller-closing-statement","closing-prep","closing-signing","seller-signing","funding-recording","proceeds-confirmed"].includes(key))return "titlePortal";
+  if(key.includes("inspection")||key.includes("well-septic"))return "inspectionPortal";
+  if(key.includes("hoa"))return "hoaPortal";
+  if(key.includes("utilities")||key.includes("occupancy"))return "utilityUrl";
+  if(key.includes("signed-contract")||key.includes("deliver-contract")||key.includes("agreement")||key.includes("closed-file"))return "documentPortal";
+  if(title.includes("recording")||title.includes("deed"))return "recorderUrl";
+  if(title.includes("property")||title.includes("title"))return "auditorUrl";
+  return "brokeragePortal"
+}
+function stepResourceUrl(tx,step){
+  if(step?.resourceUrl)return step.resourceUrl;
+  const key=stepResourceKey(step);
+  return key==="custom"?"":effectiveTransactionResource(tx,key)
+}
+function transactionResourceCardsHtml(tx){
+  const specific=[
+    ["brokeragePortal","Brokerage compliance"],
+    ["documentPortal","Forms & e-signature"],
+    ["mlsUrl","MLS record"],
+    ["showingPortal","Showing / lockbox"],
+    ["lenderPortal","Lender portal"],
+    ["titlePortal","Title / escrow"],
+    ["inspectionPortal","Inspection / report"],
+    ["auditorUrl","County auditor"],
+    ["recorderUrl","County recorder"],
+    ["hoaPortal","HOA / condominium"],
+    ["utilityUrl","Utilities"]
+  ];
+  const work=specific.map(([id,name])=>({id,name,url:effectiveTransactionResource(tx,id),official:false}));
+  const official=(db.transactionResources||[]).filter(resource=>resource.official);
+  return `<div class="tx-resource-groups">
+    <div><label>WORK SITES</label><div class="tx-resource-grid">${work.map(resource=>resource.url?`<a target="_blank" rel="noopener" href="${esc(resource.url)}"><strong>${esc(resource.name)}</strong><span>Open ↗</span></a>`:`<button data-action="open-transaction" data-id="${tx.id}"><strong>${esc(resource.name)}</strong><span>Add link</span></button>`).join("")}</div></div>
+    <div><label>VERIFIED REFERENCE GUIDES</label><div class="tx-resource-list">${official.map(resource=>`<a target="_blank" rel="noopener" href="${esc(resource.url)}"><div><strong>${esc(resource.name)}</strong><span>${esc(resource.notes||"Official reference")}</span></div><b>↗</b></a>`).join("")}</div></div>
+  </div>`
+}
+function transactionResourcesSettingsHtml(){
+  const resources=db.transactionResources||[];
+  return `<section class="setting-card transaction-resource-settings"><div class="setting-card-head"><div><h3>Transaction sites & portals</h3><p>Set common links once. Each transaction can override them.</p></div><button class="primary-btn compact" data-action="open-transaction-resource">＋ Add</button></div>
+    <div class="resource-settings-list">${resources.map(resource=>`<div class="resource-settings-row"><div><strong>${esc(resource.name)}</strong><span>${esc(resource.category)}${resource.url?` • ${esc(resource.url.split("://").pop().slice(0,42))}`:" • Link not set"}</span></div><button class="quick" data-action="open-transaction-resource" data-id="${resource.id}">${resource.official?"View":"Edit"}</button></div>`).join("")}</div>
+  </section>`
+}
+function transactionResourceModal(id=""){
+  const resource=transactionResource(id)||{id:"",name:"",category:"Work Portal",url:"",official:false,notes:""};
+  modal(resource.official?"Official reference":"Transaction resource",`<div class="form-grid">
+    <input id="transactionResourceId" type="hidden" value="${esc(resource.id)}">
+    <div class="field"><label>Name</label><input id="transactionResourceName" value="${esc(resource.name)}" ${resource.official?"readonly":""}></div>
+    <div class="field"><label>Category</label><input id="transactionResourceCategory" value="${esc(resource.category)}" ${resource.official?"readonly":""}></div>
+    <div class="field full"><label>Website URL</label><input id="transactionResourceUrl" type="url" value="${esc(resource.url)}" ${resource.official?"readonly":""}></div>
+    <div class="field full"><label>Purpose / note</label><textarea id="transactionResourceNotes" ${resource.official?"readonly":""}>${esc(resource.notes)}</textarea></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>${resource.official?`<a class="primary-btn" target="_blank" rel="noopener" href="${esc(resource.url)}">Open official guide</a>`:`${resource.id?`<button class="danger-btn" data-action="delete-transaction-resource" data-id="${resource.id}">Delete</button>`:""}<button class="primary-btn" data-action="save-transaction-resource">Save link</button>`}`)
+}
+function saveTransactionResource(){
+  const id=document.getElementById("transactionResourceId").value||uid(),name=document.getElementById("transactionResourceName").value.trim(),url=document.getElementById("transactionResourceUrl").value.trim();
+  if(!name)return alert("Add a resource name.");
+  if(url&&!url.startsWith("https://")&&!url.startsWith("http://"))return alert("Website links must begin with https:// or http://");
+  const resource={id,name,category:document.getElementById("transactionResourceCategory").value.trim()||"Work Portal",url,official:false,notes:document.getElementById("transactionResourceNotes").value.trim()};
+  const index=db.transactionResources.findIndex(item=>item.id===id);if(index>=0)db.transactionResources[index]=resource;else db.transactionResources.push(resource);
+  save();closeModal();renderSettings();toast("Transaction resource saved",name)
+}
+function deleteTransactionResource(id){
+  const resource=transactionResource(id);if(!resource||resource.official)return;
+  if(!confirm(`Delete ${resource.name}?`))return;
+  db.transactionResources=db.transactionResources.filter(item=>item.id!==id);save();closeModal();renderSettings()
+}
+
+function transactionContactPanelHtml(c){
+  const items=transactionsForContact(c.id).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  if(!items.length){
+    if(!["Buyer","Seller"].includes(c.type))return "";
+    return `<div class="transaction-contact-empty"><div><strong>No transaction file yet.</strong><span>When this client goes under contract, create the critical dates and step-by-step closing workflow here.</span></div><button class="primary-btn compact" data-action="open-transaction" data-contact="${c.id}">＋ Start transaction</button></div>`
+  }
+  return `<div class="transaction-contact-list">${items.map(tx=>{
+    const health=transactionHealth(tx),progress=transactionProgress(tx),next=nextTransactionStep(tx);
+    return `<article class="transaction-contact-card">
+      <div><span>${esc(tx.side)} side • ${esc(tx.status)}</span><strong>${esc(transactionAddress(tx)||"Address needed")}</strong><small>${tx.closingDate?`Closing ${dateLabel(tx.closingDate)}`:"Closing date needed"}${next?` • Next: ${esc(next.title)}`:""}</small></div>
+      <div class="transaction-contact-progress"><b>${progress.pct}%</b><span class="tx-health ${health.className}">${health.label}</span></div>
+      <a class="primary-btn compact" href="#/transaction/${tx.id}">Open transaction</a>
+    </article>`
+  }).join("")}</div>`
+}
+function transactionCardHtml(tx){
+  const c=contact(tx.contactId),health=transactionHealth(tx),progress=transactionProgress(tx),next=nextTransactionStep(tx),days=transactionDaysToClose(tx);
+  return `<article class="transaction-card">
+    <div class="transaction-card-top"><span class="tx-side ${tx.side.toLowerCase()}">${esc(tx.side)} side</span><span class="tx-health ${health.className}">${health.label}</span></div>
+    <h3><a href="#/transaction/${tx.id}">${esc(transactionAddress(tx)||"Property address needed")}</a></h3>
+    <p>${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Contact missing"} • ${money(tx.purchasePrice)}</p>
+    <div class="transaction-close-count"><strong>${days===null?"—":days<0?Math.abs(days):days}</strong><span>${days===null?"Closing date needed":days<0?"days past closing":days===0?"closing today":"days to closing"}</span></div>
+    <div class="tx-progress"><i style="width:${progress.pct}%"></i></div>
+    <div class="transaction-card-meta"><span>${progress.done}/${progress.total} steps</span><span>${tx.closingDate?dateLabel(tx.closingDate):"No closing date"}</span></div>
+    <div class="transaction-next"><label>NEXT STEP</label><strong>${next?esc(next.title):"Checklist complete"}</strong><small>${next?.due?dateLabel(next.due):"No date set"}</small></div>
+    <a class="primary-btn compact full-width" href="#/transaction/${tx.id}">Manage transaction</a>
+  </article>`
+}
+function transactionUpdateText(tx){
+  const c=contact(tx.contactId),progress=transactionProgress(tx),nextSteps=(tx.checklist||[])
+    .filter(step=>!["Done","Skipped"].includes(step.status))
+    .sort((a,b)=>String(a.due||"9999").localeCompare(String(b.due||"9999"))).slice(0,3);
+  const completed=(tx.checklist||[]).filter(step=>step.status==="Done").slice(-2);
+  const intro=`Hi ${c?.firstName||"there"}, here is your Holton Homes ${tx.side.toLowerCase()} transaction update for ${transactionAddress(tx)||"the property"}.`;
+  const done=completed.length?` Recently completed: ${completed.map(step=>step.title).join("; ")}.`:"";
+  const next=nextSteps.length?` Next up: ${nextSteps.map(step=>`${step.title}${step.due?` by ${dateLabel(step.due)}`:""}`).join("; ")}.`:" The current checklist is complete.";
+  const close=tx.closingDate?` Closing is currently scheduled for ${dateLabel(tx.closingDate)}.`:" We still need to confirm the closing date.";
+  return `${intro}${done}${next}${close} We are ${progress.pct}% through the tracked process. I will contact you immediately if a deadline or issue needs your decision.`
+}
+function renderTransactions(){
+  let items=[...(db.transactions||[])];
+  if(state.transactionFilter==="active")items=items.filter(tx=>!["Closed","Terminated"].includes(tx.status));
+  if(state.transactionFilter==="buyer")items=items.filter(tx=>tx.side==="Buyer"&&!["Closed","Terminated"].includes(tx.status));
+  if(state.transactionFilter==="seller")items=items.filter(tx=>tx.side==="Seller"&&!["Closed","Terminated"].includes(tx.status));
+  if(state.transactionFilter==="risk")items=items.filter(tx=>["risk","problem","setup"].includes(transactionHealth(tx).className)&&!["Closed","Terminated"].includes(tx.status));
+  if(state.transactionFilter==="closed")items=items.filter(tx=>["Closed","Terminated"].includes(tx.status));
+  items.sort((a,b)=>String(a.closingDate||"9999-12-31").localeCompare(String(b.closingDate||"9999-12-31")));
+  const active=activeTransactions(),risk=active.filter(tx=>["risk","problem","setup"].includes(transactionHealth(tx).className)).length;
+  const soon=active.filter(tx=>{const d=transactionDaysToClose(tx);return d!==null&&d>=0&&d<=14}).length;
+  document.getElementById("view").innerHTML=
+    backupWarningHtml()+
+    pageHead("Contract to closing","Transaction Center","Critical dates, contingencies, responsibilities, client updates, and every buyer or seller step in one place.",`<button class="primary-btn" data-action="open-transaction">＋ New transaction</button>`) +
+    `<section class="transaction-warning"><strong>Contract controls.</strong><span>Enter deadlines from the signed purchase agreement and brokerage instructions. The starter workflow is an operations checklist—not legal advice and not a substitute for the actual contract, lender, title company, broker, inspector, or attorney.</span></section>
+    <section class="metric-grid transaction-metrics">
+      <div class="metric"><label>Active deals</label><strong>${active.length}</strong><small>Buyer and seller sides</small></div>
+      <div class="metric"><label>At risk / setup</label><strong>${risk}</strong><small>Needs immediate attention</small></div>
+      <div class="metric"><label>Closing in 14 days</label><strong>${soon}</strong><small>Final preparation window</small></div>
+      <div class="metric"><label>Due or overdue</label><strong>${transactionDeadlineItems().length}</strong><small>Open transaction steps</small></div>
+    </section>
+    <div class="toolbar transaction-filter">${[["active","Active"],["buyer","Buyer Side"],["seller","Seller Side"],["risk","At Risk"],["closed","Closed / Terminated"]].map(([id,label])=>`<button class="${state.transactionFilter===id?"primary-btn":"ghost-btn"} compact" data-action="transaction-filter" data-id="${id}">${label}</button>`).join("")}</div>
+    <section class="transaction-grid">${items.length?items.map(transactionCardHtml).join(""):`<div class="empty transaction-empty"><strong>No transactions in this view.</strong><span>Move a buyer or seller under contract, or start a transaction manually.</span><button class="primary-btn" data-action="open-transaction">Start transaction</button></div>`}</section>`
+}
+function transactionCriticalDatesHtml(tx){
+  return `<div class="critical-date-grid">${transactionCriticalDates(tx).map(([label,value])=>`<div class="${value&&value<TODAY()&&!["Closing","Possession"].includes(label)?"past":""}"><label>${esc(label)}</label><strong>${value?dateLabel(value):"Not set"}</strong></div>`).join("")}</div>`
+}
+function transactionPeopleHtml(tx){
+  const groups=[
+    ["Lender",tx.lenderName,tx.lenderCompany,tx.lenderPhone,tx.lenderEmail],
+    ["Title / Escrow",tx.titleName,tx.titleCompany,tx.titlePhone,tx.titleEmail],
+    ["Inspector",tx.inspectorName,tx.inspectorCompany,tx.inspectorPhone,tx.inspectorEmail],
+    ["Cooperating Agent",tx.cooperatingAgentName,"",tx.cooperatingAgentPhone,tx.cooperatingAgentEmail]
+  ];
+  return groups.map(([role,name,company,phone,email])=>`<div class="tx-person">
+    <label>${esc(role)}</label><strong>${esc(name||company||"Not added")}</strong>${name&&company?`<span>${esc(company)}</span>`:""}
+    <div>${phone?`<a href="tel:${esc(phone.replace(/[^\d+]/g,""))}">☎ ${esc(phone)}</a>`:""}${email?`<a href="mailto:${esc(email)}">@ ${esc(email)}</a>`:""}</div>
+  </div>`).join("")
+}
+function transactionChecklistHtml(tx){
+  return transactionPhases.map(phase=>{
+    const steps=(tx.checklist||[]).filter(step=>step.phase===phase);
+    if(!steps.length)return "";
+    const done=steps.filter(step=>["Done","Skipped"].includes(step.status)).length;
+    return `<section class="tx-phase">
+      <div class="tx-phase-head"><div><span>PHASE ${transactionPhases.indexOf(phase)+1}</span><h2>${esc(phase)}</h2></div><b>${done}/${steps.length}</b></div>
+      <div class="tx-step-list">${steps.map(step=>{
+        const stateClass=transactionStepState(step),resource=stepResourceUrl(tx,step),isNext=nextTransactionStep(tx)?.id===step.id;
+        return `<article class="tx-step ${stateClass} ${isNext?"is-next":""}">
+          <button class="tx-step-check" data-action="quick-complete-tx-step" data-id="${tx.id}" data-step="${step.id}" title="${step.status==="Done"?"Reopen":"Mark done"}">${step.status==="Done"?"✓":step.status==="Problem"?"!":""}</button>
+          <div class="tx-step-copy"><div><strong>${esc(step.title)}</strong>${isNext?`<span class="next-badge">Next</span>`:""}${step.required?"<span>Required</span>":""}<span class="deadline-badge ${step.deadlineType.toLowerCase().replace(/[^a-z]+/g,"-")}">${esc(step.deadlineType)}</span></div><p>${esc(step.description)}</p>${step.notes?`<small>Note: ${esc(step.notes)}</small>`:""}${resource?`<a class="step-resource-link" target="_blank" rel="noopener" href="${esc(resource)}">Open related site ↗</a>`:""}</div>
+          <div class="tx-step-controls">
+            <select data-action="tx-step-status" data-id="${tx.id}" data-step="${step.id}">${transactionStepStatuses.map(status=>`<option ${step.status===status?"selected":""}>${status}</option>`).join("")}</select>
+            <input type="date" value="${esc(step.due||"")}" data-action="tx-step-due" data-id="${tx.id}" data-step="${step.id}">
+            <select data-action="tx-step-owner" data-id="${tx.id}" data-step="${step.id}">${transactionOwners.map(owner=>`<option ${step.owner===owner?"selected":""}>${owner}</option>`).join("")}</select>
+            <button class="quick ${isNext?"active-next":""}" data-action="make-tx-next" data-id="${tx.id}" data-step="${step.id}">${isNext?"Pinned":"Make next"}</button>
+            <button class="quick" data-action="edit-tx-step" data-id="${tx.id}" data-step="${step.id}">Edit</button>
+          </div>
+        </article>`
+      }).join("")}</div>
+    </section>`
+  }).join("")
+}
+
+function transactionAuditHtml(tx){
+  const issues=transactionAudit(tx);
+  if(!issues.length)return `<section class="tx-audit clear"><div><strong>Flow audit passed</strong><span>Critical setup checks are complete. Continue to verify every date against the signed contract and amendments.</span></div><b>✓</b></section>`;
+  return `<section class="tx-audit"><div class="tx-audit-head"><div><strong>Flow audit</strong><span>${issues.length} setup or sequence item${issues.length===1?"":"s"} need review.</span></div><button class="ghost-btn compact" data-action="open-transaction" data-id="${tx.id}">Fix setup</button></div>
+    <div class="tx-audit-list">${issues.map(issue=>`<div class="${issue.severity}"><b>${issue.severity==="error"?"!":"?"}</b><div><strong>${esc(issue.label)}</strong><span>${esc(issue.detail)}</span></div></div>`).join("")}</div></section>`
+}
+function transactionFlowGuideHtml(tx){
+  const flow=tx.side==="Buyer"?[
+    ["1","Contract accepted","Signed copies, brokerage file, lender and title handoff"],
+    ["2","Earnest money & title open","Deposit receipt and title / escrow file"],
+    ["3","Inspection & due diligence","Inspection, specialists, HOA, well / septic and written response"],
+    ["4","Loan, insurance & appraisal","Underwriting requests, insurance, appraisal and financing contingency"],
+    ["5","Closing preparation","Title issues, final figures, Closing Disclosure and verified funds"],
+    ["6","Walkthrough, closing & recording","Condition, signing, funding, deed recording, keys and possession"],
+    ["7","Post-closing","Final documents, client check-ins and brokerage records"]
+  ]:[
+    ["1","Contract accepted","Signed copies, brokerage file, title and lender handoff"],
+    ["2","Earnest money & seller title package","Deposit status, payoff, ownership, HOA and title information"],
+    ["3","Inspection & negotiation","Access, written response, repairs, credits and amendments"],
+    ["4","Appraisal & buyer financing","Access, lender status, required repairs and written resolution"],
+    ["5","Closing preparation","Title clearance, seller statement, proceeds security and move plan"],
+    ["6","Walkthrough, signing & possession","Repairs, property delivery, signing, funding, recording and keys"],
+    ["7","Post-closing","Proceeds confirmation, closed file and relationship follow-up"]
+  ];
+  return `<section class="card card-pad tx-flow-guide"><div class="section-head"><div><h2>Verified process map</h2><p>Several lanes overlap. The contract and professionals—not the phase number—control timing.</p></div></div><div>${flow.map(([number,title,detail])=>`<div><b>${number}</b><span><strong>${esc(title)}</strong><small>${esc(detail)}</small></span></div>`).join("")}</div></section>`
+}
+function transactionNextCommandHtml(tx){
+  const step=nextTransactionStep(tx),resource=step?stepResourceUrl(tx,step):"",pinned=Boolean(step&&tx.pinnedNextStepId===step.id);
+  return `<section class="tx-next-command">
+    <div class="tx-next-label"><span>${pinned?"PINNED NEXT STEP":"AUTOMATIC NEXT STEP"}</span><h2>${step?esc(step.title):"Transaction checklist complete"}</h2><p>${step?`${esc(step.phase)} • ${step.due?dateLabel(step.due):"No date"} • ${esc(step.owner)} • ${esc(step.deadlineType)}`:"No open steps remain."}</p></div>
+    <div class="tx-next-actions">
+      ${resource?`<a class="ghost-btn" target="_blank" rel="noopener" href="${esc(resource)}">Open site ↗</a>`:""}
+      ${step?`<button class="ghost-btn" data-action="move-tx-next-date" data-id="${tx.id}" data-days="1">Tomorrow</button><button class="primary-btn" data-action="complete-tx-next" data-id="${tx.id}">✓ Done & next</button>`:""}
+      <button class="ghost-btn" data-action="change-tx-next" data-id="${tx.id}">Change next</button>
+    </div>
+  </section>`
+}
+
+function renderTransaction(id){
+  const tx=transaction(id);if(!tx){location.hash="#/transactions";return}
+  const c=contact(tx.contactId),health=transactionHealth(tx),progress=transactionProgress(tx),next=nextTransactionStep(tx),days=transactionDaysToClose(tx);
+  document.getElementById("view").innerHTML=
+    backupWarningHtml()+
+    `<section class="transaction-detail-hero">
+      <div><div class="eyebrow">${esc(tx.side)} TRANSACTION</div><h1>${esc(transactionAddress(tx)||"Property address needed")}</h1><p>${c?`<a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:"Contact missing"} • ${money(tx.purchasePrice)} • ${esc(tx.financingType||"Financing not set")}</p></div>
+      <div class="transaction-detail-actions"><span class="tx-health ${health.className}">${health.label}</span><button class="ghost-btn" data-action="print-transaction">Print</button><button class="ghost-btn" data-action="open-transaction" data-id="${tx.id}">Edit setup</button><button class="primary-btn" data-action="transaction-status-menu" data-id="${tx.id}">Update status</button></div>
+    </section>
+    <section class="transaction-warning"><strong>Protect every deadline.</strong><span>Contract Deadline means a date entered from the signed agreement or amendment. Suggested Target is an editable operational goal and must never be treated as a contractual deadline.</span></section>
+    ${transactionNextCommandHtml(tx)}
+    ${transactionAuditHtml(tx)}
+    <section class="transaction-detail-metrics">
+      <div><label>Progress</label><strong>${progress.pct}%</strong><span>${progress.done} of ${progress.total} steps</span></div>
+      <div><label>Closing countdown</label><strong>${days===null?"—":days}</strong><span>${days===null?"Set closing date":days===0?"Closing today":days<0?"Past scheduled closing":"days remaining"}</span></div>
+      <div><label>Next-step control</label><strong>${tx.pinnedNextStepId?"Pinned":"Automatic"}</strong><span>${next?.due?`${dateLabel(next.due)} • ${next.deadlineType}`:"No due date"}</span></div>
+      <div><label>Projected GCI</label><strong>${money(tx.gci)}</strong><span>${tx.referralFee?`${tx.referralFee}% referral`:"No referral entered"}</span></div>
+    </section>
+    <div class="transaction-detail-layout">
+      <main class="transaction-main">
+        <section class="card transaction-update-card"><div class="section-head"><div><h2>Client update</h2><p>Copy a clear status update without exposing internal notes.</p></div><div><button class="ghost-btn compact" data-action="copy-transaction-update" data-id="${tx.id}">Copy update</button>${c&&hasPhone(c)?`<button class="primary-btn compact" data-action="text-transaction-update" data-id="${tx.id}">Text client</button>`:""}</div></div><blockquote>${esc(transactionUpdateText(tx))}</blockquote></section>
+        ${transactionChecklistHtml(tx)}
+        <button class="ghost-btn full-width add-tx-step" data-action="add-tx-step" data-id="${tx.id}">＋ Add custom transaction step</button>
+      </main>
+      <aside class="transaction-sidebar">
+        ${transactionFlowGuideHtml(tx)}
+        <section class="card card-pad"><div class="section-head"><div><h2>Critical dates</h2><p>Use exact contract and confirmed lender dates.</p></div></div>${transactionCriticalDatesHtml(tx)}</section>
+        <section class="card card-pad"><div class="section-head"><div><h2>Transaction team</h2><p>One-touch communication.</p></div></div><div class="tx-people">${transactionPeopleHtml(tx)}</div></section>
+        <section class="card card-pad"><div class="section-head"><div><h2>Money & terms</h2></div></div><div class="detail-grid">
+          ${detail("Purchase price",money(tx.purchasePrice))}${detail("Earnest money",money(tx.earnestMoneyAmount))}${detail("Earnest holder",tx.earnestMoneyHolder||"Not set")}${detail("Financing",tx.cashTransaction?"Cash":tx.financingType||"Not set")}${detail("Possession",dateLabel(tx.possessionDate))}${detail("Status",tx.status)}
+        </div></section>
+        <section class="card card-pad"><div class="section-head"><div><h2>Sites & portals</h2><p>Open the established systems used to complete the deal.</p></div><button class="ghost-btn compact" data-action="open-transaction" data-id="${tx.id}">Edit links</button></div>${transactionResourceCardsHtml(tx)}</section>
+        <section class="wire-warning"><strong>Wire-fraud checkpoint</strong><span>Never trust changed wiring instructions from an unexpected email. Verify instructions through a known title-company phone number before funds are sent.</span></section>
+        <section class="card card-pad"><div class="section-head"><div><h2>Internal transaction notes</h2></div></div><p class="tx-notes">${esc(tx.notes||"No internal notes yet.")}</p><button class="ghost-btn compact full-width" data-action="open-transaction" data-id="${tx.id}">Edit notes and setup</button></section>
+      </aside>
+    </div>`
+}
+function transactionModal(id="",contactId=""){
+  const existing=transaction(id),c=contact(contactId||existing?.contactId),tx=existing?JSON.parse(JSON.stringify(existing)):blankTransaction(c?.id||"",c?.type==="Buyer"?"Buyer":"Seller");
+  const contactChoices=db.contacts.filter(person=>["Buyer","Seller"].includes(person.type)).map(person=>`<option value="${person.id}" ${person.id===tx.contactId?"selected":""}>${esc(fullName(person))} — ${esc(person.type)}</option>`).join("");
+  const propertyChoices=(c?propertiesForContact(c.id):[]).map(p=>`<option value="${p.id}" ${p.id===tx.propertyId?"selected":""}>${esc(propertyAddress(p)||p.role)}</option>`).join("");
+  modal(existing?"Edit transaction setup":"Start transaction",`<div class="form-grid transaction-form">
+    <input type="hidden" id="transactionId" value="${esc(tx.id)}">
+    <div class="field"><label>Client</label><select id="transactionContact"><option value="">Choose buyer or seller</option>${contactChoices}</select></div>
+    <div class="field"><label>Representation side</label><select id="transactionSide">${["Buyer","Seller"].map(side=>`<option ${tx.side===side?"selected":""}>${side}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="transactionStatus">${["Under Contract","At Risk","Clear to Close","Closed","Terminated"].map(status=>`<option ${tx.status===status?"selected":""}>${status}</option>`).join("")}</select></div>
+    <div class="field"><label>Linked property</label><select id="transactionProperty"><option value="">Use address below</option>${propertyChoices}</select></div>
+
+    <div class="field full section-label">Property under contract</div>
+    <div class="field full"><label>Street address</label><input id="transactionStreet" value="${esc(tx.street||transactionAddressObject(tx).street)}"></div>
+    <div class="field"><label>Unit</label><input id="transactionUnit" value="${esc(tx.unit||transactionAddressObject(tx).unit)}"></div>
+    <div class="field"><label>City</label><input id="transactionCity" value="${esc(tx.city||transactionAddressObject(tx).city)}"></div>
+    <div class="field"><label>State</label><input id="transactionState" value="${esc(tx.state||transactionAddressObject(tx).state||"OH")}"></div>
+    <div class="field"><label>ZIP</label><input id="transactionZip" value="${esc(tx.zip||transactionAddressObject(tx).zip)}"></div>
+    <div class="field"><label>County</label><input id="transactionCounty" value="${esc(tx.county||transactionAddressObject(tx).county)}"></div>
+    <div class="field"><label>Purchase price</label><input id="transactionPrice" type="number" min="0" value="${tx.purchasePrice||""}"></div>
+
+    <div class="field full section-label">Contract dates — enter the signed agreement dates</div>
+    <div class="field"><label>Contract accepted</label><input id="transactionContractDate" type="date" value="${esc(tx.contractDate)}"></div>
+    <div class="field"><label>Closing</label><input id="transactionClosingDate" type="date" value="${esc(tx.closingDate)}"></div>
+    <div class="field"><label>Possession</label><input id="transactionPossessionDate" type="date" value="${esc(tx.possessionDate)}"></div>
+    <div class="field"><label>Earnest money due</label><input id="transactionEarnestDue" type="date" value="${esc(tx.earnestMoneyDue)}"></div>
+    <div class="field"><label>Inspection deadline</label><input id="transactionInspectionDeadline" type="date" value="${esc(tx.inspectionDeadline)}"></div>
+    <div class="field"><label>Inspection response deadline</label><input id="transactionInspectionResponse" type="date" value="${esc(tx.inspectionResponseDeadline)}"></div>
+    <div class="field"><label>Financing application due</label><input id="transactionFinancingApplication" type="date" value="${esc(tx.financingApplicationDue)}"></div>
+    <div class="field"><label>Appraisal target / deadline</label><input id="transactionAppraisalDeadline" type="date" value="${esc(tx.appraisalDeadline)}"></div>
+    <div class="field"><label>Loan commitment deadline</label><input id="transactionLoanCommitment" type="date" value="${esc(tx.loanCommitmentDeadline)}"></div>
+    <div class="field"><label>Title review deadline</label><input id="transactionTitleDeadline" type="date" value="${esc(tx.titleDeadline)}"></div>
+    <div class="field"><label>Closing Disclosure received</label><input id="transactionClosingDisclosure" type="date" value="${esc(tx.closingDisclosureDue)}"></div>
+    <div class="field"><label>Repairs complete</label><input id="transactionRepairCompletion" type="date" value="${esc(tx.repairCompletionDate)}"></div>
+    <div class="field"><label>Final walkthrough</label><input id="transactionWalkthrough" type="date" value="${esc(tx.finalWalkthroughDate)}"></div>
+
+    <div class="field full section-label">Earnest money and financing</div>
+    <div class="field"><label>Earnest amount</label><input id="transactionEarnestAmount" type="number" min="0" value="${tx.earnestMoneyAmount||""}"></div>
+    <div class="field"><label>Earnest holder</label><input id="transactionEarnestHolder" value="${esc(tx.earnestMoneyHolder)}"></div>
+    <div class="field"><label>Financing type</label><select id="transactionFinancingType">${["Conventional","FHA","VA","USDA","Cash","Other"].map(type=>`<option ${tx.financingType===type?"selected":""}>${type}</option>`).join("")}</select></div>
+    <div class="field"><label>Projected GCI</label><input id="transactionGci" type="number" min="0" value="${tx.gci||""}"></div>
+    <div class="field full section-label">Deal conditions — controls which steps apply</div>
+    <div class="field full transaction-condition-grid">
+      <label class="checkbox-row"><input id="transactionInspectionApplies" type="checkbox" ${tx.inspectionApplies?"checked":""}> Inspection / due diligence applies</label>
+      <label class="checkbox-row"><input id="transactionFinancingApplies" type="checkbox" ${tx.financingApplies?"checked":""}> Financing contingency / lender workflow applies</label>
+      <label class="checkbox-row"><input id="transactionAppraisalApplies" type="checkbox" ${tx.appraisalApplies?"checked":""}> Appraisal applies</label>
+      <label class="checkbox-row"><input id="transactionRepairsNegotiated" type="checkbox" ${tx.repairsNegotiated?"checked":""}> Repairs or credits were negotiated</label>
+      <label class="checkbox-row"><input id="transactionHoaCondo" type="checkbox" ${tx.hoaCondo?"checked":""}> HOA / condominium documents apply</label>
+      <label class="checkbox-row"><input id="transactionWellSeptic" type="checkbox" ${tx.wellSeptic?"checked":""}> Well / septic due diligence applies</label>
+      <label class="checkbox-row"><input id="transactionBuyerHomeSale" type="checkbox" ${tx.buyerHomeSaleContingency?"checked":""}> Buyer home-sale contingency applies</label>
+      <label class="checkbox-row"><input id="transactionPostClosingOccupancy" type="checkbox" ${tx.postClosingOccupancy?"checked":""}> Post-closing occupancy applies</label>
+      <label class="checkbox-row"><input id="transactionHomeWarranty" type="checkbox" ${tx.homeWarranty?"checked":""}> Home warranty is in the contract</label>
+    </div>
+    <div class="field"><label>Buyer home-sale deadline</label><input id="transactionBuyerHomeSaleDeadline" type="date" value="${esc(tx.buyerHomeSaleDeadline||"")}"></div>
+    <div class="field"><label>HOA / condo review deadline</label><input id="transactionHoaReviewDeadline" type="date" value="${esc(tx.hoaReviewDeadline||"")}"></div>
+    <div class="field"><label>Referral fee %</label><input id="transactionReferralFee" type="number" min="0" max="100" value="${tx.referralFee||""}"></div>
+    <div class="field"><label>Broker split %</label><input id="transactionBrokerSplit" type="number" min="0" max="100" value="${tx.brokerageSplit||""}"></div>
+
+    <div class="field full section-label">Lender</div>
+    <div class="field"><label>Company</label><input id="transactionLenderCompany" value="${esc(tx.lenderCompany)}"></div>
+    <div class="field"><label>Loan officer</label><input id="transactionLenderName" value="${esc(tx.lenderName)}"></div>
+    <div class="field"><label>Phone</label><input id="transactionLenderPhone" type="tel" value="${esc(tx.lenderPhone)}"></div>
+    <div class="field"><label>Email</label><input id="transactionLenderEmail" type="email" value="${esc(tx.lenderEmail)}"></div>
+
+    <div class="field full section-label">Title / escrow</div>
+    <div class="field"><label>Company</label><input id="transactionTitleCompany" value="${esc(tx.titleCompany)}"></div>
+    <div class="field"><label>Contact</label><input id="transactionTitleName" value="${esc(tx.titleName)}"></div>
+    <div class="field"><label>Phone</label><input id="transactionTitlePhone" type="tel" value="${esc(tx.titlePhone)}"></div>
+    <div class="field"><label>Email</label><input id="transactionTitleEmail" type="email" value="${esc(tx.titleEmail)}"></div>
+
+    <div class="field full section-label">Inspector and cooperating agent</div>
+    <div class="field"><label>Inspector / company</label><input id="transactionInspectorName" value="${esc(tx.inspectorName||tx.inspectorCompany)}"></div>
+    <div class="field"><label>Inspector phone</label><input id="transactionInspectorPhone" type="tel" value="${esc(tx.inspectorPhone)}"></div>
+    <div class="field"><label>Cooperating agent</label><input id="transactionCoopName" value="${esc(tx.cooperatingAgentName)}"></div>
+    <div class="field"><label>Agent phone</label><input id="transactionCoopPhone" type="tel" value="${esc(tx.cooperatingAgentPhone)}"></div>
+    <div class="field"><label>Agent email</label><input id="transactionCoopEmail" type="email" value="${esc(tx.cooperatingAgentEmail)}"></div>
+
+    <div class="field full section-label">Established sites and portals — transaction overrides</div>
+    <div class="field"><label>Brokerage compliance</label><input id="transactionBrokeragePortal" type="url" value="${esc(tx.brokeragePortal||"")}" placeholder="${esc(transactionResource("brokeragePortal")?.url||"https://")}"></div>
+    <div class="field"><label>Forms / e-signature</label><input id="transactionDocumentPortal" type="url" value="${esc(tx.documentPortal||"")}" placeholder="${esc(transactionResource("documentPortal")?.url||"https://")}"></div>
+    <div class="field"><label>MLS record</label><input id="transactionMlsUrl" type="url" value="${esc(tx.mlsUrl||"")}" placeholder="${esc(transactionResource("mlsUrl")?.url||"https://")}"></div>
+    <div class="field"><label>Showing / lockbox</label><input id="transactionShowingPortal" type="url" value="${esc(tx.showingPortal||"")}" placeholder="${esc(transactionResource("showingPortal")?.url||"https://")}"></div>
+    <div class="field"><label>Lender portal</label><input id="transactionLenderPortal" type="url" value="${esc(tx.lenderPortal||"")}" placeholder="${esc(transactionResource("lenderPortal")?.url||"https://")}"></div>
+    <div class="field"><label>Title / escrow portal</label><input id="transactionTitlePortal" type="url" value="${esc(tx.titlePortal||"")}" placeholder="${esc(transactionResource("titlePortal")?.url||"https://")}"></div>
+    <div class="field"><label>Inspection / report</label><input id="transactionInspectionPortal" type="url" value="${esc(tx.inspectionPortal||"")}" placeholder="${esc(transactionResource("inspectionPortal")?.url||"https://")}"></div>
+    <div class="field"><label>County auditor</label><input id="transactionAuditorUrl" type="url" value="${esc(tx.auditorUrl||"")}" placeholder="${esc(transactionResource("auditorUrl")?.url||"https://")}"></div>
+    <div class="field"><label>County recorder</label><input id="transactionRecorderUrl" type="url" value="${esc(tx.recorderUrl||"")}" placeholder="${esc(transactionResource("recorderUrl")?.url||"https://")}"></div>
+    <div class="field"><label>HOA / condo portal</label><input id="transactionHoaPortal" type="url" value="${esc(tx.hoaPortal||"")}" placeholder="${esc(transactionResource("hoaPortal")?.url||"https://")}"></div>
+    <div class="field"><label>Utilities</label><input id="transactionUtilityUrl" type="url" value="${esc(tx.utilityUrl||"")}" placeholder="${esc(transactionResource("utilityUrl")?.url||"https://")}"></div>
+
+    <div class="field full"><label>Internal transaction notes</label><textarea id="transactionNotes" rows="5">${esc(tx.notes)}</textarea></div>
+    <div class="field full"><label class="checkbox-row"><input id="transactionRebuild" type="checkbox"> Rebuild suggested targets and conditional steps while preserving completed work</label></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${existing?`<button class="danger-btn" data-action="terminate-transaction" data-id="${tx.id}">Terminate</button>`:""}<button class="primary-btn" data-action="save-transaction">Save transaction</button>`)
+}
+function saveTransaction(){
+  const id=document.getElementById("transactionId").value||uid(),old=transaction(id);
+  const contactId=document.getElementById("transactionContact").value,c=contact(contactId);
+  if(!c)return alert("Choose a buyer or seller contact.");
+  const tx=old||blankTransaction(contactId,document.getElementById("transactionSide").value);
+  Object.assign(tx,{
+    id,contactId,side:document.getElementById("transactionSide").value,status:document.getElementById("transactionStatus").value,
+    propertyId:document.getElementById("transactionProperty").value,
+    street:document.getElementById("transactionStreet").value.trim(),unit:document.getElementById("transactionUnit").value.trim(),
+    city:document.getElementById("transactionCity").value.trim(),state:document.getElementById("transactionState").value.trim()||"OH",
+    zip:document.getElementById("transactionZip").value.trim(),county:document.getElementById("transactionCounty").value.trim(),
+    purchasePrice:Number(document.getElementById("transactionPrice").value||0),
+    contractDate:document.getElementById("transactionContractDate").value,closingDate:document.getElementById("transactionClosingDate").value,
+    possessionDate:document.getElementById("transactionPossessionDate").value,
+    earnestMoneyDue:document.getElementById("transactionEarnestDue").value,
+    inspectionDeadline:document.getElementById("transactionInspectionDeadline").value,
+    inspectionResponseDeadline:document.getElementById("transactionInspectionResponse").value,
+    financingApplicationDue:document.getElementById("transactionFinancingApplication").value,
+    appraisalDeadline:document.getElementById("transactionAppraisalDeadline").value,
+    loanCommitmentDeadline:document.getElementById("transactionLoanCommitment").value,
+    titleDeadline:document.getElementById("transactionTitleDeadline").value,
+    closingDisclosureDue:document.getElementById("transactionClosingDisclosure").value,
+    repairCompletionDate:document.getElementById("transactionRepairCompletion").value,
+    finalWalkthroughDate:document.getElementById("transactionWalkthrough").value,
+    earnestMoneyAmount:Number(document.getElementById("transactionEarnestAmount").value||0),
+    earnestMoneyHolder:document.getElementById("transactionEarnestHolder").value.trim(),
+    financingType:document.getElementById("transactionFinancingType").value,
+    cashTransaction:document.getElementById("transactionFinancingType").value==="Cash",
+    inspectionApplies:document.getElementById("transactionInspectionApplies").checked,
+    financingApplies:document.getElementById("transactionFinancingType").value!=="Cash"&&document.getElementById("transactionFinancingApplies").checked,
+    appraisalApplies:document.getElementById("transactionAppraisalApplies").checked,
+    repairsNegotiated:document.getElementById("transactionRepairsNegotiated").checked,
+    hoaCondo:document.getElementById("transactionHoaCondo").checked,
+    wellSeptic:document.getElementById("transactionWellSeptic").checked,
+    buyerHomeSaleContingency:document.getElementById("transactionBuyerHomeSale").checked,
+    postClosingOccupancy:document.getElementById("transactionPostClosingOccupancy").checked,
+    homeWarranty:document.getElementById("transactionHomeWarranty").checked,
+    buyerHomeSaleDeadline:document.getElementById("transactionBuyerHomeSaleDeadline").value,
+    hoaReviewDeadline:document.getElementById("transactionHoaReviewDeadline").value,
+    gci:Number(document.getElementById("transactionGci").value||0),
+    referralFee:Number(document.getElementById("transactionReferralFee").value||0),
+    brokerageSplit:Number(document.getElementById("transactionBrokerSplit").value||0),
+    lenderCompany:document.getElementById("transactionLenderCompany").value.trim(),
+    lenderName:document.getElementById("transactionLenderName").value.trim(),
+    lenderPhone:document.getElementById("transactionLenderPhone").value.trim(),
+    lenderEmail:document.getElementById("transactionLenderEmail").value.trim(),
+    titleCompany:document.getElementById("transactionTitleCompany").value.trim(),
+    titleName:document.getElementById("transactionTitleName").value.trim(),
+    titlePhone:document.getElementById("transactionTitlePhone").value.trim(),
+    titleEmail:document.getElementById("transactionTitleEmail").value.trim(),
+    inspectorName:document.getElementById("transactionInspectorName").value.trim(),
+    inspectorCompany:document.getElementById("transactionInspectorName").value.trim(),
+    inspectorPhone:document.getElementById("transactionInspectorPhone").value.trim(),
+    cooperatingAgentName:document.getElementById("transactionCoopName").value.trim(),
+    cooperatingAgentPhone:document.getElementById("transactionCoopPhone").value.trim(),
+    cooperatingAgentEmail:document.getElementById("transactionCoopEmail").value.trim(),
+    brokeragePortal:document.getElementById("transactionBrokeragePortal").value.trim(),
+    documentPortal:document.getElementById("transactionDocumentPortal").value.trim(),
+    mlsUrl:document.getElementById("transactionMlsUrl").value.trim(),
+    showingPortal:document.getElementById("transactionShowingPortal").value.trim(),
+    lenderPortal:document.getElementById("transactionLenderPortal").value.trim(),
+    titlePortal:document.getElementById("transactionTitlePortal").value.trim(),
+    inspectionPortal:document.getElementById("transactionInspectionPortal").value.trim(),
+    auditorUrl:document.getElementById("transactionAuditorUrl").value.trim(),
+    recorderUrl:document.getElementById("transactionRecorderUrl").value.trim(),
+    hoaPortal:document.getElementById("transactionHoaPortal").value.trim(),
+    utilityUrl:document.getElementById("transactionUtilityUrl").value.trim(),
+    notes:document.getElementById("transactionNotes").value.trim(),updatedAt:NOW()
+  });
+  const urls=["brokeragePortal","documentPortal","mlsUrl","showingPortal","lenderPortal","titlePortal","inspectionPortal","auditorUrl","recorderUrl","hoaPortal","utilityUrl"];
+  const badUrl=urls.find(key=>tx[key]&&!tx[key].startsWith("https://")&&!tx[key].startsWith("http://"));if(badUrl)return alert("Every website link must begin with https:// or http://");
+  if(!tx.contractDate)return alert("Enter the contract acceptance date.");
+  if(!transactionAddress(tx)&&!tx.propertyId)return alert("Enter or link the property address.");
+  if(document.getElementById("transactionRebuild").checked){
+    (tx.checklist||[]).forEach(step=>{if(!step.custom)step.customDue=false})
+  }
+  buildTransactionChecklist(tx,true);
+  if(!old)db.transactions.unshift(tx);
+  c.stage=tx.status==="Closed"?"Closed":tx.status==="Terminated"?"Lost":"Under Contract";
+  c.type=tx.side;c.gci=tx.gci||c.gci;c.updatedAt=TODAY();
+  if(!tx.propertyId&&tx.street){
+    const p={
+      id:uid(),contactId:c.id,role:tx.side==="Buyer"?"Buyer Purchase":"Seller Property",status:tx.status==="Closed"?"Closed":"Under Contract",
+      primary:true,street:tx.street,unit:tx.unit,city:tx.city,state:tx.state,zip:tx.zip,county:tx.county,
+      propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",yearBuilt:"",occupancy:"Unknown",ownership:"Unknown",
+      estimatedValue:tx.purchasePrice,mortgageBalance:0,listPrice:0,expectedSalePrice:tx.purchasePrice,
+      targetDate:tx.closingDate,appointmentDate:"",condition:"",motivation:"",notes:"Created from transaction setup.",createdAt:TODAY(),updatedAt:TODAY()
+    };
+    propertiesForContact(c.id).forEach(item=>item.primary=false);
+    db.properties.push(p);tx.propertyId=p.id
+  }
+  const p=transactionProperty(tx);
+  if(p){p.status=tx.status==="Closed"?"Closed":"Under Contract";p.expectedSalePrice=tx.purchasePrice||p.expectedSalePrice;p.targetDate=tx.closingDate||p.targetDate;p.updatedAt=TODAY()}
+  save();closeModal();location.hash=`#/transaction/${tx.id}`;toast("Transaction saved",`${fullName(c)} • ${transactionAddress(tx)}`)
+}
+function transactionStepModal(txId,stepId=""){
+  const tx=transaction(txId),step=(tx?.checklist||[]).find(item=>item.id===stepId)||{id:"",phase:"Contract & Handoff",title:"",description:"",due:"",deadlineType:"Custom Date",resourceUrl:"",owner:"Agent",status:"Not Started",required:true,notes:"",custom:true};
+  if(!tx)return;
+  modal(step.id?"Edit transaction step":"Add transaction step",`<div class="form-grid">
+    <input type="hidden" id="txStepTransactionId" value="${tx.id}">
+    <input type="hidden" id="txStepId" value="${esc(step.id)}">
+    <div class="field"><label>Phase</label><select id="txStepPhase">${transactionPhases.map(phase=>`<option ${step.phase===phase?"selected":""}>${phase}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="txStepStatus">${transactionStepStatuses.map(status=>`<option ${step.status===status?"selected":""}>${status}</option>`).join("")}</select></div>
+    <div class="field full"><label>Step</label><input id="txStepTitle" value="${esc(step.title)}"></div>
+    <div class="field full"><label>What must happen</label><textarea id="txStepDescription">${esc(step.description)}</textarea></div>
+    <div class="field"><label>Due date</label><input id="txStepDue" type="date" value="${esc(step.due)}"></div>
+    <div class="field"><label>Date meaning</label><select id="txStepDeadlineType">${["Contract Deadline","Confirmed / Regulatory","Suggested Target","Custom Date","Milestone"].map(type=>`<option ${step.deadlineType===type?"selected":""}>${type}</option>`).join("")}</select></div>
+    <div class="field"><label>Responsible</label><select id="txStepOwner">${transactionOwners.map(owner=>`<option ${step.owner===owner?"selected":""}>${owner}</option>`).join("")}</select></div>
+    <div class="field full"><label>Related website for this step</label><input id="txStepResourceUrl" type="url" value="${esc(step.resourceUrl||"")}" placeholder="https://"></div>
+    <div class="field full"><label>Internal note / blocker</label><textarea id="txStepNotes">${esc(step.notes)}</textarea></div>
+    <div class="field full"><label class="checkbox-row"><input id="txStepMakeNext" type="checkbox" ${tx.pinnedNextStepId===step.id?"checked":""}> Pin this as the transaction’s next step</label></div>
+    <div class="field full"><label class="checkbox-row"><input id="txStepRequired" type="checkbox" ${step.required?"checked":""}> Treat as a required transaction step</label></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${step.id&&step.custom?`<button class="danger-btn" data-action="delete-tx-step" data-id="${tx.id}" data-step="${step.id}">Delete</button>`:""}<button class="primary-btn" data-action="save-tx-step">Save step</button>`)
+}
+function saveTransactionStep(){
+  const tx=transaction(document.getElementById("txStepTransactionId").value);if(!tx)return;
+  const id=document.getElementById("txStepId").value||uid(),old=tx.checklist.find(step=>step.id===id);
+  const step={
+    id,key:old?.key||`custom-${uid()}`,phase:document.getElementById("txStepPhase").value,
+    title:document.getElementById("txStepTitle").value.trim(),description:document.getElementById("txStepDescription").value.trim(),
+    due:document.getElementById("txStepDue").value,customDue:true,deadlineType:document.getElementById("txStepDeadlineType").value,status:document.getElementById("txStepStatus").value,
+    owner:document.getElementById("txStepOwner").value,required:document.getElementById("txStepRequired").checked,
+    notes:document.getElementById("txStepNotes").value.trim(),resourceUrl:document.getElementById("txStepResourceUrl").value.trim(),
+    completedAt:document.getElementById("txStepStatus").value==="Done"?(old?.completedAt||NOW()):"",
+    sort:old?.sort??tx.checklist.length,custom:old?.custom??true
+  };
+  if(!step.title)return alert("Add a step title.");
+  if(step.resourceUrl&&!step.resourceUrl.startsWith("https://")&&!step.resourceUrl.startsWith("http://"))return alert("The related website must begin with https:// or http://");
+  const index=tx.checklist.findIndex(item=>item.id===id);if(index>=0)tx.checklist[index]=step;else tx.checklist.push(step);
+  if(document.getElementById("txStepMakeNext").checked)tx.pinnedNextStepId=id;else if(tx.pinnedNextStepId===id)tx.pinnedNextStepId="";
+  tx.updatedAt=NOW();save();closeModal();renderTransaction(tx.id);toast("Transaction step saved",step.title)
+}
+function updateTransactionStep(txId,stepId,field,value){
+  const tx=transaction(txId),step=tx?.checklist.find(item=>item.id===stepId);if(!step)return;
+  step[field]=value;
+  if(field==="status")step.completedAt=value==="Done"?NOW():"";
+  if(field==="due")step.customDue=true;
+  tx.updatedAt=NOW();save();renderTransaction(tx.id)
+}
+function quickCompleteTransactionStep(txId,stepId){
+  const tx=transaction(txId),step=tx?.checklist.find(item=>item.id===stepId);if(!step)return;
+  step.status=step.status==="Done"?"Not Started":"Done";step.completedAt=step.status==="Done"?NOW():"";if(step.status==="Done"&&tx.pinnedNextStepId===step.id)tx.pinnedNextStepId="";tx.updatedAt=NOW();save();renderTransaction(tx.id)
+}
+function transactionStatusModal(id){
+  const tx=transaction(id);if(!tx)return;
+  modal("Update transaction status",`<div class="status-choice-grid">${["Under Contract","At Risk","Clear to Close","Closed","Terminated"].map(status=>`<button class="status-choice ${tx.status===status?"active":""}" data-action="set-transaction-status" data-id="${tx.id}" data-status="${status}"><strong>${status}</strong><span>${status==="Closed"?"Move the client and property to Closed.":status==="Terminated"?"Preserve the file but mark the deal terminated.":status==="Clear to Close"?"Loan/title report the deal ready for final closing.":"Keep working the active checklist."}</span></button>`).join("")}</div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>`)
+}
+function setTransactionStatus(id,status){
+  const tx=transaction(id),c=contact(tx?.contactId);if(!tx)return;
+  tx.status=status;tx.updatedAt=NOW();if(status==="Closed")tx.closedAt=NOW();
+  if(c)c.stage=status==="Closed"?"Closed":status==="Terminated"?"Lost":"Under Contract";
+  const p=transactionProperty(tx);if(p)p.status=status==="Closed"?"Closed":status==="Terminated"?"Prospect":"Under Contract";
+  save();closeModal();renderTransaction(id);toast("Transaction updated",status)
+}
+function terminateTransaction(id){
+  if(!confirm("Mark this transaction terminated? The checklist and history will remain available."))return;
+  setTransactionStatus(id,"Terminated")
+}
+
 function meaningfulDataCount(stateObj){
   if(!stateObj)return 0;
-  return ["contacts","properties","communications","tasks","planRuns","automationQueue"].reduce(
+  return ["contacts","properties","communications","tasks","planRuns","automationQueue","transactions"].reduce(
     (sum,key)=>sum+(Array.isArray(stateObj[key])?stateObj[key].length:0),0
   )
 }
@@ -1023,7 +1901,7 @@ function mergeCollection(localItems=[],cloudItems=[]){
 function mergeStates(localState,cloudState){
   const merged=normalize(cloudState||{});
   const local=normalize(localState||{});
-  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory","callScripts"].forEach(key=>{
+  ["contacts","properties","communications","tasks","planRuns","automationRules","actionPlans","automationQueue","automationLogs","templates","deletedContacts","workHistory","callScripts","transactions","transactionResources"].forEach(key=>{
     merged[key]=mergeCollection(local[key],merged[key])
   });
   merged.automationHistory=[...new Set([...(merged.automationHistory||[]),...(local.automationHistory||[])])].slice(-5000);
@@ -1343,7 +2221,14 @@ function normalize(raw){
     objections:Array.isArray(s.objections)?s.objections.map(o=>({label:o.label||"Objection",response:o.response||""})):[]
   }));
   const scriptDrafts=raw.scriptDrafts&&typeof raw.scriptDrafts==="object"?raw.scriptDrafts:{};
-  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",...(raw.settings||{})}};
+  const transactionResources=(Array.isArray(raw.transactionResources)&&raw.transactionResources.length?raw.transactionResources:defaultTransactionResources).map(resource=>({
+    id:resource.id||uid(),name:resource.name||"Transaction resource",category:resource.category||"Work Portal",
+    url:resource.url||"",official:Boolean(resource.official),notes:resource.notes||""
+  }));
+  defaultTransactionResources.filter(resource=>resource.official&&!transactionResources.some(item=>item.id===resource.id)).forEach(resource=>transactionResources.push({...resource}));
+  const transactions=(Array.isArray(raw.transactions)?raw.transactions:[]).map(normalizeTransaction);
+  contacts.filter(c=>["Buyer","Seller"].includes(c.type)&&c.stage==="Under Contract"&&!transactions.some(tx=>tx.contactId===c.id&&!["Closed","Terminated"].includes(tx.status))).forEach(c=>{const tx=blankTransaction(c.id,c.type),p=properties.find(item=>item.contactId===c.id&&item.primary)||properties.find(item=>item.contactId===c.id);if(p){tx.propertyId=p.id;Object.assign(tx,{street:p.street,unit:p.unit,city:p.city,state:p.state,zip:p.zip,county:p.county,purchasePrice:Number(p.expectedSalePrice||p.listPrice||0)})}tx.gci=c.gci;buildTransactionChecklist(tx,false);transactions.push(tx)});
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -1358,7 +2243,7 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,settings:{}});
 }
 
 function route(){
@@ -1367,13 +2252,14 @@ function route(){
   state.route=name||"today";
   renderNav();
   if(name==="contact"&&id)return renderContact(id);
-  const renderers={today:renderToday,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
+  if(name==="transaction"&&id)return renderTransaction(id);
+  const renderers={today:renderToday,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
   (renderers[state.route]||renderToday)();
 }
 function renderNav(){
   document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")));
-  const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length;
-  setCount("navTodayCount",due+openTasks);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("pipNavCount",pipNotices().length)
+  const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length,transactionDeadlines=transactionDeadlineItems().length;
+  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("pipNavCount",pipNotices().length)
 }
 function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.textContent=n||"";el.style.display=n?"grid":"none"}
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
@@ -1406,6 +2292,7 @@ function callQueue(){
   })
 }
 function bestNext(){
+  const txDeadline=transactionDeadlineItems()[0];if(txDeadline)return {title:txDeadline.step.title,detail:`${transactionAddress(txDeadline.tx)||"Transaction"} • ${txDeadline.step.status==="Problem"?"problem flagged":txDeadline.step.due<TODAY()?"overdue":"due today"}`,route:`#/transaction/${txDeadline.tx.id}`,action:"Open transaction"};
   const hotSeller=dueContacts().filter(c=>c.type==="Seller"&&c.heat==="Hot").sort((a,b)=>scoreContact(b).score-scoreContact(a).score)[0];
   if(hotSeller)return {title:`Call ${fullName(hotSeller)}`,detail:"Your highest-value due seller relationship is waiting.",route:`#/contact/${hotSeller.id}`,action:"Open seller"};
   const unread=db.communications.find(x=>x.unread);
@@ -1745,7 +2632,7 @@ function mergeContacts(primaryId,secondaryId){
     if(!householdKeys.has(key)){primary.household.push(member);householdKeys.add(key)}
   });
   primary.notes=[primary.notes,secondary.notes?`Merged notes from ${fullName(secondary)}:\n${secondary.notes}`:""].filter(Boolean).join("\n\n");
-  ["properties","communications","tasks","planRuns","automationQueue","automationLogs"].forEach(key=>{
+  ["properties","communications","tasks","planRuns","automationQueue","automationLogs","transactions"].forEach(key=>{
     (db[key]||[]).forEach(item=>{if(item.contactId===secondaryId)item.contactId=primaryId})
   });
   db.communications.unshift({id:uid(),contactId:primaryId,channel:"Note",direction:"outbound",outcome:"Duplicate merged",body:`Merged ${fullName(secondary)} into this contact.`,date:NOW(),unread:false,threadStatus:"open",createdAt:NOW()});
@@ -1761,6 +2648,7 @@ function trashContact(id){
     communications:db.communications.filter(x=>x.contactId===id),
     tasks:db.tasks.filter(x=>x.contactId===id),
     planRuns:db.planRuns.filter(x=>x.contactId===id),
+    transactions:db.transactions.filter(x=>x.contactId===id),
     deletedAt:NOW()
   };
   db.deletedContacts.unshift(snapshot);
@@ -1770,12 +2658,13 @@ function trashContact(id){
   db.communications=db.communications.filter(x=>x.contactId!==id);
   db.tasks=db.tasks.filter(x=>x.contactId!==id);
   db.planRuns=db.planRuns.filter(x=>x.contactId!==id);
+  db.transactions=db.transactions.filter(x=>x.contactId!==id);
   save();location.hash="#/people";toast("Moved to Recently Deleted",`${fullName(c)} can be restored from Settings.`)
 }
 function restoreDeleted(id){
   const snapshot=db.deletedContacts.find(x=>x.id===id);if(!snapshot)return;
   if(!db.contacts.some(c=>c.id===snapshot.contact.id))db.contacts.push(snapshot.contact);
-  ["properties","communications","tasks","planRuns"].forEach(key=>{
+  ["properties","communications","tasks","planRuns","transactions"].forEach(key=>{
     const existing=new Set((db[key]||[]).map(x=>x.id));
     (snapshot[key]||[]).forEach(item=>{if(!existing.has(item.id))db[key].push(item)})
   });
@@ -1850,8 +2739,15 @@ function applyStageWorkflow(c,oldStage,newStage){
     addTask("Review pricing, competition, and feedback","Task",addDays(TODAY(),7),"High")
   }
   if(newStage==="Offer Received")addTask("Review offer and net proceeds with seller","Call",TODAY(),"High");
-  if(newStage==="Under Contract"&&!db.tasks.some(t=>t.contactId===c.id&&t.type==="Transaction"&&t.status!=="Done")){
-    ["Inspection / due diligence","Appraisal and financing","Title / closing preparation","Final walkthrough"].forEach((title,i)=>addTask(title,"Transaction",addDays(TODAY(),[7,14,21,28][i]),"High"))
+  if(newStage==="Under Contract"){
+    const tx=ensureTransactionForContact(c);
+    if(tx&&!transactionSetupComplete(tx))setTimeout(()=>toast("Transaction setup needed",`${fullName(c)} needs the signed contract dates and property details entered in Transaction Center.`),30)
+  }
+  if(newStage==="Closed"){
+    transactionsForContact(c.id).filter(tx=>!["Closed","Terminated"].includes(tx.status)).forEach(tx=>{tx.status="Closed";tx.closedAt=NOW();tx.updatedAt=NOW()})
+  }
+  if(newStage==="Lost"){
+    transactionsForContact(c.id).filter(tx=>!["Closed","Terminated"].includes(tx.status)).forEach(tx=>{tx.status="Terminated";tx.updatedAt=NOW()})
   }
 }
 
@@ -2420,6 +3316,8 @@ function renderContact(id){
 
         <details class="compact-panel" open><summary>Lead intake & data health <span>${leadIntakeItems(c).filter(x=>x.done).length}/${leadIntakeItems(c).length}</span></summary><div class="compact-body">${leadIntakeHtml(c)}</div></details>
 
+        <details class="compact-panel" open><summary>Transaction file <span>${transactionsForContact(c.id).length}</span></summary><div class="compact-body">${transactionContactPanelHtml(c)}</div></details>
+
         <details class="compact-panel" open><summary>Properties & opportunities <span>${propertiesForContact(c.id).length}</span></summary><div class="compact-body property-panel-body">${propertyCardsHtml(c)}</div></details>
 
         <details class="compact-panel" open><summary>${c.type==="Seller"?"Seller opportunity":c.type==="Buyer"?"Buyer criteria":c.type==="Realtor"?"Realtor partner":c.type==="Lender"?"Lending partner":"Sphere relationship"} <span>${esc(c.type)}</span></summary><div class="compact-body detail-grid">${typeSpecificHtml(c)}</div></details>
@@ -2526,7 +3424,7 @@ function renderPipeline(){
   const contacts=db.contacts.filter(c=>c.type===state.pipelineType&&!["Lost"].includes(c.stage));
   document.getElementById("view").innerHTML=
     pageHead("Lead-to-close visibility","Pipeline","Drag cards between stages. Seller and buyer workflows stay separate.",`<button class="${state.pipelineType==="Seller"?"primary-btn":"ghost-btn"}" data-action="pipeline-type" data-id="Seller">Seller</button><button class="${state.pipelineType==="Buyer"?"primary-btn":"ghost-btn"}" data-action="pipeline-type" data-id="Buyer">Buyer</button>`) +
-    `<div class="kanban-wrap"><div class="kanban">${stages.map(stage=>{const items=contacts.filter(c=>c.stage===stage);return `<section class="kanban-column" data-stage="${esc(stage)}"><div class="kanban-head"><span>${esc(stage)}</span><b>${items.length}</b></div>${items.map(c=>`<article class="deal-card" draggable="true" data-contact="${c.id}"><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.property||"No property")} • ${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"}</small><div class="deal-meta"><span>${money(c.gci)}</span><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></div></article>`).join("")}</section>`}).join("")}</div></div>`;
+    `<div class="kanban-wrap"><div class="kanban">${stages.map(stage=>{const items=contacts.filter(c=>c.stage===stage);return `<section class="kanban-column" data-stage="${esc(stage)}"><div class="kanban-head"><span>${esc(stage)}</span><b>${items.length}</b></div>${items.map(c=>`<article class="deal-card" draggable="true" data-contact="${c.id}"><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.property||"No property")} • ${c.lastCommunication?`Last touch ${dateLabel(c.lastCommunication)}`:"Never contacted"}</small>${transactionsForContact(c.id).filter(tx=>!["Closed","Terminated"].includes(tx.status)).map(tx=>{const p=transactionProgress(tx),h=transactionHealth(tx);return `<a class="pipeline-transaction-link" href="#/transaction/${tx.id}"><span>${tx.closingDate?`Close ${dateLabel(tx.closingDate)}`:"Setup dates"}</span><b>${p.pct}%</b><i class="tx-health ${h.className}">${h.label}</i></a>`}).join("")}<div class="deal-meta"><span>${money(c.gci)}</span><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></div></article>`).join("")}</section>`}).join("")}</div></div>`;
 }
 
 
@@ -2889,7 +3787,7 @@ function renderReports(){
   const stageMap={};db.contacts.forEach(c=>stageMap[c.stage]=(stageMap[c.stage]||0)+1);
   document.getElementById("view").innerHTML=
     pageHead("Business intelligence","Reports","Measure relationship work, pipeline, source performance, and listing focus.") +
-    `<section class="metric-grid"><div class="metric"><label>Work Today</label><strong>${workQueueItems().length}</strong><small>Open priority items</small></div><div class="metric"><label>Database</label><strong>${db.contacts.length}</strong><small>Total people</small></div><div class="metric"><label>Seller share</label><strong>${db.contacts.length?Math.round(db.contacts.filter(c=>c.type==="Seller").length/db.contacts.length*100):0}%</strong><small>Listing-focused mix</small></div><div class="metric"><label>Activity this week</label><strong>${communications7.length}</strong><small>Logged touches</small></div><div class="metric"><label>Call connect rate</label><strong>${calls?Math.round(connected/calls*100):0}%</strong><small>Connected or appointment</small></div><div class="metric"><label>Closed GCI</label><strong>${money(closed.reduce((s,c)=>s+c.gci,0))}</strong><small>Recorded closings</small></div><div class="metric"><label>Possible duplicates</label><strong>${possibleDuplicateIds().size}</strong><small>Records to review</small></div></section>
+    `<section class="metric-grid"><div class="metric"><label>Active transactions</label><strong>${activeTransactions().length}</strong><small>Buyer and seller sides</small></div><div class="metric"><label>Transaction deadlines</label><strong>${transactionDeadlineItems().length}</strong><small>Due, overdue, or problems</small></div><div class="metric"><label>Work Today</label><strong>${workQueueItems().length}</strong><small>Open priority items</small></div><div class="metric"><label>Database</label><strong>${db.contacts.length}</strong><small>Total people</small></div><div class="metric"><label>Seller share</label><strong>${db.contacts.length?Math.round(db.contacts.filter(c=>c.type==="Seller").length/db.contacts.length*100):0}%</strong><small>Listing-focused mix</small></div><div class="metric"><label>Activity this week</label><strong>${communications7.length}</strong><small>Logged touches</small></div><div class="metric"><label>Call connect rate</label><strong>${calls?Math.round(connected/calls*100):0}%</strong><small>Connected or appointment</small></div><div class="metric"><label>Closed GCI</label><strong>${money(closed.reduce((s,c)=>s+c.gci,0))}</strong><small>Recorded closings</small></div><div class="metric"><label>Possible duplicates</label><strong>${possibleDuplicateIds().size}</strong><small>Records to review</small></div></section>
     <div class="grid two"><section class="card card-pad"><div class="card-head"><div><h2>Lead sources</h2><small>People and projected GCI by source.</small></div></div>${barChart(Object.entries(sourceMap).map(([label,v])=>({label,value:v.count,display:`${v.count} • ${money(v.gci)}`})))}</section>
     <section class="card card-pad"><div class="card-head"><div><h2>Stage funnel</h2><small>Where relationships are sitting.</small></div></div>${barChart(Object.entries(stageMap).map(([label,value])=>({label,value,display:value})))}</section></div>
     <div class="grid two" style="margin-top:10px"><section class="card card-pad"><div class="card-head"><div><h2>Estimated from open opportunities GCI</h2><small>Seller vs. buyer opportunity.</small></div></div>${barChart(["Seller","Buyer"].map(type=>({label:type,value:open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0),display:money(open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0))})))}</section>
@@ -2904,6 +3802,7 @@ function renderSettings(){
       ${cloudSettingsHtml()}
       ${templatesSettingsHtml()}
       ${callScriptsSettingsHtml()}
+      ${transactionResourcesSettingsHtml()}
       <section class="setting-card recently-deleted"><div class="setting-card-head"><div><h3>Recently Deleted</h3><p>Restore contacts removed by mistake.</p></div><b>${db.deletedContacts.length}</b></div>
         <div class="deleted-list">${db.deletedContacts.length?db.deletedContacts.slice(0,10).map(item=>`<div class="deleted-row"><div><strong>${esc(fullName(item.contact))}</strong><span>Deleted ${dateTimeLabel(item.deletedAt)}</span></div><button class="ghost-btn compact" data-action="restore-deleted" data-id="${item.id}">Restore</button><button class="quick" data-action="permanent-delete" data-id="${item.id}">×</button></div>`).join(""):`<div class="compact-empty">No deleted contacts.</div>`}</div>
       </section>
@@ -3443,6 +4342,29 @@ document.addEventListener("click",event=>{
   if(action==="save-call-script")saveCallScript();
   if(action==="delete-call-script")deleteCallScript(id);
   if(action==="reset-call-scripts")resetCallScripts();
+  if(action==="change-tx-next")transactionNextStepModal(id);
+  if(action==="choose-tx-next"){setTransactionNextStep(id,el.dataset.step||"");closeModal()}
+  if(action==="clear-tx-next"){clearTransactionNextStep(id);closeModal()}
+  if(action==="make-tx-next")setTransactionNextStep(id,el.dataset.step||"");
+  if(action==="complete-tx-next")completeTransactionNext(id);
+  if(action==="move-tx-next-date")moveTransactionNextDate(id,el.dataset.days||1);
+  if(action==="open-transaction-resource")transactionResourceModal(id||"");
+  if(action==="save-transaction-resource")saveTransactionResource();
+  if(action==="delete-transaction-resource")deleteTransactionResource(id);
+  if(action==="open-transaction")transactionModal(id||"",el.dataset.contact||"");
+  if(action==="save-transaction")saveTransaction();
+  if(action==="transaction-filter"){state.transactionFilter=id;renderTransactions()}
+  if(action==="quick-complete-tx-step")quickCompleteTransactionStep(id,el.dataset.step||"");
+  if(action==="edit-tx-step")transactionStepModal(id,el.dataset.step||"");
+  if(action==="add-tx-step")transactionStepModal(id);
+  if(action==="save-tx-step")saveTransactionStep();
+  if(action==="delete-tx-step"){const tx=transaction(id);if(tx&&confirm("Delete this custom transaction step?")){tx.checklist=tx.checklist.filter(step=>step.id!==el.dataset.step);save();closeModal();renderTransaction(id)}}
+  if(action==="transaction-status-menu")transactionStatusModal(id);
+  if(action==="set-transaction-status")setTransactionStatus(id,el.dataset.status||"Under Contract");
+  if(action==="terminate-transaction")terminateTransaction(id);
+  if(action==="copy-transaction-update"){const tx=transaction(id);if(tx)copyTextValue(transactionUpdateText(tx),"Client update copied")}
+  if(action==="text-transaction-update"){const tx=transaction(id),c=contact(tx?.contactId);if(tx&&c&&hasPhone(c))location.href=`sms:${c.phone.replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(transactionUpdateText(tx))}`}
+  if(action==="print-transaction")window.print();
   if(action==="quick-launch")quickLaunch(channel,id);
   if(action==="save-pending-touch")savePendingTouchLog(id,channel);
   if(action==="dismiss-pending-touch"){clearPendingTouch();closeModal()}
@@ -3564,6 +4486,22 @@ document.addEventListener("click",event=>{
   }
 });
 document.addEventListener("change",event=>{
+  const txStepControl=event.target.closest('[data-action="tx-step-status"],[data-action="tx-step-due"],[data-action="tx-step-owner"]');
+  if(txStepControl){
+    const field=txStepControl.dataset.action==="tx-step-status"?"status":txStepControl.dataset.action==="tx-step-due"?"due":"owner";
+    updateTransactionStep(txStepControl.dataset.id,txStepControl.dataset.step,field,txStepControl.value);return
+  }
+  if(event.target.id==="transactionContact"){
+    const c=contact(event.target.value),side=document.getElementById("transactionSide"),propertySelect=document.getElementById("transactionProperty");
+    if(c&&side)side.value=c.type;
+    if(c&&propertySelect)propertySelect.innerHTML=`<option value="">Use address below</option>${propertiesForContact(c.id).map(p=>`<option value="${p.id}">${esc(propertyAddress(p)||p.role)}</option>`).join("")}`;
+    return
+  }
+  if(event.target.id==="transactionProperty"){
+    const p=db.properties.find(item=>item.id===event.target.value);
+    if(p){[["transactionStreet","street"],["transactionUnit","unit"],["transactionCity","city"],["transactionState","state"],["transactionZip","zip"],["transactionCounty","county"]].forEach(([id,key])=>{const field=document.getElementById(id);if(field)field.value=p[key]||""})}
+    return
+  }
   if(event.target.id==="scriptSelect"){changeConversationScript();return}
   if(event.target.id==="scriptOutcome"){
     document.getElementById("scriptAppointmentField")?.classList.toggle("show",event.target.value==="Appointment Set");
@@ -3624,5 +4562,5 @@ document.addEventListener("visibilitychange",()=>{
 document.getElementById("drawerBackdrop").addEventListener("click",closePip);
 document.getElementById("modalBackdrop").addEventListener("click",event=>{if(event.target.id==="modalBackdrop")closeModal()});
 window.addEventListener("hashchange",route);
-renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);initCloud();
+db=loadDatabase();renderPip();route();restoreFromIndexedDbIfNeeded();setTimeout(()=>processAutomationEngine(),250);initCloud();
 })();
