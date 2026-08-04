@@ -686,3 +686,43 @@ No database or Supabase changes are required.
 - Discreet Staff Exit returns to event management.
 
 No new Supabase SQL is required. Existing V3 data migrates automatically.
+
+
+## V3.3 — Stability Audit
+
+### Responsive shell
+- Unified the iPhone/iPad breakpoint at 1100 CSS pixels.
+- Removed the broken hybrid state where the top bar was mobile but navigation remained desktop.
+- Mobile/iPad top bar now contains only Search, Notifications, and Quick Add.
+- Cloud Sync moved to the top of More on mobile/iPad.
+- Exactly five bottom-navigation destinations appear on phone and iPad.
+
+### Mobile tool access
+More now displays a complete mobile tool directory:
+- Inbox
+- Tasks & Calendar
+- Call Queue
+- Prospecting Sprint
+- Field Mode
+- Open Houses
+- Market Study
+- Plans & Automations
+- Lead Activity
+- Reporting
+- Settings
+- Cloud Sync
+
+### Open House exits
+- Added `← All open houses` to staff management.
+- Guest kiosk exit no longer relies on a browser confirmation dialog.
+- Added a large fixed Exit Guest Mode button.
+- Added an additional footer exit.
+- Escape exits guest mode on computers and attached iPad keyboards.
+- Exit directly removes kiosk mode, returns to staff view, and exits browser fullscreen if active.
+
+### Runtime protection
+- Click actions are guarded so one failing button does not silently stop the interface.
+- UI errors are saved locally in `holtonHomesUiFailures`.
+- Static action coverage and browser smoke tests are included in QA_REPORT.txt.
+
+No new Supabase SQL is required.

@@ -1,8 +1,8 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v3_2_openhouse";
-const LEGACY_KEYS = ["holtonHomesCRM_v3_fub","holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesCRM_v3_3_stable";
+const LEGACY_KEYS = ["holtonHomesCRM_v3_2_openhouse","holtonHomesCRM_v3_fub","holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
@@ -1943,7 +1943,15 @@ function setCloudStatus(status,detail=""){
   }
   if(dot)dot.textContent=status==="Synced"?"✓":status==="Syncing…"?"↻":status.includes("Offline")?"!":"●"
   const settingsStatus=document.getElementById("cloudSettingsStatus");
-  if(settingsStatus)settingsStatus.textContent=detail||status
+  if(settingsStatus)settingsStatus.textContent=detail||status;
+  const mobileStatus=document.getElementById("mobileCloudStatus");
+  const mobileDot=document.getElementById("mobileCloudDot");
+  if(mobileStatus)mobileStatus.textContent=detail||status;
+  if(mobileDot){
+    mobileDot.classList.toggle("synced",status==="Synced");
+    mobileDot.classList.toggle("syncing",status==="Syncing…");
+    mobileDot.classList.toggle("offline",status.includes("Offline")||status.toLowerCase().includes("error"))
+  }
 }
 function persistLocalSnapshot(){
   const payload=JSON.stringify(db);
@@ -2544,9 +2552,41 @@ function dayBriefingModal(){
 function moreTile(route,icon,title,description,count=0,className=""){
   return `<a class="more-tile ${className}" href="#/${route}"><span>${icon}</span><div><strong>${esc(title)}</strong><small>${esc(description)}</small></div>${count?`<b>${count}</b>`:""}</a>`
 }
+
+function mobileToolDirectoryHtml(){
+  const unread=db.communications.filter(item=>item.unread).length;
+  const dueTasks=db.tasks.filter(item=>item.status!=="Done"&&item.due<=TODAY()).length;
+  const txDue=transactionDeadlineItems().length;
+  const tools=[
+    ["inbox","✉","Inbox","Replies and conversations",unread],
+    ["tasks","☷","Tasks & Calendar","Promises, appointments, and reminders",dueTasks],
+    ["call-queue","☎","Call Queue","Resume calls without losing your place",callQueue().length],
+    ["focus","⚡","Prospecting Sprint","Work one relationship at a time",0],
+    ["field","⌖","Field Mode","Appointments, directions, calls, and notes",0],
+    ["open-houses","⌂","Open Houses","Events, iPad sign-in, and guest follow-up",0],
+    ["market-study","↗","Market Study","Five-minute local market scan",0],
+    ["automations","⚙","Plans & Automations","Repeatable follow-up workflows",0],
+    ["activity","◉","Lead Activity","Property and behavior signals",0],
+    ["reports","▥","Reporting","Pipeline, sources, and production",0],
+    ["settings","⚙","Settings","Apps, goals, scripts, portals, and backups",0]
+  ];
+  return `<section class="mobile-tool-directory">
+    <div class="mobile-tools-title"><span>ALL CRM TOOLS</span><h2>Everything hidden from the bottom bar</h2><p>The bottom bar stays simple. Every additional workspace is available here.</p></div>
+    <button class="mobile-cloud-card" data-action="cloud-sync-now">
+      <span class="mobile-cloud-indicator" id="mobileCloudDot"></span>
+      <div><strong>Cloud Sync</strong><small id="mobileCloudStatus">${esc(cloudStatus)}</small></div>
+      <b>Sync now</b>
+    </button>
+    <div class="mobile-tools-list">${tools.map(([route,icon,title,description,count])=>`
+      <a href="#/${route}"><span>${icon}</span><div><strong>${esc(title)}</strong><small>${esc(description)}</small></div>${count?`<b>${count}</b>`:""}<em>›</em></a>
+    `).join("")}</div>
+  </section>`
+}
+
 function renderMore(){
   const unread=db.communications.filter(x=>x.unread).length,dueTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,setup=setupProgress();
   document.getElementById("view").innerHTML=backupWarningHtml()+pageHead("Tools & administration","More","Communication, focused work, lead generation, reports, and system setup.",`<button class="primary-btn" data-action="open-quick-capture">＋ Quick capture</button>`)+
+  mobileToolDirectoryHtml()+
   `<section class="more-grid pro-more-grid">
     <button class="more-tile setup" data-action="open-setup-center"><span>✓</span><div><strong>CRM Setup & Guide</strong><small>${setup.done}/${setup.total} foundations complete</small></div><b>${setup.pct}%</b></button>
     ${moreTile("focus","⚡","Prospecting Sprint","Work one relationship at a time.",callQueue().length,"seller")}
@@ -2791,6 +2831,7 @@ function renderOpenHouse(id){
     <section class="open-house-hero open-house-staff-hero">
       <div><span>OPEN HOUSE STAFF VIEW</span><h1>${esc(item.title)}</h1><p>${dateLabel(item.date)} • ${esc(item.time)} • ${esc(openHouseAddress(item)||"Address needed")}</p></div>
       <div class="open-house-staff-actions">
+        <a class="ghost-btn" href="#/open-houses">← All open houses</a>
         ${openHouseAddress(item)?`<button class="ghost-btn" data-action="open-directions" data-address="${esc(openHouseAddress(item))}">Directions</button>`:""}
         <button class="ghost-btn" data-action="open-open-house" data-id="${item.id}">Edit event</button>
         <button class="ghost-btn" data-action="open-house-visitor" data-id="${item.id}">Add guest manually</button>
@@ -3057,7 +3098,7 @@ function renderOpenHouseKiosk(id){
   const view=document.getElementById("view");
   if(state.openHouseKioskSuccess){
     view.innerHTML=`<main class="open-house-kiosk">
-      <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Staff exit</button>
+      <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Exit guest mode</button>
       <section class="kiosk-success">
         <div class="kiosk-success-mark">✓</div>
         <span>YOU’RE CHECKED IN</span>
@@ -3073,7 +3114,7 @@ function renderOpenHouseKiosk(id){
   }
   const step=state.openHouseKioskStep;
   view.innerHTML=`<main class="open-house-kiosk">
-    <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Staff exit</button>
+    <button class="kiosk-staff-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Exit guest mode</button>
     <header class="kiosk-property-header">
       <div class="kiosk-brand"><span>HH</span><div><strong>Holton Homes</strong><small>Open House</small></div></div>
       <div class="kiosk-property"><strong>${esc(item.title)}</strong><span>${esc(openHouseAddress(item))}</span></div>
@@ -3081,7 +3122,10 @@ function renderOpenHouseKiosk(id){
     <div class="kiosk-progress" aria-label="Step ${step} of 4">${[1,2,3,4].map(number=>`<span class="${number<step?"done":number===step?"active":""}"><b>${number<step?"✓":number}</b></span>`).join("")}</div>
     <div class="kiosk-content">${openHouseKioskStepHtml(item)}</div>
     <footer class="kiosk-actions">
-      ${step>1?`<button class="ghost-btn kiosk-back" data-action="open-house-kiosk-back" data-id="${item.id}">← Back</button>`:`<span></span>`}
+      <div class="kiosk-left-actions">
+        ${step>1?`<button class="ghost-btn kiosk-back" data-action="open-house-kiosk-back" data-id="${item.id}">← Back</button>`:""}
+        <button class="kiosk-footer-exit" data-action="exit-open-house-kiosk" data-id="${item.id}">Exit guest mode</button>
+      </div>
       <div><small>Step ${step} of 4</small><button class="primary-btn" data-action="${step===4?"save-open-house-kiosk":"open-house-kiosk-next"}" data-id="${item.id}">${step===4?"Check in":"Continue →"}</button></div>
     </footer>
   </main>`
@@ -3151,10 +3195,20 @@ function resetOpenHouseKiosk(id){
   renderOpenHouseKiosk(id)
 }
 function exitOpenHouseKiosk(id){
-  if(!confirm("Exit the guest sign-in screen and return to staff view?"))return;
-  clearTimeout(openHouseKioskResetTimer);releaseOpenHouseWakeLock();
-  state.openHouseKioskId="";state.openHouseKioskDraft=null;state.openHouseKioskSuccess="";
-  location.hash=`#/open-house/${id}`
+  clearTimeout(openHouseKioskResetTimer);
+  releaseOpenHouseWakeLock();
+  try{if(document.fullscreenElement)document.exitFullscreen()}catch{}
+  state.openHouseKioskId="";
+  state.openHouseKioskStep=1;
+  state.openHouseKioskDraft=null;
+  state.openHouseKioskSuccess="";
+  document.body.classList.remove("open-house-kiosk-active");
+  const target=`#/open-house/${id}`;
+  if(location.hash===target)route();
+  else{
+    location.hash=target;
+    setTimeout(()=>{if(document.body.classList.contains("open-house-kiosk-active"))route()},0)
+  }
 }
 
 const marketSignalOptions=[
@@ -5652,7 +5706,29 @@ function seedDemo(){
   db.contacts.unshift(seller,farm,buyer);db.tasks.unshift({id:uid(),contactId:seller.id,title:"Prepare listing consultation pricing",type:"Appointment",due:TODAY(),status:"Open",priority:"High",planRunId:"",createdAt:TODAY()},{id:uid(),contactId:buyer.id,title:"Buyer financing follow-up",type:"Call",due:TODAY(),status:"Open",priority:"High",planRunId:"",createdAt:TODAY()});db.communications.unshift({id:uid(),contactId:seller.id,channel:"Call",direction:"outbound",outcome:"Appointment Set",body:"Booked listing consultation.",date:`${addDays(TODAY(),-2)}T14:00:00`,unread:false,threadStatus:"open",createdAt:NOW()},{id:uid(),contactId:buyer.id,channel:"Text",direction:"inbound",outcome:"Replied",body:"Can we look at the one on Sample Street?",date:NOW(),unread:true,threadStatus:"open",createdAt:NOW()});save();toast("Sample data added","Explore the complete workflow.");route()
 }
 
+
+
+function recordUiFailure(error,action="unknown"){
+  try{
+    const failures=JSON.parse(localStorage.getItem("holtonHomesUiFailures")||"[]");
+    failures.unshift({date:NOW(),route:state.route,action,message:String(error?.message||error)});
+    localStorage.setItem("holtonHomesUiFailures",JSON.stringify(failures.slice(0,25)))
+  }catch{}
+  console.error("Holton Homes UI failure",action,error);
+  toast("That action did not complete",`Action: ${action}. The error was saved under Settings diagnostics.`)
+}
+window.addEventListener("error",event=>recordUiFailure(event.error||event.message,"window-error"));
+window.addEventListener("unhandledrejection",event=>recordUiFailure(event.reason,"unhandled-promise"));
+
+document.addEventListener("keydown",event=>{
+  if(event.key==="Escape"&&document.body.classList.contains("open-house-kiosk-active")&&state.openHouseKioskId){
+    event.preventDefault();
+    exitOpenHouseKiosk(state.openHouseKioskId)
+  }
+});
+
 document.addEventListener("click",event=>{
+  try{
   const directNameLink=event.target.closest("a.person-name-link");
   if(directNameLink){
     const actionNode=directNameLink.closest("[data-action]");
@@ -5935,6 +6011,10 @@ document.addEventListener("click",event=>{
     if(cloudUser)pullCloudState({force:true,announce:true});
     else route();
     toast("Device cache cleared",cloudUser?"Your cloud copy is downloading again.":"Sign in to restore cloud data.")
+  }
+
+  }catch(error){
+    recordUiFailure(error,event.target.closest("[data-action]")?.dataset.action||"click")
   }
 });
 document.addEventListener("change",event=>{

@@ -1,7 +1,7 @@
 {
-  "name": "Holton Homes CRM V3.2",
+  "name": "Holton Homes CRM V3.3",
   "short_name": "Holton CRM",
-  "description": "A relationship CRM with a private full-screen iPad open-house sign-in.",
+  "description": "A stabilized real-estate CRM with unified iPhone/iPad navigation and audited Open House controls.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
