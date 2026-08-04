@@ -1305,3 +1305,245 @@ body{margin:0;background:var(--v3-page);color:var(--v3-text);font-family:-apple-
 @media(min-width:1101px){
   .mobile-people{display:none!important}
 }
+
+
+/* ================================================================
+   V3.1 — CLEAN DESKTOP TOP-RIGHT ACTION AREA
+   ================================================================ */
+@media(min-width:1101px){
+  .fub-topbar{
+    height:66px!important;
+    gap:14px!important;
+    padding:0 18px!important;
+  }
+  .fub-primary-nav{
+    height:66px!important;
+    flex:0 0 auto!important;
+  }
+  .fub-primary-nav a{
+    height:66px!important;
+    padding:0 12px!important;
+  }
+
+  .fub-global-search{
+    flex:0 1 300px!important;
+    width:300px!important;
+    min-width:230px!important;
+    height:40px!important;
+    margin-left:auto!important;
+    border:1px solid rgba(25,48,58,.12)!important;
+    border-radius:21px!important;
+    background:#fff!important;
+    overflow:visible!important;
+  }
+  .fub-global-search input{
+    width:100%!important;
+    height:40px!important;
+    padding:0 15px 0 39px!important;
+    font-size:13px!important;
+    color:#46545b!important;
+    text-overflow:ellipsis!important;
+  }
+  .fub-global-search input::placeholder{
+    color:#8a969c!important;
+    opacity:1!important;
+  }
+  .fub-global-search>span{
+    left:14px!important;
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    color:#68767d!important;
+  }
+  .fub-global-search .search-results{
+    top:48px!important;
+    right:0!important;
+    left:auto!important;
+    width:min(520px,70vw)!important;
+  }
+
+  .fub-top-actions{
+    flex:0 0 auto!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:7px!important;
+    margin-left:0!important;
+    padding-left:10px!important;
+    border-left:1px solid rgba(255,255,255,.14)!important;
+  }
+
+  /* Completely neutralize old cloud-pill rings and shadows. */
+  .fub-top-actions .fub-sync-action,
+  .fub-top-actions .cloud-sync-pill{
+    position:relative!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:7px!important;
+    width:auto!important;
+    min-width:40px!important;
+    height:40px!important;
+    min-height:40px!important;
+    padding:0 11px!important;
+    margin:0!important;
+    border:1px solid rgba(255,255,255,.22)!important;
+    outline:0!important;
+    border-radius:20px!important;
+    background:rgba(255,255,255,.96)!important;
+    color:#536168!important;
+    box-shadow:none!important;
+    overflow:hidden!important;
+  }
+  .fub-top-actions .cloud-sync-pill::before,
+  .fub-top-actions .cloud-sync-pill::after{
+    display:none!important;
+    content:none!important;
+  }
+  .fub-sync-led,
+  #cloudSyncDot{
+    display:block!important;
+    flex:0 0 9px!important;
+    width:9px!important;
+    height:9px!important;
+    min-width:9px!important;
+    min-height:9px!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:50%!important;
+    background:#43b77d!important;
+    color:transparent!important;
+    font-size:0!important;
+    line-height:0!important;
+    box-shadow:0 0 0 4px #e3f5eb!important;
+  }
+  .fub-sync-copy,
+  #cloudSyncLabel{
+    display:block!important;
+    max-width:72px!important;
+    overflow:hidden!important;
+    color:#536168!important;
+    font-size:11px!important;
+    font-weight:750!important;
+    line-height:1!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+  }
+
+  .fub-top-icon{
+    position:relative!important;
+    display:grid!important;
+    place-items:center!important;
+    flex:0 0 40px!important;
+    width:40px!important;
+    min-width:40px!important;
+    height:40px!important;
+    min-height:40px!important;
+    padding:0!important;
+    margin:0!important;
+    border:1px solid rgba(255,255,255,.22)!important;
+    outline:0!important;
+    border-radius:50%!important;
+    background:rgba(255,255,255,.96)!important;
+    color:#5e6a71!important;
+    box-shadow:none!important;
+  }
+  .fub-top-icon:hover,
+  .fub-sync-action:hover{
+    background:#fff!important;
+    border-color:rgba(255,255,255,.5)!important;
+    transform:translateY(-1px)!important;
+  }
+  .fub-action-symbol{
+    display:block!important;
+    font-size:18px!important;
+    font-weight:650!important;
+    line-height:1!important;
+  }
+  .fub-add-action{
+    background:var(--v3-accent)!important;
+    border-color:var(--v3-accent)!important;
+    color:#fff!important;
+  }
+  .fub-add-action:hover{
+    background:#b92964!important;
+    border-color:#b92964!important;
+  }
+  .fub-top-actions .notification-button b,
+  #notificationCount{
+    position:absolute!important;
+    right:-4px!important;
+    top:-5px!important;
+    min-width:19px!important;
+    height:19px!important;
+    padding:0 5px!important;
+    display:grid!important;
+    place-items:center!important;
+    border:2px solid var(--v3-nav)!important;
+    border-radius:999px!important;
+    background:#df3d78!important;
+    color:#fff!important;
+    font-size:10px!important;
+    font-weight:850!important;
+    line-height:1!important;
+  }
+  .fub-top-actions .notification-button b:empty,
+  #notificationCount:empty{
+    display:none!important;
+  }
+}
+
+/* Intermediate laptop widths: preserve the toolbar instead of squeezing it. */
+@media(min-width:1101px) and (max-width:1390px){
+  .fub-brand span:last-child{display:none!important}
+  .fub-primary-nav a{padding:0 9px!important}
+  .fub-primary-nav a[href="#/reports"]{display:none!important}
+  .fub-global-search{
+    flex-basis:240px!important;
+    width:240px!important;
+    min-width:190px!important;
+  }
+  .fub-sync-copy,#cloudSyncLabel{display:none!important}
+  .fub-top-actions .fub-sync-action,
+  .fub-top-actions .cloud-sync-pill{
+    width:40px!important;
+    padding:0!important;
+  }
+}
+
+/* Keep mobile controls consistent with the same visual family. */
+@media(max-width:1100px){
+  .fub-top-actions{
+    display:flex!important;
+    gap:7px!important;
+  }
+  .fub-top-actions .fub-sync-action,
+  .fub-top-actions .cloud-sync-pill,
+  .fub-top-icon{
+    width:42px!important;
+    min-width:42px!important;
+    height:42px!important;
+    min-height:42px!important;
+    padding:0!important;
+    border:1px solid #eadfe4!important;
+    border-radius:50%!important;
+    background:#fff!important;
+    box-shadow:none!important;
+  }
+  .fub-sync-copy,#cloudSyncLabel{display:none!important}
+  .fub-sync-led,#cloudSyncDot{
+    width:9px!important;
+    height:9px!important;
+    min-width:9px!important;
+    min-height:9px!important;
+    border-radius:50%!important;
+    background:#43b77d!important;
+    color:transparent!important;
+    font-size:0!important;
+    box-shadow:0 0 0 4px #e3f5eb!important;
+  }
+  .fub-add-action{
+    background:var(--v3-accent)!important;
+    border-color:var(--v3-accent)!important;
+    color:#fff!important;
+  }
+}

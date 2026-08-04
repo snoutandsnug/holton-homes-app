@@ -47,18 +47,21 @@
 
     <div class="fub-global-search global-search-wrap">
       <span>⌕</span>
-      <input id="globalSearch" placeholder="Search people, phone, email, property, or tag">
+      <input id="globalSearch" placeholder="Search people, property, phone…">
       <div class="search-results" id="globalSearchResults"></div>
     </div>
 
-    <div class="fub-top-actions">
-      <button class="cloud-sync-pill" id="cloudSyncButton" data-action="cloud-sync-now" title="Cloud sync">
-        <span id="cloudSyncDot">●</span><span id="cloudSyncLabel">Sync</span>
+    <div class="fub-top-actions" aria-label="CRM actions">
+      <button class="fub-sync-action cloud-sync-pill" id="cloudSyncButton" data-action="cloud-sync-now" title="Cloud sync" aria-label="Cloud sync">
+        <span class="fub-sync-led" id="cloudSyncDot">●</span>
+        <span class="fub-sync-copy" id="cloudSyncLabel">Synced</span>
       </button>
-      <button class="fub-icon-action notification-button" id="notificationButton" data-action="open-notifications" aria-label="Notifications">
-        <span>♢</span><b id="notificationCount"></b>
+      <button class="fub-top-icon notification-button" id="notificationButton" data-action="open-notifications" aria-label="Notifications" title="Notifications">
+        <span class="fub-action-symbol">◇</span><b id="notificationCount"></b>
       </button>
-      <button class="fub-icon-action" data-action="open-quick-capture" aria-label="Quick capture" title="Quick capture">＋</button>
+      <button class="fub-top-icon fub-add-action" data-action="open-quick-capture" aria-label="Quick capture" title="Quick capture">
+        <span class="fub-action-symbol">＋</span>
+      </button>
     </div>
   </header>
 

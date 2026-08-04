@@ -643,3 +643,18 @@ V3 keeps the existing Supabase state, contacts, transactions, scripts, workflows
 ## Data migration
 
 The active storage key is `holtonHomesCRM_v3_fub`. V3 migrates the CRM Pro 2 state automatically. No Supabase SQL changes are required.
+
+
+## V3.1 — Top Bar Stabilization
+
+- Shorter global-search label.
+- Clean, fixed-width desktop search.
+- Cloud sync reduced to a normal status control.
+- Removed inherited double rings and shadows.
+- Matching 40-pixel notification and Quick Add controls.
+- Notification badge no longer distorts the button.
+- Consistent spacing and a subtle divider around the action group.
+- Responsive laptop behavior hides Reporting before squeezing the search and actions.
+- Mobile controls use the same visual family.
+
+No database or Supabase changes are required.
