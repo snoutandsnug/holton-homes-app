@@ -1,0 +1,31 @@
+HOLTON HOMES OS v14 — REPO READY
+
+Upload these files into the ROOT of:
+snoutandsnug/holton-homes-app
+
+REPLACE:
+- index.html
+- 404.html
+- service-worker.js
+
+ADD:
+- v14.css
+- v14-agent.js
+- package.json
+- vercel.json
+- api/pip.js
+
+DO NOT DELETE:
+- app.js
+- styles.css
+- v13.css
+- cloud-config.js
+- assets/
+- SUPABASE_SETUP.sql
+
+IMPORTANT:
+The `api` folder must remain a folder, with `pip.js` inside it.
+
+Once committed to GitHub, Vercel should deploy the repo automatically if Git integration is still connected.
+
+AI Gateway must be enabled in Vercel for Pip's real AI calls.

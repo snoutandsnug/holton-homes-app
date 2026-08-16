@@ -1,0 +1,281 @@
+/* Holton Homes OS v14 — cockpit rebuild
+   Loaded AFTER styles.css and v13.css. Keeps the v13 engine and mobile nav.
+*/
+:root{
+  --v14-ink:#2b2421;
+  --v14-muted:#756963;
+  --v14-line:#eadfda;
+  --v14-cream:#fffaf7;
+  --v14-surface:#ffffff;
+  --v14-soft:#fbf4f2;
+  --v14-pink:#d95f82;
+  --v14-pink-dark:#b94768;
+  --v14-pink-wash:#fff0f4;
+  --v14-shadow:0 10px 30px rgba(69,45,36,.07);
+}
+html,body{background:#faf8f6;color:var(--v14-ink)}
+body{font-size:15px}
+button,a,input,select,textarea{font:inherit}
+
+/* --- Desktop cockpit: return navigation to the TOP --- */
+@media (min-width:901px){
+  .v13-app{display:block!important;min-height:100vh}
+  .v13-sidebar{
+    position:sticky!important;
+    top:0!important;
+    z-index:120!important;
+    height:auto!important;
+    min-height:0!important;
+    width:100%!important;
+    display:grid!important;
+    grid-template-columns:175px minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:18px!important;
+    padding:10px 22px!important;
+    background:rgba(255,250,247,.97)!important;
+    color:var(--v14-ink)!important;
+    border:0!important;
+    border-bottom:1px solid var(--v14-line)!important;
+    box-shadow:0 2px 14px rgba(70,45,36,.04)!important;
+    backdrop-filter:blur(16px);
+  }
+  .v13-brand{
+    min-height:44px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    padding:0!important;
+    border:0!important;
+  }
+  .v13-brand img{width:145px!important;max-height:42px!important;object-fit:contain!important}
+  .v13-brand>span{display:none!important}
+
+  .v13-primary-nav{
+    display:flex!important;
+    align-items:center!important;
+    gap:2px!important;
+    min-width:0!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:0!important;
+    scrollbar-width:none;
+  }
+  .v13-primary-nav::-webkit-scrollbar{display:none}
+  .v13-nav-label{display:none!important}
+  .v13-primary-nav a{
+    flex:0 0 auto!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    min-height:42px!important;
+    padding:0 11px!important;
+    margin:0!important;
+    border-radius:10px!important;
+    border:0!important;
+    background:transparent!important;
+    color:#5b504b!important;
+    font-size:13px!important;
+    font-weight:700!important;
+    letter-spacing:-.01em!important;
+    gap:6px!important;
+  }
+  .v13-primary-nav a:hover{background:#f8ece9!important;color:var(--v14-ink)!important}
+  .v13-primary-nav a.active{
+    background:var(--v14-pink-wash)!important;
+    color:var(--v14-pink-dark)!important;
+    box-shadow:inset 0 0 0 1px rgba(217,95,130,.14)!important;
+  }
+  .v13-primary-nav a .nav-icon{display:none!important}
+  .v13-primary-nav a>b{
+    position:static!important;
+    min-width:18px!important;
+    height:18px!important;
+    padding:0 5px!important;
+    font-size:10px!important;
+  }
+  .v13-primary-nav .mobile-more-route{display:none!important}
+
+  .v13-sidebar-foot{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:7px!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+  }
+  .v13-sidebar-foot>a{display:none!important}
+  .v13-pip-button{
+    width:auto!important;
+    min-width:112px!important;
+    min-height:42px!important;
+    margin:0!important;
+    padding:7px 12px!important;
+    border-radius:12px!important;
+    background:var(--v14-ink)!important;
+    color:#fff!important;
+    border:0!important;
+  }
+  .v13-pip-button small{display:none!important}
+  .v13-pip-button strong{font-size:13px!important}
+  .v13-pip-button .pip-mini{width:24px!important;height:24px!important}
+
+  .v13-shell{min-width:0!important}
+  .v13-topbar{
+    position:sticky!important;
+    top:63px!important;
+    z-index:110!important;
+    height:62px!important;
+    min-height:62px!important;
+    padding:0 28px!important;
+    background:rgba(255,255,255,.94)!important;
+    border-bottom:1px solid var(--v14-line)!important;
+    box-shadow:none!important;
+    backdrop-filter:blur(14px);
+  }
+  .v13-mobile-brand{display:none!important}
+  .fub-global-search{max-width:720px!important}
+  .fub-global-search input{
+    height:42px!important;
+    border-radius:12px!important;
+    background:#f8f5f3!important;
+    border:1px solid transparent!important;
+    font-size:14px!important;
+  }
+  .fub-global-search input:focus{
+    background:#fff!important;
+    border-color:#e7c5cf!important;
+    box-shadow:0 0 0 3px rgba(217,95,130,.10)!important;
+  }
+  .v13-quick-add{
+    min-height:40px!important;
+    padding:0 14px!important;
+    border-radius:11px!important;
+  }
+  .workspace,.fub-workspace{padding:0!important}
+  .view,.fub-view{
+    max-width:none!important;
+    width:100%!important;
+    padding:30px 34px 54px!important;
+  }
+}
+
+/* --- Typography and density cleanup --- */
+.page-head{margin-bottom:22px!important}
+.page-head h1,.v13-today-header h1,.fub-database-header h1{
+  letter-spacing:-.035em!important;
+  color:var(--v14-ink)!important;
+}
+.page-head h1{font-size:34px!important;line-height:1.08!important}
+.page-head p,.v13-today-header p{font-size:15px!important;line-height:1.55!important;color:var(--v14-muted)!important}
+.eyebrow,.v13-panel-head span,.agent-panel-head span{
+  font-size:11px!important;
+  letter-spacing:.12em!important;
+  font-weight:800!important;
+}
+
+/* fewer "boxed dashboard" surfaces */
+.v13-panel,.card,.agent-panel,.fub-people-database,.v13-lead-preview,.v13-lead-list{
+  border-color:var(--v14-line)!important;
+}
+.v13-panel{
+  border-radius:16px!important;
+  box-shadow:none!important;
+  background:var(--v14-surface)!important;
+}
+.v13-today-grid{gap:18px!important}
+.v13-three-wins{gap:12px!important}
+.v13-win-card{
+  border-radius:16px!important;
+  border:1px solid var(--v14-line)!important;
+  box-shadow:none!important;
+  background:#fff!important;
+  min-height:0!important;
+}
+.v13-win-card h2{font-size:18px!important;line-height:1.22!important}
+.v13-win-card p{font-size:13px!important;line-height:1.5!important}
+.v13-win-number{opacity:.45!important}
+
+/* People gets the width it actually needs */
+@media (min-width:1181px){
+  .fub-people-screen{grid-template-columns:220px minmax(0,1fr)!important}
+}
+.fub-smart-collection summary,.fub-smart-collection button{font-size:12px!important}
+.fub-people-table{font-size:13px!important}
+.fub-people-table th{font-size:10px!important;letter-spacing:.06em!important}
+.fub-person-button strong{font-size:14px!important}
+.fub-person-button small,.fub-date-cell small{font-size:11px!important}
+
+/* --- Business Builder --- */
+.v14-business-builder{
+  margin:0 0 18px;
+  border:1px solid #ead9dd;
+  border-radius:18px;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(217,95,130,.11), transparent 34%),
+    linear-gradient(135deg,#fff,#fff9f7);
+  box-shadow:var(--v14-shadow);
+  overflow:hidden;
+}
+.v14-builder-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+  padding:20px 22px 14px;border-bottom:1px solid #f0e3e0;
+}
+.v14-builder-kicker{display:block;font-size:10px;font-weight:900;letter-spacing:.13em;color:var(--v14-pink-dark);margin-bottom:6px}
+.v14-builder-head h2{font-size:22px;letter-spacing:-.025em;margin:0 0 4px;color:var(--v14-ink)}
+.v14-builder-head p{margin:0;color:var(--v14-muted);font-size:13px}
+.v14-builder-actions{display:flex;gap:8px;flex-wrap:wrap}
+.v14-ai-button{
+  appearance:none;border:0;border-radius:11px;padding:10px 13px;cursor:pointer;
+  background:var(--v14-ink);color:#fff;font-weight:800;font-size:12px;
+}
+.v14-ai-button.secondary{background:#fff;color:var(--v14-ink);border:1px solid var(--v14-line)}
+.v14-opportunity-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));}
+.v14-opportunity{
+  min-width:0;padding:15px 16px 17px;border-right:1px solid #f0e3e0;text-decoration:none;color:inherit;
+}
+.v14-opportunity:last-child{border-right:0}
+.v14-opportunity:hover{background:#fff6f7}
+.v14-opportunity>b{display:block;font-size:13px;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v14-opportunity span{display:block;color:var(--v14-muted);font-size:11px;line-height:1.45}
+.v14-opportunity em{display:inline-block;margin-top:8px;font-size:10px;font-style:normal;font-weight:800;color:var(--v14-pink-dark)}
+.v14-builder-empty{padding:18px 22px;color:var(--v14-muted);font-size:13px}
+
+/* Pip becomes a real work assistant */
+.v14-pip-quick-prompts{
+  display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:12px 14px 2px;
+}
+.v14-pip-quick-prompts button{
+  appearance:none;border:1px solid var(--v14-line);background:#fff;border-radius:10px;
+  padding:9px 10px;text-align:left;cursor:pointer;font-size:11px;font-weight:800;color:var(--v14-ink);
+}
+.v14-pip-quick-prompts button:hover{border-color:#e7bdc8;background:#fff6f8}
+.pip-answer.v14-ai-loading{color:var(--v14-muted)}
+.pip-answer.v14-ai-answer{
+  white-space:pre-wrap!important;
+  line-height:1.55!important;
+  font-size:13px!important;
+}
+.v14-ai-status{
+  display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;
+  color:#756963;margin-left:7px;
+}
+.v14-ai-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#d95f82;box-shadow:0 0 0 3px rgba(217,95,130,.12)}
+.v14-context-ai{
+  margin-left:8px!important;
+}
+
+/* Mobile: keep v13 bottom nav, just clean up inserted builder */
+@media (max-width:900px){
+  .v14-business-builder{margin:10px 12px 16px;border-radius:16px}
+  .v14-builder-head{display:block;padding:17px 16px 13px}
+  .v14-builder-actions{margin-top:12px}
+  .v14-opportunity-list{grid-template-columns:1fr}
+  .v14-opportunity{border-right:0;border-bottom:1px solid #f0e3e0;padding:13px 16px}
+  .v14-opportunity:last-child{border-bottom:0}
+  .v14-pip-quick-prompts{grid-template-columns:1fr 1fr}
+}
+
+/* Open-house kiosk should remain distraction free */
+body.open-house-kiosk-active .v13-sidebar,
+body.open-house-kiosk-active .v13-topbar{display:none!important}
