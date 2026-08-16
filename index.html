@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f2dfe6">
-  <meta name="description" content="Holton Homes OS — relationship-first real estate command center with Pip Coach">
+  <meta name="description" content="Holton Homes OS — relationship-first real estate command center with Pip Coach — visual polish">
   <title>Holton Homes OS</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
@@ -119,19 +119,53 @@
 <aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true"><div id="contactPeekContent"></div></aside>
 
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
-<aside class="pip-drawer" id="pipDrawer" aria-hidden="true">
-  <div class="pip-drawer-head">
-    <div class="pip-avatar-large" aria-hidden="true"></div>
-    <div><strong>Pip Coach</strong><small>Business first. Mascot second.</small></div>
-    <button class="icon-btn" data-action="close-pip">×</button>
+<aside class="pip-drawer v146-pip-drawer" id="pipDrawer" aria-hidden="true">
+  <div class="v146-pip-shell">
+    <header class="pip-drawer-head v146-pip-header">
+      <div class="v146-pip-identity">
+        <div class="pip-avatar-large" aria-hidden="true"></div>
+        <div class="v146-pip-title">
+          <span>HOLTON HOMES COACH</span>
+          <strong>Pip</strong>
+          <small>Your CRM brain for what deserves attention next.</small>
+        </div>
+      </div>
+      <button class="icon-btn v146-pip-close" data-action="close-pip" aria-label="Close Pip">×</button>
+    </header>
+
+    <section class="v146-pip-stage">
+      <div class="v146-pip-stage-copy">
+        <span class="v146-stage-kicker">RIGHT NOW</span>
+        <div class="pip-focus" id="pipFocus"></div>
+      </div>
+      <img id="pipStageArt" src="./pip-default.webp" alt="" aria-hidden="true">
+    </section>
+
+    <section class="v146-next-section">
+      <div class="v146-section-heading">
+        <div><span>NEXT BEST MOVES</span><strong>Keep momentum without hunting through the CRM.</strong></div>
+      </div>
+      <div class="pip-list" id="pipNotices"></div>
+    </section>
+
+    <section class="v146-tools-section">
+      <div class="v146-section-heading">
+        <div><span>COACH TOOLS</span><strong>One-click answers from your CRM.</strong></div>
+      </div>
+      <div class="v146-prompt-mount"></div>
+    </section>
+
+    <section class="v146-ask-section">
+      <div class="v146-section-heading">
+        <div><span>ASK PIP</span><strong>Ask about your database in plain English.</strong></div>
+      </div>
+      <div class="pip-ask">
+        <input id="pipAskInput" placeholder="Try “who should I call first?”">
+        <button class="primary-btn compact" data-action="ask-pip">Ask</button>
+      </div>
+      <div class="pip-answer" id="pipAnswer"></div>
+    </section>
   </div>
-  <div class="pip-focus" id="pipFocus"></div>
-  <div class="pip-list" id="pipNotices"></div>
-  <div class="pip-ask">
-    <input id="pipAskInput" placeholder="Ask what to do next">
-    <button class="primary-btn compact" data-action="ask-pip">Ask</button>
-  </div>
-  <div class="pip-answer" id="pipAnswer"></div>
 </aside>
 
 <div class="notification-backdrop" id="notificationBackdrop"></div>

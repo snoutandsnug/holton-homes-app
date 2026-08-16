@@ -1,9 +1,9 @@
-HOLTON HOMES OS v14.5 — PIP THE COACH
+HOLTON HOMES OS v14.6 — VISUAL POLISH
 
-Stay on branch:
+Stay on:
 v14-ai-rebuild
 
-This supersedes v14.4.
+This builds directly on v14.5. No new Pip images are needed.
 
 REPLACE:
 - index.html
@@ -12,52 +12,45 @@ REPLACE:
 - v14-agent.js
 - service-worker.js
 
-KEEP:
-- v14-crm.js
-- app.js
-- styles.css
-- v13.css
-- cloud-config.js
-- api/pip.js (unused by Pip Local for now)
-- package.json
-- vercel.json
-- assets/
-
-ADD THESE FIVE ROOT IMAGE FILES:
+KEEP EVERYTHING ELSE, INCLUDING:
 - pip-default.webp
 - pip-thinking.webp
 - pip-celebrate.webp
 - pip-work.webp
 - pip-concerned.webp
+- v14-crm.js
+- app.js
+- v13.css
+- styles.css
+- cloud-config.js
 
 WHAT CHANGED
 
-PIP IS NOW FREE BY DEFAULT
-- Find Business runs locally
-- Build My Day runs locally
-- Pipeline Check runs locally
-- Seller Radar runs locally
-- Database Health runs locally
-- Lead Sources runs locally
-- Content starter ideas run locally
-- No Vercel AI Gateway call is required for core coaching
+PIP DRAWER
+- One composed coach panel instead of stacked random cards
+- Large contextual Pip artwork inside the primary coaching card
+- Concerned Pip for overdue/cleanup/risk states
+- Work Pip for calls/pipeline/business creation
+- Thinking Pip for seller/strategy states
+- Celebration Pip after completed work
+- Face-cropped Pip in the top header button/drawer header
+- Removed “PIP LOCAL · $0” and “Business first. Mascot second.” developer-ish copy
+- Removed redundant second Pip card
+- Clear hierarchy: Right Now → Next Best Moves → Coach Tools → Ask Pip
+- Rich tool cards instead of generic outline buttons
+- ChatGPT handoff looks intentional instead of being another plain button
+- Pip answers expand into a proper result card instead of leaving dead white space
 
-ASK CHATGPT HANDOFF
-- Pip can package useful CRM context into the clipboard
-- Click "Copy for ChatGPT"
-- Open ChatGPT and paste
-- Uses the ChatGPT product you already use instead of a paid CRM API call
+WHOLE CRM
+- More premium blush top bar
+- Better active nav states
+- Cleaner search/actions
+- Today command strip has stronger visual hierarchy
+- Business Builder is one composed surface
+- Opportunity cells are less flat
+- Three Wins cards are more decisive
+- Main operational panels use subtler borders/shadows and less “card soup”
+- Overall background has depth without becoming pink everywhere
 
-PIP MOODS
-- Default = normal coaching
-- Thinking = strategy/content/open-ended questions
-- Work = Growth OS, calls, pipeline, business-finding
-- Concerned = overdue work / pipeline risk
-- Celebration = completing work or copying a ChatGPT packet
-
-UI CLEANUP
-- Fixes duplicate desktop "More"
-- Real Pip artwork appears in top-nav icon, Pip drawer, and Growth OS
-- Small animations only for celebration/concern states
-
-DO NOT MERGE MAIN UNTIL PREVIEW IS CHECKED.
+DO NOT MERGE MAIN YET.
+Preview this branch first.

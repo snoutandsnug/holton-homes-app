@@ -195,6 +195,8 @@ function setPipMood(mood="default",ms=0){
   if(mini){mini.style.backgroundImage=`url("${PIP_ART[mood]}")`;mini.dataset.mood=mood}
   const coach=$("#pipCoachArt");
   if(coach){coach.src=PIP_ART[mood];coach.dataset.mood=mood}
+  const stage=$("#pipStageArt");
+  if(stage){stage.src=PIP_ART[mood];stage.dataset.mood=mood}
   if(ms>0)pipMoodTimer=setTimeout(()=>setPipMood(contextMood()),ms);
 }
 function contextMood(){
@@ -208,23 +210,28 @@ function installPipArt(){
   if(holder && !$("#pipMascotImage",holder)){
     holder.innerHTML=`<img id="pipMascotImage" src="${PIP_ART.default}" alt="Pip the coach">`;
   }
-  const head=$(".pip-drawer-head");
-  if(head && !$(".v145-pip-mode",head)){
-    const label=document.createElement("span");
-    label.className="v145-pip-mode";
-    label.textContent="Pip Local · $0";
-    head.querySelector("div:nth-child(2)")?.appendChild(label);
+  const title=$(".v146-pip-title");
+  if(title){
+    const small=title.querySelector("small");
+    if(small)small.textContent="Your CRM brain for what deserves attention next.";
   }
   const mini=$(".pip-mini");
   if(mini)mini.style.backgroundImage=`url("${PIP_ART.default}")`;
+  const stage=$("#pipStageArt");
+  if(stage && !stage.src)stage.src=PIP_ART.default;
   setPipMood(contextMood());
 }
 function setAnswer(text,mood="thinking",prompt=""){
   const answer=$("#pipAnswer");
   if(answer){
     answer.classList.remove("v14-ai-loading");
-    answer.classList.add("v14-ai-answer","v145-local-answer");
-    answer.innerHTML=`<div class="v145-answer-copy">${esc(text).replace(/\n/g,"<br>")}</div>
+    answer.classList.add("v14-ai-answer","v145-local-answer","v146-answer-open");
+    answer.innerHTML=`
+      <div class="v146-answer-head">
+        <span>PIP'S READ</span>
+        <strong>${mood==="concerned"?"Something needs attention":mood==="work"?"Here’s the move":mood==="celebrate"?"Nice. Keep going.":"Here’s what I see"}</strong>
+      </div>
+      <div class="v145-answer-copy">${esc(text).replace(/\n/g,"<br>")}</div>
       <div class="v145-chatgpt-row">
         <button class="ghost-btn compact" data-v145-copy-chatgpt data-prompt="${esc(prompt)}">Copy for ChatGPT</button>
         <button class="ghost-btn compact" data-v145-open-chatgpt>Open ChatGPT</button>
@@ -293,20 +300,32 @@ async function copyForChatGPT(prompt=""){
   setPipMood("celebrate",3500);
 }
 function injectPipPrompts(){
-  const ask=$(".pip-ask");
-  if(!ask||$(".v145-pip-quick-prompts"))return;
-  ask.insertAdjacentHTML("beforebegin",`
-    <div class="v145-pip-coach">
-      <img id="pipCoachArt" src="${PIP_ART.default}" alt="Pip the coach">
-      <div><strong>Pip the Coach</strong><span>Runs your CRM locally. No API bill.</span></div>
+  const mount=$(".v146-prompt-mount");
+  if(!mount||$(".v146-tool-grid",mount))return;
+  mount.innerHTML=`
+    <div class="v146-tool-grid">
+      <button class="v146-tool-card business" data-v14-ai="business">
+        <span class="v146-tool-icon">↗</span>
+        <span><strong>Find business</strong><small>Best conversations right now</small></span>
+      </button>
+      <button class="v146-tool-card day" data-v14-ai="day">
+        <span class="v146-tool-icon">✓</span>
+        <span><strong>Build my day</strong><small>Put the work in order</small></span>
+      </button>
+      <button class="v146-tool-card seller" data-v145-mode="seller">
+        <span class="v146-tool-icon">⌂</span>
+        <span><strong>Seller radar</strong><small>Surface listing opportunities</small></span>
+      </button>
+      <button class="v146-tool-card pipeline" data-v14-ai="pipeline">
+        <span class="v146-tool-icon">◆</span>
+        <span><strong>Pipeline check</strong><small>Find stalled relationships</small></span>
+      </button>
     </div>
-    <div class="v145-pip-quick-prompts">
-      <button data-v14-ai="business">Find business</button>
-      <button data-v14-ai="day">Build my day</button>
-      <button data-v145-mode="seller">Seller radar</button>
-      <button data-v14-ai="pipeline">Pipeline check</button>
-      <button data-v145-copy-chatgpt data-prompt="Review my CRM and help me decide the best next moves.">Ask ChatGPT</button>
-    </div>`);
+    <button class="v146-chatgpt-card" data-v145-copy-chatgpt data-prompt="Review my CRM and help me decide the best next moves.">
+      <span class="v146-chatgpt-mark">✦</span>
+      <span><strong>Take this to ChatGPT</strong><small>Copy the useful CRM context for deeper strategy or writing.</small></span>
+      <b>Copy context</b>
+    </button>`;
 }
 function builderHtml(){
   const db=parseDb(),list=topBusiness(db,5);
@@ -343,8 +362,26 @@ function celebrateOnCompletion(event){
   const el=event.target.closest('[data-action="complete-task"],[data-action="complete-task-button"],[data-action="complete-next-action"],[data-action="work-primary"]');
   if(el)setTimeout(()=>setPipMood("celebrate",4000),250);
 }
+function syncPipStage(){
+  const focus=$("#pipFocus");
+  const stage=$("#pipStageArt");
+  if(!focus||!stage)return;
+  const text=focus.textContent.toLowerCase();
+  let mood=contextMood();
+  if(/overdue|clean up|missing|risk|stale|reply/.test(text))mood="concerned";
+  else if(/seller|listing|value/.test(text))mood="thinking";
+  else if(/create|call|follow up|appointment|pipeline/.test(text))mood="work";
+  setPipMood(mood);
+}
+function polishPipNotices(){
+  $$("#pipNotices .pip-notice").forEach((item,index)=>{
+    if(item.dataset.v146==="1")return;
+    item.dataset.v146="1";
+    item.insertAdjacentHTML("afterbegin",`<span class="v146-notice-index">0${index+1}</span>`);
+  });
+}
 function runEnhancements(){
-  installPipArt();injectPipPrompts();enhanceToday();contextButton();
+  installPipArt();injectPipPrompts();enhanceToday();contextButton();syncPipStage();polishPipNotices();
   if(routeName()==="growth")setPipMood("work");
 }
 
@@ -394,4 +431,23 @@ window.addEventListener("load",()=>setTimeout(runEnhancements,140));
 const view=$("#view");
 if(view)new MutationObserver(()=>setTimeout(runEnhancements,10)).observe(view,{childList:true,subtree:false});
 setTimeout(runEnhancements,90);
+})();
+;(() => {
+  const drawer=document.getElementById("pipDrawer");
+  if(!drawer)return;
+  const observer=new MutationObserver(()=>setTimeout(()=>{
+    try{
+      window.PipLocal?.setMood?.(
+        /overdue|clean up|missing|risk|stale|reply/i.test(document.getElementById("pipFocus")?.textContent||"")
+          ?"concerned"
+          :(["growth","pipeline","focus","call-queue"].includes((location.hash||"#/today").replace("#/","").split("/")[0])?"work":"default")
+      );
+      document.querySelectorAll("#pipNotices .pip-notice").forEach((item,index)=>{
+        if(item.dataset.v146==="1")return;
+        item.dataset.v146="1";
+        item.insertAdjacentHTML("afterbegin",`<span class="v146-notice-index">0${index+1}</span>`);
+      });
+    }catch{}
+  },20));
+  observer.observe(drawer,{childList:true,subtree:true});
 })();

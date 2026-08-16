@@ -1,4 +1,4 @@
-const CACHE="holton-homes-os-v14-5-pip-coach-2026-08-16";
+const CACHE="holton-homes-os-v14-6-visual-polish-2026-08-16";
 const ASSETS=[
   "./",
   "./index.html",
