@@ -1,14 +1,17 @@
 (() => {
 "use strict";
 
-const STORAGE_KEY = "holtonHomesCRM_v3_3_stable";
-const LEGACY_KEYS = ["holtonHomesCRM_v3_2_openhouse","holtonHomesCRM_v3_fub","holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
+const STORAGE_KEY = "holtonHomesOS_v13";
+const LEGACY_KEYS = ["holtonHomesCRM_v3_3_stable","holtonHomesCRM_v3_2_openhouse","holtonHomesCRM_v3_fub","holtonHomesCRM_pro2","holtonHomesCRM_pro1","holtonHomesCRM_agentOS2","holtonHomesCRM_agentOS1","holtonHomesCRM_v26","holtonHomesCRM_v25","holtonHomesCRM_v24","holtonHomesCRM_v23","holtonHomesCRM_v22","holtonHomesCRM_v21","holtonHomesCRM_v20","holtonHomesCRM_v19","holtonHomesCRM_v18","holtonHomesCRM_v17","holtonHomesCRM_v16","holtonHomesCRM_v15","holtonHomesCRM_v14","holtonHomesCRM_v13","holtonHomesCRM_v12","holtonHomesCRM_v11","holtonHomesCRM_v10","holtonHomesBusinessBuilder_v7","holtonHomesCRM"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const NOW = () => new Date().toISOString();
 const sellerStages = ["New","Attempted Contact","Contacted","Nurture","Valuation Requested","Valuation Delivered","Listing Appointment","Follow-Up","Listing Agreement Signed","Coming Soon","Active Listing","Offer Received","Under Contract","Closed","Lost"];
 const buyerStages = ["New","Attempted Contact","Contacted","Nurture","Buyer Consultation","Pre-Approved","Touring Homes","Offer Submitted","Under Contract","Closed","Lost"];
-const sources = ["Sphere","Referral","Social Media","Website","Open House","Farm / Homestead Brand","Cold Outreach","Sign Call","Past Client","Other"];
+const sources = ["Sphere","Referral","What’s New Around Cincy?","YouTube","Facebook","Instagram / TikTok","Social Media","Website","Open House","Farm / Homestead Brand","Cold Outreach","Sign Call","Past Client","Other"];
 const behaviorTypes = ["Viewed Property","Saved Property","Repeated Property View","Requested Showing","Home Valuation","Opened Email","Clicked Property Alert","Searched Website"];
+const contentStages = ["Story Inbox","Verify","Learn","Teach Back","Script","Film","Published"];
+const vendorCategories = ["Lender","Inspector","Photographer","Contractor","HVAC","Plumber","Electrician","Cleaner","Mover","Insurance","Title","Attorney","Other"];
+const leadIntents = ["Seller","Buyer","Both","Community","Vendor / Partner","Unknown"];
 
 const defaultTemplates = [
   {id:"tpl-new-seller",name:"New seller introduction",channel:"Text",category:"Seller",subject:"",body:"Hi {{first_name}}, this is {{agent_name}} with Holton Homes. I saw your real estate inquiry and wanted to personally reach out. What has you thinking about a move?"},
@@ -403,7 +406,7 @@ const defaultAutomationRules = [
 ];
 
 let db = null;
-let state = {route:"people",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",openHouseKioskId:"",openHouseKioskStep:1,openHouseKioskDraft:null,openHouseKioskSuccess:"",notificationFilter:"priority"};
+let state = {route:"today",smartList:"all",peopleQuery:"",peopleType:"",peopleStage:"",peopleHeat:"",peopleSort:"next",peoplePreviewId:"",selectedPeople:[],contactTab:"overview",timelineFilter:"all",activeContactId:"",inboxTab:"leads",leadInboxId:"",inboxFolder:"open",activeThread:null,taskFilter:"open",pipelineType:"Seller",transactionFilter:"active",callIndex:0,workIndex:0,pendingTaskId:"",automationTab:"overview",focusMode:"seller",focusIndex:0,openHouseFilter:"upcoming",openHouseKioskId:"",openHouseKioskStep:1,openHouseKioskDraft:null,openHouseKioskSuccess:"",notificationFilter:"priority",contentStage:"all",vendorCategory:"All"};
 let focusTimerHandle=null;
 let speechRecognizer=null;
 let automationBusy=false,automationTimer=null;
@@ -2263,7 +2266,23 @@ function normalize(raw){
       },
       type:p.type||"Seller",stage:p.stage||"New",heat:p.heat||"Warm",
       timeframe:p.timeframe||"Unknown",followUp:p.followUp||"",lastCommunication:p.lastCommunication||p.lastContact||"",
-      source:p.source||"Sphere",gci:Number(p.gci||0),property:p.property||"",tags:Array.isArray(p.tags)?p.tags:[],
+      source:p.source||"Sphere",sourceDetail:p.sourceDetail||"",gci:Number(p.gci||0),property:p.property||"",tags:Array.isArray(p.tags)?p.tags:[],
+      attribution:{
+        contentId:p.attribution?.contentId||p.contentId||"",
+        campaign:p.attribution?.campaign||p.campaign||"",
+        form:p.attribution?.form||p.formName||"",
+        event:p.attribution?.event||p.eventName||"",
+        originalSource:p.attribution?.originalSource||p.source||"Sphere"
+      },
+      consent:{
+        marketing:Boolean(p.consent?.marketing),
+        email:Boolean(p.consent?.email),
+        text:Boolean(p.consent?.text),
+        doNotCall:Boolean(p.consent?.doNotCall||p.doNotCall),
+        unsubscribed:Boolean(p.consent?.unsubscribed||p.unsubscribed),
+        capturedAt:p.consent?.capturedAt||""
+      },
+      priorityOverride:p.priorityOverride||"",priorityOverrideReason:p.priorityOverrideReason||"",
       notes:p.notes||"",createdAt:p.createdAt||TODAY(),updatedAt:p.updatedAt||TODAY(),
       household:Array.isArray(p.household)?p.household.map(member=>({
         id:member.id||uid(),
@@ -2401,11 +2420,38 @@ function normalize(raw){
     outcomes:Array.isArray(item.outcomes)?item.outcomes:[],endedAt:item.endedAt||""
   }));
   const notificationDismissals=raw.notificationDismissals&&typeof raw.notificationDismissals==="object"?raw.notificationDismissals:{};
+  const leadInbox=(Array.isArray(raw.leadInbox)?raw.leadInbox:Array.isArray(raw.intakes)?raw.intakes:[]).map(item=>({
+    id:item.id||uid(),firstName:item.firstName||"",lastName:item.lastName||"",phone:item.phone||"",email:item.email||"",
+    intent:item.intent||"Unknown",source:item.source||"Website",sourceDetail:item.sourceDetail||"",campaign:item.campaign||"",
+    form:item.form||"",event:item.event||"",contentId:item.contentId||"",property:item.property||"",area:item.area||"",
+    timeframe:item.timeframe||"Unknown",message:item.message||item.notes||"",permission:Boolean(item.permission),
+    status:item.status||"New",receivedAt:item.receivedAt||NOW(),responseStartedAt:item.responseStartedAt||"",
+    responseDeadlineMinutes:Number(item.responseDeadlineMinutes||5),matchedContactId:item.matchedContactId||"",
+    archivedReason:item.archivedReason||"",originalPayload:item.originalPayload||{},idempotencyKey:item.idempotencyKey||"",
+    createdAt:item.createdAt||item.receivedAt||NOW(),updatedAt:item.updatedAt||NOW()
+  }));
+  const contentItems=(Array.isArray(raw.contentItems)?raw.contentItems:[]).map(item=>({
+    id:item.id||uid(),title:item.title||"Untitled story",stage:contentStages.includes(item.stage)?item.stage:"Story Inbox",
+    area:item.area||"",topic:item.topic||"",angle:item.angle||"",sources:item.sources||"",verificationNotes:item.verificationNotes||"",
+    learnPacket:item.learnPacket||"",teachBack:item.teachBack||"",script:item.script||"",publishUrl:item.publishUrl||"",
+    platform:item.platform||"Facebook / YouTube",active:Boolean(item.active),publishedAt:item.publishedAt||"",
+    views:Number(item.views||0),inquiries:Number(item.inquiries||0),appointments:Number(item.appointments||0),
+    closedGci:Number(item.closedGci||0),createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
+  }));
+  const vendors=(Array.isArray(raw.vendors)?raw.vendors:[]).map(item=>({
+    id:item.id||uid(),name:item.name||"Unnamed provider",category:item.category||"Other",phone:item.phone||"",email:item.email||"",
+    website:item.website||"",serviceArea:item.serviceArea||"",status:item.status||"Considering",notes:item.notes||"",
+    lastVerified:item.lastVerified||"",referrals:Number(item.referrals||0),positiveFeedback:Number(item.positiveFeedback||0),
+    createdAt:item.createdAt||NOW(),updatedAt:item.updatedAt||NOW()
+  }));
+  const auditTrail=Array.isArray(raw.auditTrail)?raw.auditTrail:[];
   const transactions=(Array.isArray(raw.transactions)?raw.transactions:[]).map(normalizeTransaction);
   contacts.filter(c=>["Buyer","Seller"].includes(c.type)&&c.stage==="Under Contract"&&!transactions.some(tx=>tx.contactId===c.id&&!["Closed","Terminated"].includes(tx.status))).forEach(c=>{const tx=blankTransaction(c.id,c.type),p=properties.find(item=>item.contactId===c.id&&item.primary)||properties.find(item=>item.contactId===c.id);if(p){tx.propertyId=p.id;Object.assign(tx,{street:p.street,unit:p.unit,city:p.city,state:p.state,zip:p.zip,county:p.county,purchasePrice:Number(p.expectedSalePrice||p.listPrice||0)})}tx.gci=c.gci;buildTransactionChecklist(tx,false);transactions.push(tx)});
-  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,openHouses,marketStudies,focusSessions,notificationDismissals,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",mapProvider:"apple",calendarProvider:"ask",emailProvider:"native",calendarDefaultTime:"09:00",calendarDefaultDuration:60,calendarReminderMinutes:30,calendarTimeZone:"America/New_York",
+  return {contacts,properties,communications,tasks,planRuns,automationRules,actionPlans,automationQueue,automationLogs,automationHistory,templates,deletedContacts,workSnoozes,workHistory,callScripts,scriptDrafts,transactions,transactionResources,openHouses,marketStudies,focusSessions,notificationDismissals,leadInbox,contentItems,vendors,auditTrail,settings:{agentName:"Jacob",agentEmail:"",agentPhone:"",commissionRate:3,lastManualBackupAt:"",lastSavedAt:"",annualGciTarget:100000,sellerShareGoal:60,dailyConversationTarget:5,coreMarkets:"Cincinnati, Brown County, Mt. Orab, Williamsburg, Hillsboro, Lebanon",callQueueResumeContactId:"",mapProvider:"apple",calendarProvider:"ask",emailProvider:"native",calendarDefaultTime:"09:00",calendarDefaultDuration:60,calendarReminderMinutes:30,calendarTimeZone:"America/New_York",
     dailyAttemptTarget:10,dailySellerConversationTarget:1,dailyAppointmentTarget:1,dailyMarketStudyTarget:1,
-    activeFocusSessionId:"",showCelebrations:true,homeDensity:"comfortable",peopleDensity:"comfortable",onboardingCollapsed:false,setupCompletedAt:"",...(raw.settings||{})}};
+    activeFocusSessionId:"",showCelebrations:true,homeDensity:"comfortable",peopleDensity:"comfortable",onboardingCollapsed:false,setupCompletedAt:"",
+    agentSplitPercent:70,transactionFee:350,businessExpensePercent:10,taxReservePercent:25,householdTakeHomeGoal:90000,
+    brokerageName:"",licenseStatus:"Pre-license",notificationQuietStart:"20:00",notificationQuietEnd:"08:00",...(raw.settings||{})}};
 }
 function loadDatabase(){
   try{
@@ -2420,11 +2466,11 @@ function loadDatabase(){
       }
     }
   }catch(error){console.warn("Database load failed",error)}
-  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,openHouses:[],marketStudies:[],focusSessions:[],notificationDismissals:{},settings:{}});
+  return normalize({contacts:[],properties:[],communications:[],tasks:[],planRuns:[],automationRules:defaultAutomationRules,actionPlans:[],automationQueue:[],automationLogs:[],automationHistory:[],templates:defaultTemplates,deletedContacts:[],workSnoozes:{},workHistory:[],callScripts:defaultCallScripts,scriptDrafts:{},transactions:[],transactionResources:defaultTransactionResources,openHouses:[],marketStudies:[],focusSessions:[],notificationDismissals:{},leadInbox:[],contentItems:[],vendors:[],auditTrail:[],settings:{}});
 }
 
 
-const moreRoutes=new Set(["more","inbox","call-queue","tasks","automations","activity","reports","settings","focus","field","open-houses","market-study"]);
+const moreRoutes=new Set(["more","call-queue","tasks","automations","activity","settings","focus","field","open-houses","market-study"]);
 function preferredContactName(c){return c?.relationshipMemory?.preferredName||c?.firstName||fullName(c)}
 function relationshipReminder(c){
   const m=c?.relationshipMemory||{};
@@ -2559,7 +2605,9 @@ function mobileToolDirectoryHtml(){
   const txDue=transactionDeadlineItems().length;
   const tools=[
     ["inbox","✉","Inbox","Replies and conversations",unread],
-    ["tasks","☷","Tasks & Calendar","Promises, appointments, and reminders",dueTasks],
+    ["calendar","☷","Calendar","Promises, appointments, and reminders",dueTasks],
+    ["content","▶","Content","Move one verified story toward publishing",0],
+    ["network","◇","Local Network","Trusted providers and referrals",0],
     ["call-queue","☎","Call Queue","Resume calls without losing your place",callQueue().length],
     ["focus","⚡","Prospecting Sprint","Work one relationship at a time",0],
     ["field","⌖","Field Mode","Appointments, directions, calls, and notes",0],
@@ -2593,7 +2641,9 @@ function renderMore(){
     ${moreTile("field","⌖","Field Mode","Appointments, directions, calls, and notes.","","field")}
     ${moreTile("inbox","▣","Inbox","Action, defer, or close conversations.",unread,"inbox")}
     ${moreTile("call-queue","☎","Call Queue","Resume your due calls.",callQueue().length,"calls")}
-    ${moreTile("tasks","✓","Tasks & Calendar","Promises and appointments.",dueTasks,"tasks")}
+    ${moreTile("calendar","✓","Calendar","Promises and appointments.",dueTasks,"tasks")}
+    ${moreTile("content","▶","Content","Verified stories and client attribution.","","content")}
+    ${moreTile("network","◇","Local Network","Trusted providers and referrals.","","network")}
     ${moreTile("open-houses","⌂","Open Houses","Capture visitors and follow up.","","openhouse")}
     ${moreTile("market-study","↗","Market Study","Build local expertise in five minutes.","","market")}
     ${moreTile("automations","⚡","Plans & Automations","Repeatable follow-up systems.","","automation")}
@@ -2605,14 +2655,14 @@ function renderMore(){
 }
 function quickCaptureModal(){
   modal("Quick capture",`<div class="quick-capture-grid">
-    <button data-action="quick-lead"><span>◎</span><strong>New lead</strong><small>Name, contact info, source, next step</small></button>
-    <button data-action="open-contact"><span>＋</span><strong>Full contact</strong><small>Complete buyer, seller, or partner intake</small></button>
+    <button data-action="open-lead-intake"><span>◎</span><strong>New inquiry</strong><small>Start the response timer and triage safely</small></button>
+    <button data-action="open-contact"><span>＋</span><strong>New person</strong><small>Complete buyer, seller, sphere, or partner profile</small></button>
     <button data-action="open-voice-update"><span>◉</span><strong>Voice / field update</strong><small>Dictate what just happened</small></button>
     <button data-action="open-task"><span>✓</span><strong>Task or appointment</strong><small>Protect a promise or calendar event</small></button>
     <button data-action="open-communication" data-channel="Note"><span>✎</span><strong>Log touch</strong><small>Call, text, email, or note</small></button>
     <button data-action="open-transaction"><span>⌛</span><strong>Transaction</strong><small>Start contract-to-close workflow</small></button>
-    <button data-action="open-open-house"><span>⌂</span><strong>Open house</strong><small>Create event and visitor capture</small></button>
-    <button data-action="open-market-study"><span>↗</span><strong>Market insight</strong><small>Save today’s local market lesson</small></button>
+    <button data-action="open-content"><span>▶</span><strong>Content story</strong><small>Save a story, source, angle, or script</small></button>
+    <button data-action="open-vendor"><span>◇</span><strong>Local provider</strong><small>Add a trusted or potential connector</small></button>
   </div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>`)
 }
 function quickLeadModal(){
@@ -2966,6 +3016,9 @@ function createOpenHouseContact(item,data,existingContactId=""){
   if(c){
     c.tags=[...new Set([...(c.tags||[]),...tags])];
     c.notes=[c.notes,eventNote].filter(Boolean).join("\n");
+    c.sourceDetail=c.sourceDetail||item.title;
+    c.attribution={...(c.attribution||{}),event:item.title||item.id,originalSource:c.attribution?.originalSource||c.source||"Open House"};
+    c.consent={...(c.consent||{}),marketing:consent,email:consent&&Boolean(data.email),text:consent&&Boolean(data.phone),capturedAt:consent?(data.consentAt||NOW()):""};
     if(!represented&&consent&&followUp)c.followUp=followUp;
     c.updatedAt=NOW();
     return c.id
@@ -2973,7 +3026,7 @@ function createOpenHouseContact(item,data,existingContactId=""){
   const normalized=normalize({contacts:[{
     id:uid(),firstName:data.firstName,lastName:data.lastName,phone:data.phone,email:data.email,
     type:"Buyer",stage:"New",heat,timeframe:data.timeline||"Unknown",followUp,
-    source:"Open House",tags,notes:eventNote,createdAt:NOW(),updatedAt:NOW()
+    source:"Open House",sourceDetail:item.title,attribution:{contentId:"",campaign:"",form:"Open House Sign-In",event:item.title||item.id,originalSource:"Open House"},consent:{marketing:consent,email:consent&&Boolean(data.email),text:consent&&Boolean(data.phone),doNotCall:false,unsubscribed:false,capturedAt:consent?(data.consentAt||NOW()):""},tags,notes:eventNote,createdAt:NOW(),updatedAt:NOW()
   }]}).contacts[0];
   db.contacts.unshift(normalized);
   return normalized.id
@@ -3618,7 +3671,7 @@ function closeContactPeek(){
 
 function route(){
   closeContactPeek();
-  const hash=(location.hash||"#/people").replace(/^#\//,"");
+  const hash=(location.hash||"#/today").replace(/^#\//,"");
   const [name,id]=hash.split("/");
   const kiosk=name==="open-house-kiosk";
   document.body.classList.toggle("open-house-kiosk-active",kiosk);
@@ -3629,13 +3682,13 @@ function route(){
   if(name==="transaction"&&id)return renderTransaction(id);
   if(name==="open-house"&&id)return renderOpenHouse(id);
   if(name==="open-house-kiosk"&&id)return renderOpenHouseKiosk(id);
-  const renderers={today:renderToday,more:renderMore,focus:renderFocus,field:renderField,"open-houses":renderOpenHouses,"market-study":renderMarketStudy,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,tasks:renderTasks,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
-  (renderers[state.route]||renderPeople)();
+  const renderers={today:renderToday,more:renderMore,focus:renderFocus,field:renderField,"open-houses":renderOpenHouses,"market-study":renderMarketStudy,inbox:renderInbox,people:renderPeople,"call-queue":renderCallQueue,pipeline:renderPipeline,transactions:renderTransactions,calendar:renderCalendar,tasks:renderTasks,content:renderContent,network:renderNetwork,automations:renderAutomations,activity:renderActivity,reports:renderReports,settings:renderSettings};
+  (renderers[state.route]||renderToday)();
 }
 function renderNav(){
   document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===state.route||(state.route==="contact"&&a.dataset.route==="people")||(moreRoutes.has(state.route)&&a.dataset.route==="more")));
-  const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length,transactionDeadlines=transactionDeadlineItems().length;
-  setCount("navTodayCount",due+openTasks+transactionDeadlines);setCount("navInboxCount",unread);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("navMoreCount",unread+openTasks+calls);setCount("pipNavCount",pipNotices().length);updateNotificationBadge()
+  const due=dueContacts().length,unread=db.communications.filter(x=>x.unread).length,newLeads=db.leadInbox.filter(x=>x.status==="New").length,openTasks=db.tasks.filter(t=>t.status!=="Done"&&t.due<=TODAY()).length,calls=callQueue().length,transactionDeadlines=transactionDeadlineItems().length;
+  setCount("navTodayCount",due+openTasks+transactionDeadlines+newLeads);setCount("navInboxCount",unread+newLeads);setCount("navTaskCount",openTasks);setCount("navCallCount",calls);setCount("navTransactionCount",transactionDeadlines);setCount("navMoreCount",unread+openTasks+calls);setCount("pipNavCount",pipNotices().length);updateNotificationBadge()
 }
 function setCount(id,n){const el=document.getElementById(id);if(!el)return;el.textContent=n||"";el.style.display=n?"grid":"none"}
 function pageHead(eyebrow,title,description,actions=""){return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${actions}</div></div>`}
@@ -3706,27 +3759,58 @@ function holtonPlanHtml(){
     </section>`
 }
 
+function closedBusinessGci(){
+  const closedTransactions=db.transactions.filter(tx=>tx.status==="Closed");
+  return closedTransactions.length?closedTransactions.reduce((sum,tx)=>sum+Number(tx.gci||0),0):db.contacts.filter(c=>c.stage==="Closed").reduce((sum,c)=>sum+Number(c.gci||0),0)
+}
+function commissionWaterfall(){
+  const gross=closedBusinessGci(),closedCount=Math.max(db.transactions.filter(tx=>tx.status==="Closed").length,db.contacts.filter(c=>c.stage==="Closed").length);
+  const afterSplit=gross*(Number(db.settings.agentSplitPercent||70)/100),fees=closedCount*Number(db.settings.transactionFee||0),businessExpenses=afterSplit*(Number(db.settings.businessExpensePercent||0)/100);
+  const beforeTax=Math.max(0,afterSplit-fees-businessExpenses),taxReserve=beforeTax*(Number(db.settings.taxReservePercent||0)/100),takeHome=Math.max(0,beforeTax-taxReserve),goal=Number(db.settings.householdTakeHomeGoal||90000);
+  return {gross,afterSplit,fees,businessExpenses,taxReserve,takeHome,goal,pct:Math.min(100,goal?Math.round(takeHome/goal*100):0),closedCount}
+}
+function activeContentStory(){return db.contentItems.find(item=>item.active)||db.contentItems.find(item=>item.stage!=="Published")||null}
+function todaysThreeWins(){
+  const leads=activeLeadIntakes(),unread=db.communications.filter(x=>x.unread),txDeadline=transactionDeadlineItems()[0],hotSeller=dueContacts().filter(c=>c.type==="Seller").sort((a,b)=>scoreContact(b).score-scoreContact(a).score)[0],due=dueContacts()[0],story=activeContentStory(),sellerTop=sellerRadar()[0]?.c;
+  const relationship=leads[0]
+    ?{label:"Respond",title:`Review ${[leads[0].firstName,leads[0].lastName].filter(Boolean).join(" ")||"the newest inquiry"}`,detail:`${leads[0].source} ${leads[0].intent.toLowerCase()} inquiry · ${intakeTimerLabel(leads[0])}`,route:"#/inbox",action:"Open lead inbox"}
+    :unread[0]
+      ?{label:"Reply",title:`Reply to ${fullName(contact(unread[0].contactId)||{})}`,detail:"An inbound conversation is waiting for a human response.",route:"#/inbox",action:"Open conversations",inboxTab:"conversations"}
+      :hotSeller
+        ?{label:"Relationship",title:`Call ${fullName(hotSeller)}`,detail:`Hot seller follow-up is due. ${smartListReason(hotSeller)||reasonToCall(hotSeller)}`,route:`#/contact/${hotSeller.id}`,action:"Open seller"}
+        :due
+          ?{label:"Relationship",title:`Follow up with ${fullName(due)}`,detail:"A promised next action is due today.",route:`#/contact/${due.id}`,action:"Open person"}
+          :{label:"Relationship",title:"Create one real conversation",detail:"Your urgent queue is clear. Reach out to a homeowner or referral relationship.",route:"#/people",action:"Open people"};
+  const pipeline=txDeadline
+    ?{label:"Protect the deal",title:txDeadline.step.title,detail:`${transactionAddress(txDeadline.tx)||"Active transaction"} · ${txDeadline.step.due<TODAY()?"overdue":"due today"}`,route:`#/transaction/${txDeadline.tx.id}`,action:"Open transaction"}
+    :sellerTop
+      ?{label:"Move opportunity",title:`Advance ${fullName(sellerTop)}`,detail:`${sellerTop.stage} · ${money(sellerTop.gci)} projected GCI`,route:`#/contact/${sellerTop.id}`,action:"Open opportunity"}
+      :{label:"Pipeline",title:"Create a seller opportunity",detail:"No transaction deadline is at risk. Build the next listing conversation.",route:"#/pipeline",action:"Open pipeline"};
+  const growth=story
+    ?{label:"Build demand",title:story.title,detail:`${story.stage} · ${story.area||story.topic||"Holton Homes content"}`,route:"#/content",action:"Open newsroom"}
+    :{label:"Build demand",title:"Save one useful local story",detail:"Turn a Cincinnati-area change into something homeowners can understand and share.",route:"#/content",action:"Open newsroom"};
+  return [relationship,pipeline,growth]
+}
+function winCardHtml(win,index){return `<article class="v13-win-card"><span class="v13-win-number">0${index+1}</span><div class="v13-win-copy"><span>${esc(win.label)}</span><h2>${esc(win.title)}</h2><p>${esc(win.detail)}</p><div class="v13-win-actions"><a class="${index===0?"primary-btn":"ghost-btn"}" href="${win.route}" ${win.inboxTab?`data-action="open-inbox-tab" data-id="${win.inboxTab}"`:""}>${esc(win.action)}</a>${index===0?`<button class="ghost-btn" data-action="start-focus-modal">Focus mode</button>`:""}</div></div></article>`}
 function renderToday(){
   clearInterval(focusTimerHandle);
-  const production=dailyProduction(),work=workQueueItems(),open=db.contacts.filter(isOpen),gci=open.reduce((sum,c)=>sum+c.gci,0);
+  const work=workQueueItems(),open=db.contacts.filter(isOpen),openGci=open.reduce((sum,c)=>sum+Number(c.gci||0),0),moneyFlow=commissionWaterfall(),wins=todaysThreeWins(),newLeads=activeLeadIntakes().length,unread=db.communications.filter(x=>x.unread).length,story=activeContentStory(),pip=pipNotices()[0],appointments=todayAppointments(),dateText=new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
   document.getElementById("view").innerHTML=
     backupWarningHtml()+
-    `<section class="agent-home-head"><div><span>HOLTON HOMES AGENT OS</span><h1>Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${esc(db.settings.agentName||"Jacob")}.</h1><p>${work.length?`${work.length} relationship${work.length===1?"":"s"} or deadline${work.length===1?"":"s"} need movement.`:"Your urgent work is clear. Create conversations and study the market."}</p></div><div><button class="ghost-btn" data-action="open-day-briefing">☀ Brief me</button><button class="primary-btn" data-action="start-focus-modal">⚡ Start sprint</button></div></section>
-    ${setupCardHtml()}
-    ${homeNextActionHtml()}
-    ${dailyProgressHtml()}
-    <section class="agent-home-grid">
-      <main>
-        ${sellerRadarHtml()}
-        <section class="agent-panel work-today-clean"><div class="agent-panel-head"><div><span>WORK TODAY</span><h2>${work.length?`${work.length} priority item${work.length===1?"":"s"}`:"Cleared"}</h2></div><a href="#/more" class="ghost-btn compact">All tools</a></div><div class="clean-work-list">${work.length?work.slice(0,6).map(workQueueRow).join(""):`<div class="empty">No urgent work remains. Start a prospecting sprint.</div>`}</div></section>
-      </main>
-      <aside>
-        ${appointmentRailHtml()}
-        <section class="agent-panel business-pulse"><div class="agent-panel-head"><div><span>BUSINESS PULSE</span><h2>What you are building</h2></div><a class="ghost-btn compact" href="#/reports">Reports</a></div>
-          <div class="pulse-grid"><div class="seller"><strong>${open.filter(c=>c.type==="Seller").length}</strong><span>open sellers</span></div><div class="buyer"><strong>${open.filter(c=>c.type==="Buyer").length}</strong><span>open buyers</span></div><div class="transaction"><strong>${activeTransactions().length}</strong><span>active deals</span></div><div class="gci"><strong>${money(gci)}</strong><span>open GCI</span></div></div>
-        </section>
-        ${relationshipMomentsHtml()}
-        <section class="agent-panel home-shortcuts"><div class="agent-panel-head"><div><span>KEEP MOVING</span><h2>Fast workspaces</h2></div></div><div><a href="#/field">⌖ Field Mode</a><a href="#/open-houses">⌂ Open Houses</a><a href="#/market-study">↗ Market Study</a><button data-action="open-quick-capture">＋ Quick Capture</button></div></section>
+    `<header class="v13-today-header"><div><time>${esc(dateText)}</time><h1>Good ${new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, ${esc(db.settings.agentName||"Jacob")}.</h1><p>Three wins first. Everything else can wait.</p></div><div class="v13-today-header-actions"><button class="ghost-btn" data-action="open-day-briefing">Daily briefing</button><button class="primary-btn" data-action="start-focus-modal">Start focus mode</button></div></header>
+    ${newLeads||unread?`<section class="v13-signal-strip"><strong>${newLeads?`${newLeads} new ${newLeads===1?"inquiry":"inquiries"}`:"No new inquiries"}</strong><span>${unread?`${unread} unread ${unread===1?"conversation":"conversations"}`:"Conversations are clear"}</span><a href="#/inbox">Review inbox</a></section>`:""}
+    ${!db.contacts.length?setupCardHtml():""}
+    <section class="v13-three-wins">${wins.map(winCardHtml).join("")}</section>
+    <section class="v13-today-grid">
+      <div class="v13-today-column">
+        <section class="v13-panel"><header class="v13-panel-head"><div><span>Next actions</span><h2>${work.length?`${work.length} items need movement`:"Urgent queue cleared"}</h2><p>Prioritized by response, promise, deadline, and opportunity—not clicks.</p></div><a class="ghost-btn compact" href="#/focus">Focus queue</a></header><div class="v13-queue">${work.length?work.slice(0,7).map(workQueueRow).join(""):`<div class="empty">Nothing urgent is waiting. Create a seller conversation or work the active story.</div>`}</div></section>
+        <section class="v13-panel"><header class="v13-panel-head"><div><span>Appointments & promises</span><h2>Protect what you committed to</h2></div><button class="ghost-btn compact" data-action="open-task">＋ Add</button></header><div class="appointment-rail"><div>${appointments.length?appointments.map(t=>{const c=contact(t.contactId);return `<article><time>${esc(t.time||"All day")}</time><div><strong>${esc(t.title)}</strong><small>${c?esc(fullName(c)):"No contact"}${t.location?` • ${esc(t.location)}`:""}</small></div>${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Directions</button>`:""}<button class="quick" data-action="add-task-calendar" data-id="${t.id}">Calendar</button></article>`}).join(""):`<div class="empty">No appointments today. Add promised follow-ups before they disappear.</div>`}</div></div></section>
+      </div>
+      <aside class="v13-today-column side">
+        <section class="v13-panel"><header class="v13-panel-head"><div><span>Real income</span><h2>GCI to household take-home</h2></div><a class="ghost-btn compact" href="#/reports">Details</a></header><div class="v13-money-waterfall"><div class="v13-money-total"><span>Estimated take-home</span><strong>${money(moneyFlow.takeHome)}</strong></div><div class="v13-progress"><span style="width:${moneyFlow.pct}%"></span></div><div class="v13-money-rows"><div><span>Closed GCI</span><strong>${money(moneyFlow.gross)}</strong></div><div><span>After split</span><strong>${money(moneyFlow.afterSplit)}</strong></div><div><span>Fees, expenses & tax reserve</span><strong>−${money(moneyFlow.fees+moneyFlow.businessExpenses+moneyFlow.taxReserve)}</strong></div><div><span>Household goal progress</span><strong>${moneyFlow.pct}%</strong></div></div></div></section>
+        <section class="v13-panel"><header class="v13-panel-head"><div><span>Business pulse</span><h2>Pipeline at a glance</h2></div></header><div class="v13-mini-metrics"><div><strong>${open.filter(c=>c.type==="Seller").length}</strong><span>Open sellers</span></div><div><strong>${open.filter(c=>c.type==="Buyer").length}</strong><span>Open buyers</span></div><div><strong>${activeTransactions().length}</strong><span>Active deals</span></div><div><strong>${money(openGci)}</strong><span>Projected GCI</span></div></div></section>
+        <section class="v13-panel"><header class="v13-panel-head"><div><span>Active story</span><h2>${esc(story?.title||"No story selected")}</h2><p>${esc(story?`${story.stage} · ${story.area||story.topic||"No area set"}`:"Use one active story at a time so content does not become another pile.")}</p></div></header><a class="ghost-btn compact" href="#/content">${story?"Continue story":"Open newsroom"}</a></section>
+        <section class="v13-panel v13-pip-panel"><span class="pip-mini"></span><div><span>Pip’s reason</span><strong>${esc(pip.title)}</strong><p>${esc(pip.detail)}</p></div></section>
       </aside>
     </section>`;
 }
@@ -4440,7 +4524,105 @@ function resetCallScripts(){
 }
 
 function threads(){const map=new Map();db.communications.forEach(m=>{if(!map.has(m.contactId))map.set(m.contactId,[]);map.get(m.contactId).push(m)});return [...map.entries()].map(([contactId,messages])=>{messages.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=messages.at(-1),c=contact(contactId);return {contact:c,messages,last,unread:messages.some(x=>x.unread),status:last?.threadStatus||"open",deferredUntil:last?.deferredUntil||""}}).filter(x=>x.contact).sort((a,b)=>String(b.last.date).localeCompare(String(a.last.date)))}
-function renderInbox(){let list=threads();if(state.inboxFolder==="unread")list=list.filter(t=>t.unread);if(state.inboxFolder==="open")list=list.filter(t=>t.status==="open"||!t.status);if(state.inboxFolder==="deferred")list=list.filter(t=>t.status==="deferred");if(state.inboxFolder==="closed")list=list.filter(t=>t.status==="closed");if(!state.activeThread||!list.some(x=>x.contact.id===state.activeThread))state.activeThread=list[0]?.contact.id||null;const active=list.find(x=>x.contact.id===state.activeThread);const all=threads();document.getElementById("view").innerHTML=pageHead("Conversation workflow","Inbox Zero","Do now, defer, or close every relationship conversation. This inbox contains CRM-logged communication; it is not a live Gmail or business-text feed until those services are connected.",`<button class="ghost-btn" data-action="inbox-zero">Mark all read</button>`)+`<section class="inbox-zero-summary"><div><strong>${all.filter(t=>t.status==="open").length}</strong><span>open</span></div><div><strong>${all.filter(t=>t.unread).length}</strong><span>unread</span></div><div><strong>${all.filter(t=>t.status==="deferred").length}</strong><span>deferred</span></div><div><strong>${all.filter(t=>t.status==="closed").length}</strong><span>closed</span></div></section><div class="inbox-layout pro-inbox-layout"><aside class="inbox-folders">${[["open","Do now",all.filter(t=>t.status==="open").length],["unread","Unread",all.filter(t=>t.unread).length],["deferred","Deferred",all.filter(t=>t.status==="deferred").length],["all","All",all.length],["closed","Closed",all.filter(t=>t.status==="closed").length]].map(([id,label,count])=>`<button class="folder-btn ${state.inboxFolder===id?"active":""}" data-action="inbox-folder" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}</aside><section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong>${esc(fullName(t.contact))}</strong><time>${dateTimeLabel(t.last.date)}</time></div><span>${esc(t.contact.type)} • ${esc(t.contact.stage)}</span><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p>${t.status==="deferred"?`<small>Returns ${dateLabel(t.deferredUntil)}</small>`:""}</article>`).join(""):`<div class="empty">This folder is clear.</div>`}</section>${active?conversationHtml(active):`<section class="conversation"><div class="empty">Select a conversation.</div></section>`}</div>`}
+function inboxSwitchHtml(){
+  const leadCount=db.leadInbox.filter(item=>!["Converted","Archived"].includes(item.status)).length;
+  const unread=db.communications.filter(item=>item.unread).length;
+  return `<div class="v13-inbox-switch" aria-label="Inbox view"><button class="${state.inboxTab==="leads"?"active":""}" data-action="inbox-tab" data-id="leads">Lead inbox${leadCount?` · ${leadCount}`:""}</button><button class="${state.inboxTab==="conversations"?"active":""}" data-action="inbox-tab" data-id="conversations">Conversations${unread?` · ${unread}`:""}</button></div>`
+}
+function normalizedPhone(value){return String(value||"").replace(/\D/g,"").slice(-10)}
+function intakeDuplicate(item){
+  const phone=normalizedPhone(item.phone),email=String(item.email||"").trim().toLowerCase();
+  return db.contacts.find(c=>(phone&&normalizedPhone(c.phone)===phone)||(email&&String(c.email||"").trim().toLowerCase()===email))||null
+}
+function intakeAgeMinutes(item){return Math.max(0,Math.floor((Date.now()-new Date(item.receivedAt).getTime())/60000))}
+function intakeAgeLabel(item){const minutes=intakeAgeMinutes(item);if(minutes<60)return `${minutes}m`;const hours=Math.floor(minutes/60);if(hours<24)return `${hours}h`;return `${Math.floor(hours/24)}d`}
+function intakeTimerLabel(item){
+  if(item.responseStartedAt)return "Response started";
+  const remaining=Number(item.responseDeadlineMinutes||5)-intakeAgeMinutes(item);
+  return remaining>0?`${remaining}m to respond`:`${Math.abs(remaining)}m overdue`
+}
+function activeLeadIntakes(){return db.leadInbox.filter(item=>!["Converted","Archived"].includes(item.status)).sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)))}
+function renderInbox(){
+  if(state.inboxTab==="conversations"){
+    renderConversationInbox();
+    document.querySelector(".page-head")?.insertAdjacentHTML("afterend",inboxSwitchHtml());
+    return
+  }
+  renderLeadInbox()
+}
+function renderLeadInbox(){
+  const list=activeLeadIntakes();
+  if(!state.leadInboxId||!list.some(item=>item.id===state.leadInboxId))state.leadInboxId=list[0]?.id||"";
+  const selected=list.find(item=>item.id===state.leadInboxId),duplicate=selected?intakeDuplicate(selected):null;
+  document.getElementById("view").innerHTML=
+    pageHead("Response center","Inbox","Every inquiry is reviewed before it becomes an opportunity.",`<button class="primary-btn" data-action="open-lead-intake">＋ Capture inquiry</button>`)+
+    inboxSwitchHtml()+
+    `<section class="v13-lead-layout">
+      <div class="v13-lead-list">
+        <div class="v13-lead-list-head"><div><strong>Needs review</strong><span>${list.length} active ${list.length===1?"inquiry":"inquiries"}</span></div><button class="ghost-btn compact" data-action="open-lead-intake">Add</button></div>
+        ${list.length?list.map(item=>`<button class="v13-lead-card ${item.id===state.leadInboxId?"active":""}" data-action="select-lead-intake" data-id="${item.id}"><div><span>${esc(item.source)} · ${esc(item.intent)}</span><strong>${esc([item.firstName,item.lastName].filter(Boolean).join(" ")||"Unnamed inquiry")}</strong><small>${esc(item.property||item.area||item.message||"No inquiry detail supplied")}</small></div><div class="v13-lead-age"><b>${intakeAgeLabel(item)}</b><span>${item.status}</span></div></button>`).join(""):`<div class="v13-lead-empty"><div><h2>Lead inbox is clear.</h2><p>Website forms, open-house sign-ins, referrals, and manual inquiries can all land here for review.</p><button class="primary-btn" data-action="open-lead-intake">Capture an inquiry</button></div></div>`}
+      </div>
+      ${selected?`<article class="v13-lead-preview">
+        <header class="v13-lead-preview-head"><div><span>${esc(selected.source)}${selected.sourceDetail?` · ${esc(selected.sourceDetail)}`:""}</span><h2>${esc([selected.firstName,selected.lastName].filter(Boolean).join(" ")||"Unnamed inquiry")}</h2><p>${esc(selected.phone||selected.email||"No contact information")}</p></div><div class="v13-timer"><strong>${esc(intakeTimerLabel(selected))}</strong><span>Received ${dateTimeLabel(selected.receivedAt)}</span></div></header>
+        <div class="v13-lead-detail-grid"><div><label>Intent</label><strong>${esc(selected.intent)}</strong></div><div><label>Timeframe</label><strong>${esc(selected.timeframe)}</strong></div><div><label>Property / area</label><strong>${esc(selected.property||selected.area||"Not supplied")}</strong></div><div><label>Permission</label><strong>${selected.permission?"Permission recorded":"No marketing permission recorded"}</strong></div><div><label>Campaign</label><strong>${esc(selected.campaign||selected.form||selected.event||"Direct / unknown")}</strong></div><div><label>Duplicate check</label><strong>${duplicate?`Matches ${esc(fullName(duplicate))}`:"No exact phone/email match"}</strong></div></div>
+        <div class="v13-lead-note"><strong>Inquiry</strong><br>${esc(selected.message||"No message was submitted.")}</div>
+        <div class="v13-lead-actions">
+          ${!selected.responseStartedAt?`<button class="ghost-btn" data-action="start-lead-response" data-id="${selected.id}">Start response</button>`:""}
+          <button class="primary-btn" data-action="convert-lead" data-id="${selected.id}" data-mode="Seller">Seller opportunity</button>
+          <button class="ghost-btn" data-action="convert-lead" data-id="${selected.id}" data-mode="Buyer">Buyer opportunity</button>
+          <button class="ghost-btn" data-action="convert-lead" data-id="${selected.id}" data-mode="Community">Community contact</button>
+          <button class="ghost-btn" data-action="convert-lead-vendor" data-id="${selected.id}">Vendor / partner</button>
+          <button class="danger-btn" data-action="archive-lead" data-id="${selected.id}">Archive</button>
+        </div>
+      </article>`:`<div class="v13-lead-empty"><div><h2>Nothing needs triage.</h2><p>New submissions will appear here with their source, intent, response timer, consent, and duplicate check.</p></div></div>`}
+    </section>`
+}
+function leadIntakeModal(){
+  modal("Capture inquiry",`<div class="form-grid">
+    <div class="field"><label>First name</label><input id="leadFirst" autocomplete="given-name"></div><div class="field"><label>Last name</label><input id="leadLast" autocomplete="family-name"></div>
+    <div class="field"><label>Phone</label><input id="leadPhone" type="tel"></div><div class="field"><label>Email</label><input id="leadEmail" type="email"></div>
+    <div class="field"><label>Intent</label><select id="leadIntent">${leadIntents.map(value=>`<option>${value}</option>`).join("")}</select></div><div class="field"><label>Timeframe</label><select id="leadTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(value=>`<option>${value}</option>`).join("")}</select></div>
+    <div class="field"><label>Source</label><select id="leadSource">${["Manual","Referral","Website","Facebook","YouTube","Open House","What’s New Around Cincy?","Sign Call","Other"].map(value=>`<option>${value}</option>`).join("")}</select></div><div class="field"><label>Campaign / source detail</label><input id="leadCampaign" placeholder="Post, video, event, form, or referrer"></div>
+    <div class="field full"><label>Property or target area</label><input id="leadProperty" placeholder="Address, neighborhood, county, or search area"></div>
+    <div class="field full"><label>What did they ask?</label><textarea id="leadMessage" placeholder="Paste the inquiry or record what they need."></textarea></div>
+    <div class="field full"><label class="checkbox-row"><input id="leadPermission" type="checkbox"> Permission to receive marketing follow-up was explicitly supplied</label></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button><button class="primary-btn" data-action="save-lead-intake">Save to lead inbox</button>`)
+}
+function saveLeadIntake(){
+  const firstName=document.getElementById("leadFirst").value.trim(),lastName=document.getElementById("leadLast").value.trim(),phone=document.getElementById("leadPhone").value.trim(),email=document.getElementById("leadEmail").value.trim();
+  if(!firstName&&!lastName)return alert("Add a name.");
+  if(!phone&&!email)return alert("Add a phone number or email.");
+  const existing=db.leadInbox.find(item=>!["Converted","Archived"].includes(item.status)&&((phone&&normalizedPhone(item.phone)===normalizedPhone(phone))||(email&&String(item.email).toLowerCase()===email.toLowerCase())));
+  if(existing){closeModal();state.leadInboxId=existing.id;state.inboxTab="leads";location.hash="#/inbox";renderInbox();return toast("Already in the lead inbox","The matching inquiry was opened instead of duplicated.")}
+  const item={id:uid(),firstName,lastName,phone,email,intent:document.getElementById("leadIntent").value,source:document.getElementById("leadSource").value,sourceDetail:"",campaign:document.getElementById("leadCampaign").value.trim(),form:"Manual capture",event:"",contentId:"",property:document.getElementById("leadProperty").value.trim(),area:"",timeframe:document.getElementById("leadTimeframe").value,message:document.getElementById("leadMessage").value.trim(),permission:document.getElementById("leadPermission").checked,status:"New",receivedAt:NOW(),responseStartedAt:"",responseDeadlineMinutes:5,matchedContactId:"",archivedReason:"",originalPayload:{route:"manual"},idempotencyKey:uid(),createdAt:NOW(),updatedAt:NOW()};
+  db.leadInbox.unshift(item);state.leadInboxId=item.id;state.inboxTab="leads";save();closeModal();location.hash="#/inbox";renderInbox();toast("Inquiry captured","The response timer has started.")
+}
+function startLeadResponse(id){const item=db.leadInbox.find(x=>x.id===id);if(!item)return;item.responseStartedAt=NOW();item.status="Responding";item.updatedAt=NOW();save();renderLeadInbox();toast("Response started","The inquiry remains in triage until you classify it.")}
+function convertLead(id,mode){
+  const item=db.leadInbox.find(x=>x.id===id);if(!item)return;
+  const duplicate=intakeDuplicate(item);
+  if(duplicate){
+    duplicate.sourceDetail=duplicate.sourceDetail||item.campaign||item.sourceDetail;duplicate.updatedAt=TODAY();
+    duplicate.attribution={contentId:item.contentId||duplicate.attribution?.contentId||"",campaign:item.campaign||duplicate.attribution?.campaign||"",form:item.form||duplicate.attribution?.form||"",event:item.event||duplicate.attribution?.event||"",originalSource:duplicate.attribution?.originalSource||item.source};
+    if(item.message)db.communications.unshift({id:uid(),contactId:duplicate.id,channel:"Intake",direction:"inbound",outcome:"New inquiry",body:item.message,date:item.receivedAt,unread:true,threadStatus:"open",createdAt:NOW()});
+    item.matchedContactId=duplicate.id;item.status="Converted";item.updatedAt=NOW();save();toast("Attached to existing person",fullName(duplicate));location.hash=`#/contact/${duplicate.id}`;return
+  }
+  const type=mode==="Community"?"Sphere":mode;
+  const rawContact={id:uid(),firstName:item.firstName,lastName:item.lastName,phone:item.phone,email:item.email,type,stage:"New",heat:mode==="Community"?"Warm":"Hot",timeframe:item.timeframe,followUp:mode==="Community"?addDays(TODAY(),30):TODAY(),lastCommunication:"",source:item.source,sourceDetail:item.campaign||item.sourceDetail,gci:0,property:item.property,tags:mode==="Community"?["community"]:["new inquiry"],notes:item.message,createdAt:TODAY(),updatedAt:TODAY(),attribution:{contentId:item.contentId,campaign:item.campaign,form:item.form,event:item.event,originalSource:item.source},consent:{marketing:item.permission,email:item.permission,text:item.permission,doNotCall:false,unsubscribed:false,capturedAt:item.permission?item.receivedAt:""}};
+  const c=normalize({contacts:[rawContact]}).contacts[0];db.contacts.unshift(c);
+  if(type==="Seller"&&item.property)db.properties.unshift({id:uid(),contactId:c.id,role:"Seller Property",status:"Prospect",primary:true,street:item.property,unit:"",city:"",state:"OH",zip:"",county:"",propertyType:"Single Family",beds:"",baths:"",sqft:"",acres:"",yearBuilt:"",occupancy:"Unknown",ownership:"Unknown",estimatedValue:0,mortgageBalance:0,listPrice:0,expectedSalePrice:0,targetDate:"",appointmentDate:"",condition:"",motivation:item.message,notes:"Created from lead inbox.",createdAt:TODAY(),updatedAt:TODAY()});
+  db.communications.unshift({id:uid(),contactId:c.id,channel:"Intake",direction:"inbound",outcome:"New inquiry",body:item.message||`${item.intent} inquiry from ${item.source}`,date:item.receivedAt,unread:true,threadStatus:"open",createdAt:NOW()});
+  db.tasks.unshift({id:uid(),contactId:c.id,title:mode==="Community"?`Relationship follow-up with ${fullName(c)}`:`Respond to new ${type.toLowerCase()} inquiry`,type:"Follow Up",due:TODAY(),time:"",duration:30,location:"",notes:"Created by Lead Inbox",status:"Open",priority:mode==="Community"?"Normal":"High",planRunId:"",completedAt:"",createdAt:TODAY()});
+  item.matchedContactId=c.id;item.status="Converted";item.updatedAt=NOW();save();toast(mode==="Community"?"Community contact saved":`${type} opportunity created`,fullName(c));location.hash=`#/contact/${c.id}`
+}
+function convertLeadVendor(id){
+  const item=db.leadInbox.find(x=>x.id===id);if(!item)return;
+  const vendor={id:uid(),name:[item.firstName,item.lastName].filter(Boolean).join(" ")||"New provider",category:"Other",phone:item.phone,email:item.email,website:"",serviceArea:item.area||item.property,status:"Considering",notes:item.message,lastVerified:"",referrals:0,positiveFeedback:0,createdAt:NOW(),updatedAt:NOW()};
+  db.vendors.unshift(vendor);item.status="Converted";item.updatedAt=NOW();save();state.vendorCategory="All";location.hash="#/network";toast("Added to Local Network",vendor.name)
+}
+function archiveLead(id){const item=db.leadInbox.find(x=>x.id===id);if(!item||!confirm("Archive this inquiry? It will remain in your data export."))return;item.status="Archived";item.archivedReason="Archived by user";item.updatedAt=NOW();save();renderLeadInbox();toast("Inquiry archived","No contact or opportunity was created.")}
+
+function renderConversationInbox(){let list=threads();if(state.inboxFolder==="unread")list=list.filter(t=>t.unread);if(state.inboxFolder==="open")list=list.filter(t=>t.status==="open"||!t.status);if(state.inboxFolder==="deferred")list=list.filter(t=>t.status==="deferred");if(state.inboxFolder==="closed")list=list.filter(t=>t.status==="closed");if(!state.activeThread||!list.some(x=>x.contact.id===state.activeThread))state.activeThread=list[0]?.contact.id||null;const active=list.find(x=>x.contact.id===state.activeThread);const all=threads();document.getElementById("view").innerHTML=pageHead("Communication hub","Inbox","Logged calls, texts, email, and notes stay connected to each relationship. Live two-way sync remains disabled until a provider is connected.",`<button class="ghost-btn" data-action="inbox-zero">Mark all read</button>`)+`<section class="inbox-zero-summary"><div><strong>${all.filter(t=>t.status==="open").length}</strong><span>open</span></div><div><strong>${all.filter(t=>t.unread).length}</strong><span>unread</span></div><div><strong>${all.filter(t=>t.status==="deferred").length}</strong><span>deferred</span></div><div><strong>${all.filter(t=>t.status==="closed").length}</strong><span>closed</span></div></section><div class="inbox-layout pro-inbox-layout"><aside class="inbox-folders">${[["open","Do now",all.filter(t=>t.status==="open").length],["unread","Unread",all.filter(t=>t.unread).length],["deferred","Deferred",all.filter(t=>t.status==="deferred").length],["all","All",all.length],["closed","Closed",all.filter(t=>t.status==="closed").length]].map(([id,label,count])=>`<button class="folder-btn ${state.inboxFolder===id?"active":""}" data-action="inbox-folder" data-id="${id}"><span>${label}</span><b>${count}</b></button>`).join("")}</aside><section class="thread-list">${list.length?list.map(t=>`<article class="thread ${t.unread?"unread":""} ${active?.contact.id===t.contact.id?"active":""}" data-action="open-thread" data-id="${t.contact.id}"><div class="thread-top"><strong>${esc(fullName(t.contact))}</strong><time>${dateTimeLabel(t.last.date)}</time></div><span>${esc(t.contact.type)} • ${esc(t.contact.stage)}</span><p>${esc(t.last.body||`${t.last.channel} • ${t.last.outcome}`)}</p>${t.status==="deferred"?`<small>Returns ${dateLabel(t.deferredUntil)}</small>`:""}</article>`).join(""):`<div class="empty">This folder is clear.</div>`}</section>${active?conversationHtml(active):`<section class="conversation"><div class="empty">Select a conversation.</div></section>`}</div>`}
 function conversationHtml(thread){thread.messages.forEach(m=>m.unread=false);save(false);const c=thread.contact,next=nextActionFor(c,db.tasks.filter(t=>t.contactId===c.id&&t.status!=="Done").sort((a,b)=>String(a.due).localeCompare(String(b.due))));return `<section class="conversation pro-conversation"><div class="conversation-head"><div>${avatar(c)}<div><strong><a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a></strong><small>${esc(c.type)} • ${esc(c.stage)} • ${esc(c.phone||c.email||"No contact information")}</small></div></div><div class="row-actions">${contactQuickActions(c)}<button class="quick" data-action="inbox-do-now" data-id="${c.id}">Do now</button><button class="quick" data-action="defer-thread" data-id="${c.id}">Defer</button><button class="quick" data-action="toggle-thread" data-id="${c.id}">${thread.status==="closed"?"Reopen":"Close"}</button></div></div><section class="conversation-context"><div><span>NEXT ACTION</span><strong>${esc(next.title)}</strong><small>${next.due?dateLabel(next.due):"No date"}</small></div><div><span>RELATIONSHIP</span><p>${esc(contactSummary(c,scoreContact(c)))}</p></div></section><div class="messages">${thread.messages.map(m=>`<div class="message ${m.direction==="outbound"?"outbound":""}"><b>${esc(m.channel)}${m.outcome?` • ${esc(m.outcome)}`:""}</b><div>${esc(m.body||"No details")}</div><small>${dateTimeLabel(m.date)}</small></div>`).join("")}</div><div class="composer"><textarea id="inboxReply" placeholder="Write a text, email, or CRM note..."></textarea><div class="composer-row"><select id="inboxChannel"><option>Text</option><option>Email</option><option>Note</option></select><button class="primary-btn compact" data-action="send-inbox-reply" data-id="${c.id}">Launch & log</button></div></div></section>`}
 
 function scoreLabel(score){return score>=70?"High":score>=40?"Medium":"Low"}
@@ -5041,6 +5223,80 @@ function renderTasks(){
     <section class="card">${tasks.length?tasks.map(t=>{const c=contact(t.contactId);return `<div class="task-row ${t.status==="Done"?"done":""}"><input type="checkbox" ${t.status==="Done"?"checked":""} data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` • <a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}${t.time?` • ${esc(t.time)}`:""}${t.location?` • ${esc(t.location)}`:""}${t.planRunId?" • Action plan":""}</small></div><span class="task-date ${t.status!=="Done"&&t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}</span><div class="task-app-actions">${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Map</button>`:""}<button class="quick" data-action="add-task-calendar" data-id="${t.id}">Calendar</button><button class="quick" data-action="edit-task" data-id="${t.id}">Edit</button><button class="quick" data-action="delete-task" data-id="${t.id}">×</button></div></div>`}).join(""):`<div class="empty">No tasks in this view.</div>`}</section>`;
 }
 
+function renderCalendar(){
+  const open=db.tasks.filter(t=>t.status!=="Done").sort((a,b)=>`${a.due}${a.time||"23:59"}`.localeCompare(`${b.due}${b.time||"23:59"}`));
+  const overdue=open.filter(t=>t.due<TODAY()),today=open.filter(t=>t.due===TODAY()),upcoming=open.filter(t=>t.due>TODAY()).slice(0,30);
+  const lane=(label,items)=>`<section class="v13-panel"><header class="v13-panel-head"><div><span>${esc(label)}</span><h2>${items.length} ${items.length===1?"commitment":"commitments"}</h2></div></header><div>${items.length?items.map(t=>{const c=contact(t.contactId);return `<div class="task-row"><input type="checkbox" data-action="complete-task" data-id="${t.id}"><div><strong>${esc(t.title)}</strong><small>${esc(t.type)}${c?` · <a class="person-name-link" href="#/contact/${c.id}">${esc(fullName(c))}</a>`:""}${t.location?` · ${esc(t.location)}`:""}</small></div><span class="task-date ${t.due<TODAY()?"overdue":""}">${dateLabel(t.due)}${t.time?` · ${esc(t.time)}`:""}</span><div class="task-app-actions">${t.location?`<button class="quick" data-action="open-directions" data-address="${esc(t.location)}">Map</button>`:""}<button class="quick" data-action="add-task-calendar" data-id="${t.id}">Add to calendar</button><button class="quick" data-action="edit-task" data-id="${t.id}">Edit</button></div></div>`}).join(""):`<div class="empty">Nothing in this lane.</div>`}</div></section>`;
+  document.getElementById("view").innerHTML=pageHead("Promises and appointments","Calendar","A clean operational calendar for follow-ups, meetings, and transaction work—not a replacement for Google or Apple Calendar.",`<button class="ghost-btn" data-action="open-task">＋ Task</button><button class="primary-btn" data-action="open-task">＋ Appointment</button>`)+`<div class="v13-today-column">${overdue.length?lane("Overdue",overdue):""}${lane("Today",today)}${lane("Upcoming",upcoming)}</div>`
+}
+
+function renderContent(){
+  const items=db.contentItems,active=activeContentStory(),published=items.filter(item=>item.stage==="Published"),totals={views:published.reduce((sum,item)=>sum+item.views,0),inquiries:published.reduce((sum,item)=>sum+item.inquiries,0),appointments:published.reduce((sum,item)=>sum+item.appointments,0),gci:published.reduce((sum,item)=>sum+item.closedGci,0)};
+  document.getElementById("view").innerHTML=pageHead("Demand engine","Content","One active story at a time—from verified source to client attribution.",`<button class="primary-btn" data-action="open-content">＋ Save story</button>`)+
+    `<section class="v13-content-hero"><article class="v13-active-story"><span>One active story</span><h2>${esc(active?.title||"Choose the story worth finishing")}</h2><p>${esc(active?`${active.stage} · ${active.area||active.topic||"No area set"}`:"The newsroom protects your ideas without turning Today into a content dashboard.")}</p><footer>${active?`<button class="primary-btn" data-action="edit-content" data-id="${active.id}">Continue working</button><button class="ghost-btn" data-action="content-next" data-id="${active.id}">Advance stage</button>`:`<button class="primary-btn" data-action="open-content">Save first story</button>`}</footer></article><div class="v13-content-stats"><div><strong>${totals.views.toLocaleString()}</strong><span>Views</span></div><div><strong>${totals.inquiries}</strong><span>Inquiries</span></div><div><strong>${totals.appointments}</strong><span>Appointments</span></div><div><strong>${money(totals.gci)}</strong><span>Closed GCI</span></div></div></section>
+    <section class="v13-stage-board">${contentStages.map(stage=>{const stageItems=items.filter(item=>item.stage===stage);return `<div class="v13-stage-column"><header class="v13-stage-head"><strong>${esc(stage)}</strong><b>${stageItems.length}</b></header>${stageItems.length?stageItems.map(item=>`<article class="v13-story-card ${item.active?"active":""}"><span>${esc(item.area||item.topic||"Holton Homes")}</span><h3>${esc(item.title)}</h3><p>${esc(item.angle||item.verificationNotes||"No angle or verification note yet.")}</p><footer><small>${item.active?"Active story":item.stage}</small><div><button class="quick" data-action="edit-content" data-id="${item.id}">Edit</button>${stage!=="Published"?`<button class="quick" data-action="content-next" data-id="${item.id}">Next</button>`:""}</div></footer></article>`).join(""):`<div class="compact-empty">No stories</div>`}</div>`}).join("")}</section>`
+}
+function contentModal(id=""){
+  const item=db.contentItems.find(x=>x.id===id)||{id:"",title:"",stage:"Story Inbox",area:"",topic:"",angle:"",sources:"",verificationNotes:"",learnPacket:"",teachBack:"",script:"",publishUrl:"",platform:"Facebook / YouTube",active:!db.contentItems.some(x=>x.active),views:0,inquiries:0,appointments:0,closedGci:0};
+  modal(item.id?"Edit content story":"Save content story",`<div class="form-grid"><input id="contentId" type="hidden" value="${esc(item.id)}">
+    <div class="field full"><label>Story / working title</label><input id="contentTitle" value="${esc(item.title)}" placeholder="What changed and why should someone care?"></div>
+    <div class="field"><label>Stage</label><select id="contentStage">${contentStages.map(value=>`<option ${item.stage===value?"selected":""}>${value}</option>`).join("")}</select></div><div class="field"><label>Platform</label><input id="contentPlatform" value="${esc(item.platform)}"></div>
+    <div class="field"><label>Area</label><input id="contentArea" value="${esc(item.area)}" placeholder="Cincinnati, Clermont, NKY..."></div><div class="field"><label>Topic</label><input id="contentTopic" value="${esc(item.topic)}" placeholder="Restaurant, road, housing, employer..."></div>
+    <div class="field full"><label>Angle</label><textarea id="contentAngle" placeholder="What makes this useful, surprising, or worth discussing?">${esc(item.angle)}</textarea></div>
+    <div class="field full"><label>Sources</label><textarea id="contentSources" placeholder="One source or URL per line">${esc(item.sources)}</textarea></div>
+    <div class="field full"><label>Verification notes</label><textarea id="contentVerification">${esc(item.verificationNotes)}</textarea></div>
+    <div class="field full"><label>Learn packet</label><textarea id="contentLearn">${esc(item.learnPacket)}</textarea></div>
+    <div class="field full"><label>Teach-back</label><textarea id="contentTeachBack">${esc(item.teachBack)}</textarea></div>
+    <div class="field full"><label>Script / copy</label><textarea id="contentScript" rows="8">${esc(item.script)}</textarea></div>
+    <div class="field full"><label>Published URL</label><input id="contentUrl" type="url" value="${esc(item.publishUrl)}" placeholder="https://..."></div>
+    <div class="field"><label>Views</label><input id="contentViews" type="number" min="0" value="${item.views||0}"></div><div class="field"><label>Inquiries</label><input id="contentInquiries" type="number" min="0" value="${item.inquiries||0}"></div>
+    <div class="field"><label>Appointments</label><input id="contentAppointments" type="number" min="0" value="${item.appointments||0}"></div><div class="field"><label>Closed GCI attributed</label><input id="contentGci" type="number" min="0" value="${item.closedGci||0}"></div>
+    <div class="field full"><label class="checkbox-row"><input id="contentActive" type="checkbox" ${item.active?"checked":""}> Make this the one active story</label></div>
+  </div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${item.id?`<button class="danger-btn" data-action="delete-content" data-id="${item.id}">Archive</button>`:""}<button class="primary-btn" data-action="save-content">Save story</button>`)
+}
+function saveContent(){
+  const id=document.getElementById("contentId").value||uid(),existing=db.contentItems.find(item=>item.id===id),title=document.getElementById("contentTitle").value.trim();if(!title)return alert("Add a working title.");
+  const active=document.getElementById("contentActive").checked;if(active)db.contentItems.forEach(item=>item.active=false);
+  const stage=document.getElementById("contentStage").value,publishUrl=document.getElementById("contentUrl").value.trim();if(publishUrl&&!/^https?:\/\//.test(publishUrl))return alert("Published URL must begin with https:// or http://");
+  const record={id,title,stage,area:document.getElementById("contentArea").value.trim(),topic:document.getElementById("contentTopic").value.trim(),angle:document.getElementById("contentAngle").value.trim(),sources:document.getElementById("contentSources").value.trim(),verificationNotes:document.getElementById("contentVerification").value.trim(),learnPacket:document.getElementById("contentLearn").value.trim(),teachBack:document.getElementById("contentTeachBack").value.trim(),script:document.getElementById("contentScript").value.trim(),publishUrl,platform:document.getElementById("contentPlatform").value.trim(),active,publishedAt:stage==="Published"?(existing?.publishedAt||NOW()):"",views:Number(document.getElementById("contentViews").value||0),inquiries:Number(document.getElementById("contentInquiries").value||0),appointments:Number(document.getElementById("contentAppointments").value||0),closedGci:Number(document.getElementById("contentGci").value||0),createdAt:existing?.createdAt||NOW(),updatedAt:NOW()};
+  const index=db.contentItems.findIndex(item=>item.id===id);if(index>=0)db.contentItems[index]=record;else db.contentItems.unshift(record);save();closeModal();renderContent();toast(existing?"Story updated":"Story saved",title)
+}
+function advanceContent(id){const item=db.contentItems.find(x=>x.id===id);if(!item)return;const index=contentStages.indexOf(item.stage);if(index<contentStages.length-1)item.stage=contentStages[index+1];item.updatedAt=NOW();if(item.stage==="Published"&&!item.publishedAt)item.publishedAt=NOW();save();renderContent();toast("Story advanced",item.stage)}
+function deleteContent(id){const item=db.contentItems.find(x=>x.id===id);if(!item||!confirm("Archive this content record? Attribution totals attached to contacts will remain."))return;db.contentItems=db.contentItems.filter(x=>x.id!==id);save();closeModal();renderContent();toast("Story archived",item.title)}
+
+function renderNetwork(){
+  const categories=["All",...vendorCategories],list=db.vendors.filter(item=>state.vendorCategory==="All"||item.category===state.vendorCategory).sort((a,b)=>(a.status==="Trusted"?-1:1)-(b.status==="Trusted"?-1:1)||a.name.localeCompare(b.name));
+  document.getElementById("view").innerHTML=pageHead("Referral trust","Local Network","A verified connector directory—not a random vendor list.",`<button class="primary-btn" data-action="open-vendor">＋ Add provider</button>`)+`<section class="v13-network-layout"><aside class="v13-network-categories">${categories.map(category=>`<button class="${state.vendorCategory===category?"active":""}" data-action="vendor-category" data-id="${esc(category)}"><span>${esc(category)}</span><b>${category==="All"?db.vendors.length:db.vendors.filter(v=>v.category===category).length}</b></button>`).join("")}</aside><div class="v13-vendor-grid">${list.length?list.map(item=>`<article class="v13-vendor-card"><header><div><h3>${esc(item.name)}</h3><span>${esc(item.category)} · ${esc(item.status)}</span></div><button class="quick" data-action="edit-vendor" data-id="${item.id}">Edit</button></header><p>${esc(item.notes||"No service notes yet.")}</p><dl><dt>Service area</dt><dd>${esc(item.serviceArea||"Not set")}</dd><dt>Last verified</dt><dd>${item.lastVerified?dateLabel(item.lastVerified):"Needs verification"}</dd><dt>Referrals</dt><dd>${item.referrals}</dd></dl><footer>${item.phone?`<a class="ghost-btn compact" href="tel:${item.phone.replace(/[^\d+]/g,"")}">Call</a>`:""}${item.email?`<a class="ghost-btn compact" href="mailto:${esc(item.email)}">Email</a>`:""}${item.website?`<a class="ghost-btn compact" href="${esc(item.website)}" target="_blank" rel="noopener">Website</a>`:""}<button class="primary-btn compact" data-action="vendor-referral" data-id="${item.id}">Log referral</button></footer></article>`).join(""):`<div class="empty"><div>No providers in this category.<br><button class="primary-btn" data-action="open-vendor" style="margin-top:10px">Add provider</button></div></div>`}</div></section>`
+}
+function vendorModal(id=""){
+  const item=db.vendors.find(x=>x.id===id)||{id:"",name:"",category:"Other",phone:"",email:"",website:"",serviceArea:"",status:"Considering",notes:"",lastVerified:"",referrals:0,positiveFeedback:0};
+  modal(item.id?"Edit provider":"Add local provider",`<div class="form-grid"><input id="vendorId" type="hidden" value="${esc(item.id)}"><div class="field full"><label>Business / provider name</label><input id="vendorName" value="${esc(item.name)}"></div><div class="field"><label>Category</label><select id="vendorCategory">${vendorCategories.map(value=>`<option ${item.category===value?"selected":""}>${value}</option>`).join("")}</select></div><div class="field"><label>Status</label><select id="vendorStatus">${["Considering","Trusted","Needs Reverification","Do Not Refer"].map(value=>`<option ${item.status===value?"selected":""}>${value}</option>`).join("")}</select></div><div class="field"><label>Phone</label><input id="vendorPhone" type="tel" value="${esc(item.phone)}"></div><div class="field"><label>Email</label><input id="vendorEmail" type="email" value="${esc(item.email)}"></div><div class="field full"><label>Website</label><input id="vendorWebsite" type="url" value="${esc(item.website)}" placeholder="https://..."></div><div class="field full"><label>Service area</label><input id="vendorArea" value="${esc(item.serviceArea)}"></div><div class="field"><label>Last verified</label><input id="vendorVerified" type="date" value="${esc(item.lastVerified)}"></div><div class="field"><label>Positive feedback count</label><input id="vendorFeedback" type="number" min="0" value="${item.positiveFeedback||0}"></div><div class="field full"><label>Notes</label><textarea id="vendorNotes">${esc(item.notes)}</textarea></div></div>`,`<button class="ghost-btn" data-action="close-modal">Cancel</button>${item.id?`<button class="danger-btn" data-action="delete-vendor" data-id="${item.id}">Remove</button>`:""}<button class="primary-btn" data-action="save-vendor">Save provider</button>`)
+}
+function saveVendor(){
+  const id=document.getElementById("vendorId").value||uid(),existing=db.vendors.find(item=>item.id===id),name=document.getElementById("vendorName").value.trim(),website=document.getElementById("vendorWebsite").value.trim();if(!name)return alert("Add a provider name.");if(website&&!/^https?:\/\//.test(website))return alert("Website must begin with https:// or http://");
+  const record={id,name,category:document.getElementById("vendorCategory").value,phone:document.getElementById("vendorPhone").value.trim(),email:document.getElementById("vendorEmail").value.trim(),website,serviceArea:document.getElementById("vendorArea").value.trim(),status:document.getElementById("vendorStatus").value,notes:document.getElementById("vendorNotes").value.trim(),lastVerified:document.getElementById("vendorVerified").value,referrals:existing?.referrals||0,positiveFeedback:Number(document.getElementById("vendorFeedback").value||0),createdAt:existing?.createdAt||NOW(),updatedAt:NOW()};const index=db.vendors.findIndex(item=>item.id===id);if(index>=0)db.vendors[index]=record;else db.vendors.unshift(record);save();closeModal();renderNetwork();toast(existing?"Provider updated":"Provider added",name)
+}
+function deleteVendor(id){const item=db.vendors.find(x=>x.id===id);if(!item||!confirm("Remove this provider from the Local Network?"))return;db.vendors=db.vendors.filter(x=>x.id!==id);save();closeModal();renderNetwork();toast("Provider removed",item.name)}
+function logVendorReferral(id){const item=db.vendors.find(x=>x.id===id);if(!item)return;item.referrals++;item.updatedAt=NOW();save();renderNetwork();toast("Referral logged",`${item.name} · ${item.referrals} total`)}
+
+function healthItems(){
+  const failures=(()=>{try{return JSON.parse(localStorage.getItem("holtonHomesUiFailures")||"[]")}catch{return []}})();
+  const notificationStatus=!("Notification" in window)?"unsupported":Notification.permission;
+  return [
+    {label:"Cloud workspace",status:cloudReady?"ok":cloudClient?"warn":"error",detail:cloudReady?"Signed in and syncing.":cloudClient?"Configured but not signed in on this device.":"Supabase is not configured."},
+    {label:"Local recovery copy",status:"ok",detail:"Browser and IndexedDB recovery snapshots are enabled."},
+    {label:"Manual backup",status:backupAgeDays()<=30?"ok":"warn",detail:backupAgeDays()<=30?`Last export ${backupAgeDays()} days ago.`:"Download a JSON backup before trusting the app with active clients."},
+    {label:"Notifications",status:notificationStatus==="granted"?"ok":"warn",detail:notificationStatus==="granted"?"Browser notifications are allowed.":notificationStatus==="denied"?"Blocked in browser settings.":"Permission has not been granted."},
+    {label:"Communication provider",status:"warn",detail:"Personal phone/email handoff works. Live two-way inbox is not connected."},
+    {label:"Recent UI errors",status:failures.length?"error":"ok",detail:failures.length?`${failures.length} saved failure${failures.length===1?"":"s"}; review before production use.`:"No saved interface failures."}
+  ]
+}
+function openHealthModal(){const items=healthItems();modal("Reliability center",`<div class="v13-health-grid">${items.map(item=>`<article class="v13-health-item ${item.status}"><span class="v13-health-dot"></span><div><strong>${esc(item.label)}</strong><p>${esc(item.detail)}</p></div></article>`).join("")}</div><div class="v13-health-actions"><button class="ghost-btn" data-action="cloud-sync-now">Sync now</button><button class="ghost-btn" data-action="request-notifications">Enable notifications</button><button class="primary-btn" data-action="export-json">Download safety backup</button></div>`,`<button class="ghost-btn" data-action="close-modal">Close</button>`)}
+function requestNotifications(){if(!("Notification" in window))return toast("Not supported","This browser does not offer notifications.");Notification.requestPermission().then(()=>{closeModal();openHealthModal()})}
+
+function financialSettingsHtml(){return `<section class="setting-card"><h3>Commission and household goals</h3><p>Keep gross commission separate from what actually reaches your household. Historical transactions retain their recorded GCI.</p><div class="field"><label>Agent side of brokerage split (%)</label><input id="settingAgentSplit" type="number" min="0" max="100" value="${esc(db.settings.agentSplitPercent||70)}"></div><div class="field" style="margin-top:8px"><label>Transaction fee per closing</label><input id="settingTransactionFee" type="number" min="0" value="${esc(db.settings.transactionFee||0)}"></div><div class="field" style="margin-top:8px"><label>Business expense reserve (%)</label><input id="settingBusinessExpense" type="number" min="0" max="100" value="${esc(db.settings.businessExpensePercent||0)}"></div><div class="field" style="margin-top:8px"><label>Tax reserve (%)</label><input id="settingTaxReserve" type="number" min="0" max="100" value="${esc(db.settings.taxReservePercent||0)}"></div><div class="field" style="margin-top:8px"><label>Annual household take-home goal</label><input id="settingHouseholdGoal" type="number" min="0" value="${esc(db.settings.householdTakeHomeGoal||90000)}"></div><div class="field" style="margin-top:8px"><label>Brokerage name</label><input id="settingBrokerageName" value="${esc(db.settings.brokerageName||"")}" placeholder="Leave blank until selected"></div><div class="field" style="margin-top:8px"><label>License status</label><select id="settingLicenseStatus">${["Pre-license","Active salesperson","Inactive","Broker"].map(value=>`<option ${db.settings.licenseStatus===value?"selected":""}>${value}</option>`).join("")}</select></div><button class="primary-btn compact" style="margin-top:10px" data-action="save-financial-settings">Save assumptions</button></section>`}
+function saveFinancialSettings(){db.settings.agentSplitPercent=Number(document.getElementById("settingAgentSplit").value||0);db.settings.transactionFee=Number(document.getElementById("settingTransactionFee").value||0);db.settings.businessExpensePercent=Number(document.getElementById("settingBusinessExpense").value||0);db.settings.taxReservePercent=Number(document.getElementById("settingTaxReserve").value||0);db.settings.householdTakeHomeGoal=Number(document.getElementById("settingHouseholdGoal").value||0);db.settings.brokerageName=document.getElementById("settingBrokerageName").value.trim();db.settings.licenseStatus=document.getElementById("settingLicenseStatus").value;save();toast("Financial assumptions saved","Today and Reports now use the updated take-home estimate.")}
+
 function renderAutomations(){
   const tabs=[["overview","Overview"],["rules","Rules"],["plans","Action Plans"],["queue","Approval Queue"],["logs","Logs"]];
   const body=
@@ -5074,16 +5330,18 @@ function renderActivity(){
 }
 
 function renderReports(){
-  const open=db.contacts.filter(isOpen),closed=db.contacts.filter(c=>c.stage==="Closed"),communications7=db.communications.filter(m=>daysSince(m.date)<=7),connected=db.communications.filter(m=>m.channel==="Call"&&["Connected","Appointment Set"].includes(m.outcome)).length,calls=db.communications.filter(m=>m.channel==="Call").length;
+  const open=db.contacts.filter(isOpen),closed=db.contacts.filter(c=>c.stage==="Closed"),communications7=db.communications.filter(m=>daysSince(m.date)<=7),connected=db.communications.filter(m=>m.channel==="Call"&&["Connected","Appointment Set"].includes(m.outcome)).length,calls=db.communications.filter(m=>m.channel==="Call").length,flow=commissionWaterfall();
   const sourceMap={};db.contacts.forEach(c=>{sourceMap[c.source]??={count:0,gci:0};sourceMap[c.source].count++;sourceMap[c.source].gci+=c.gci});
   const stageMap={};db.contacts.forEach(c=>stageMap[c.stage]=(stageMap[c.stage]||0)+1);
   document.getElementById("view").innerHTML=
     pageHead("Business intelligence","Reports","Measure relationship work, pipeline, source performance, and listing focus.") +
+    `<section class="v13-panel" style="margin-bottom:12px"><header class="v13-panel-head"><div><span>Commission waterfall</span><h2>Gross commission is not household income</h2><p>Uses your current split, fee, expense, and tax-reserve assumptions.</p></div><a class="ghost-btn compact" href="#/settings">Edit assumptions</a></header><div class="v13-mini-metrics"><div><strong>${money(flow.gross)}</strong><span>Closed GCI</span></div><div><strong>${money(flow.afterSplit)}</strong><span>After split</span></div><div><strong>−${money(flow.fees)}</strong><span>Transaction fees</span></div><div><strong>−${money(flow.businessExpenses)}</strong><span>Business reserve</span></div><div><strong>−${money(flow.taxReserve)}</strong><span>Tax reserve</span></div><div><strong>${money(flow.takeHome)}</strong><span>Estimated take-home</span></div></div></section>`+
     `<section class="metric-grid"><div class="metric"><label>Active transactions</label><strong>${activeTransactions().length}</strong><small>Buyer and seller sides</small></div><div class="metric"><label>Transaction deadlines</label><strong>${transactionDeadlineItems().length}</strong><small>Due, overdue, or problems</small></div><div class="metric"><label>Work Today</label><strong>${workQueueItems().length}</strong><small>Open priority items</small></div><div class="metric"><label>Database</label><strong>${db.contacts.length}</strong><small>Total people</small></div><div class="metric"><label>Seller share</label><strong>${db.contacts.length?Math.round(db.contacts.filter(c=>c.type==="Seller").length/db.contacts.length*100):0}%</strong><small>Listing-focused mix</small></div><div class="metric"><label>Activity this week</label><strong>${communications7.length}</strong><small>Logged touches</small></div><div class="metric"><label>Call connect rate</label><strong>${calls?Math.round(connected/calls*100):0}%</strong><small>Connected or appointment</small></div><div class="metric"><label>Closed GCI</label><strong>${money(closed.reduce((s,c)=>s+c.gci,0))}</strong><small>Recorded closings</small></div><div class="metric"><label>Possible duplicates</label><strong>${possibleDuplicateIds().size}</strong><small>Records to review</small></div></section>
     <div class="grid two"><section class="card card-pad"><div class="card-head"><div><h2>Lead sources</h2><small>People and projected GCI by source.</small></div></div>${barChart(Object.entries(sourceMap).map(([label,v])=>({label,value:v.count,display:`${v.count} • ${money(v.gci)}`})))}</section>
     <section class="card card-pad"><div class="card-head"><div><h2>Stage funnel</h2><small>Where relationships are sitting.</small></div></div>${barChart(Object.entries(stageMap).map(([label,value])=>({label,value,display:value})))}</section></div>
     <div class="grid two" style="margin-top:10px"><section class="card card-pad"><div class="card-head"><div><h2>Estimated from open opportunities GCI</h2><small>Seller vs. buyer opportunity.</small></div></div>${barChart(["Seller","Buyer"].map(type=>({label:type,value:open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0),display:money(open.filter(c=>c.type===type).reduce((s,c)=>s+c.gci,0))})))}</section>
-    <section class="card card-pad"><div class="card-head"><div><h2>Data health</h2><small>Missing information that weakens follow-up.</small></div></div>${barChart([{label:"No follow-up",value:open.filter(c=>!c.followUp).length},{label:"No contact address",value:open.filter(c=>!contactAddressComplete(c)).length},{label:"No phone/email",value:open.filter(c=>!hasPhone(c)&&!hasEmail(c)).length},{label:"Unknown timeframe",value:open.filter(c=>c.timeframe==="Unknown").length},{label:"Stale 14+ days",value:open.filter(c=>daysSince(c.lastCommunication)>=14).length}])}</section></div>`;
+    <section class="card card-pad"><div class="card-head"><div><h2>Data health</h2><small>Missing information that weakens follow-up.</small></div></div>${barChart([{label:"No follow-up",value:open.filter(c=>!c.followUp).length},{label:"No contact address",value:open.filter(c=>!contactAddressComplete(c)).length},{label:"No phone/email",value:open.filter(c=>!hasPhone(c)&&!hasEmail(c)).length},{label:"Unknown timeframe",value:open.filter(c=>c.timeframe==="Unknown").length},{label:"Stale 14+ days",value:open.filter(c=>daysSince(c.lastCommunication)>=14).length}])}</section></div>
+    <section class="card card-pad" style="margin-top:10px"><div class="card-head"><div><h2>Content to client</h2><small>Views are context; inquiries, appointments, and commission are outcomes.</small></div><a class="ghost-btn compact" href="#/content">Open newsroom</a></div>${db.contentItems.length?barChart(db.contentItems.map(item=>({label:item.title,value:item.inquiries,display:`${item.inquiries} inquiries · ${item.appointments} appts · ${money(item.closedGci)}`}))):`<div class="empty">Publish a story and record outcomes to prove what creates business.</div>`}</section>`;
 }
 function barChart(data){const max=Math.max(1,...data.map(x=>Number(x.value)||0));return `<div class="chart">${data.length?data.sort((a,b)=>b.value-a.value).map(x=>`<div class="bar-row"><label>${esc(x.label)}</label><div class="track"><div class="fill" style="width:${Math.max(2,(Number(x.value)||0)/max*100)}%"></div></div><b>${esc(x.display??x.value)}</b></div>`).join(""):`<div class="empty">No data yet.</div>`}</div>`}
 
@@ -5093,6 +5351,7 @@ function renderSettings(){
     `<div class="settings-grid">
       ${cloudSettingsHtml()}
       ${appIntegrationsSettingsHtml()}
+      ${financialSettingsHtml()}
       ${templatesSettingsHtml()}
       ${callScriptsSettingsHtml()}
       ${transactionResourcesSettingsHtml()}
@@ -5113,7 +5372,7 @@ function renderSettings(){
         <div class="field" style="margin-top:8px"><label>Core markets</label><textarea id="settingCoreMarkets">${esc(db.settings.coreMarkets||"")}</textarea></div>
         <button class="primary-btn compact" style="margin-top:9px" data-action="save-goals">Save goals</button>
       </section>
-      <section class="setting-card"><h3>Data protection</h3><p>The cloud is the shared source of truth. This browser also keeps a local recovery copy for offline use.</p><div class="warning"><strong>Still recommended:</strong> download a JSON backup monthly. Free cloud plans do not replace your own exports.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><div id="storageProtectionStatus" class="storage-status"></div></section>
+      <section class="setting-card"><h3>Data protection</h3><p>The cloud is the shared source of truth. This browser also keeps a local recovery copy for offline use.</p><div class="warning"><strong>Still recommended:</strong> download a JSON backup monthly. Free cloud plans do not replace your own exports.</div><button class="ghost-btn compact" style="margin-top:9px" data-action="request-persistent-storage">Protect browser storage</button><button class="ghost-btn compact" style="margin-top:9px" data-action="open-health">Open reliability center</button><div id="storageProtectionStatus" class="storage-status"></div></section>
       <section class="setting-card"><h3>CRM foundation</h3><p>The same contacts, households, properties, tasks, notes, and plans now sync across signed-in devices.</p><div class="cloud-roadmap"><span>✓ Secure login</span><span>✓ Shared cloud database</span><span>✓ Phone and computer sync</span><span>✓ Universal Conversation Mode</span><span>✓ Apple / Google Maps choice</span><span>✓ Apple / Google calendar handoff</span><span>✓ Default Mail / Gmail compose</span><span>✓ Synced call-note drafts</span><span>✓ Local offline cache</span><span>○ Two-way business texting</span><span>○ In-browser calling</span></div></section>
       <section class="setting-card"><h3>Device cache</h3><p>Clear only this device’s local cache. Your signed-in cloud data will download again.</p><button class="danger-btn compact" data-action="clear-data">Clear device cache</button></section>
     </div>`;
@@ -5206,8 +5465,12 @@ function openContactModal(id=""){
     <div class="field"><label>Timeframe</label><select id="contactTimeframe">${["Now — 0–3 months","3–6 months","6–12 months","12+ months","Unknown"].map(x=>`<option ${(c.timeframe||"Unknown")===x?"selected":""}>${x}</option>`).join("")}</select></div>
     <div class="field"><label>Next follow-up</label><input id="contactFollowUp" type="date" value="${esc(c.followUp||TODAY())}"></div>
     <div class="field"><label>Source</label><select id="contactSource">${sources.map(x=>`<option ${c.source===x?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="field"><label>Source detail</label><input id="contactSourceDetail" value="${esc(c.sourceDetail||"")}" placeholder="Page, channel, partner, or event"></div>
+    <div class="field"><label>Campaign</label><input id="contactCampaign" value="${esc(c.attribution?.campaign||"")}" placeholder="Campaign or content series"></div>
     <div class="field"><label>Estimated from open opportunities GCI</label><input id="contactGci" type="number" min="0" value="${c.gci||""}"></div>
     <div class="field full"><label>Tags</label><input id="contactTags" value="${esc((c.tags||[]).join(", "))}" placeholder="Type tags separated by commas: farm, referral partner, hot lead"><small class="field-help">Tags appear as clickable bubbles throughout the CRM.</small></div>
+    <div class="field full section-label">Permission and contact safety <small>Record what the person actually agreed to. This is an operational record, not legal advice.</small></div>
+    <div class="field full visitor-checks"><label class="checkbox-row"><input id="contactConsentMarketing" type="checkbox" ${c.consent?.marketing?"checked":""}> Marketing follow-up permission</label><label class="checkbox-row"><input id="contactConsentEmail" type="checkbox" ${c.consent?.email?"checked":""}> Email permission</label><label class="checkbox-row"><input id="contactConsentText" type="checkbox" ${c.consent?.text?"checked":""}> Text permission</label><label class="checkbox-row"><input id="contactDoNotCall" type="checkbox" ${c.consent?.doNotCall?"checked":""}> Do not call</label><label class="checkbox-row"><input id="contactUnsubscribed" type="checkbox" ${c.consent?.unsubscribed?"checked":""}> Unsubscribed</label></div>
     <div id="contactSpecificFields" class="field full specific-fields-grid">${contactSpecificForm(c,type)}</div>
     <div class="field full section-label">Relationship memory <small>Details that make the next conversation feel prepared—not creepy.</small></div>
     <div class="field"><label>Preferred name</label><input id="memoryPreferredName" value="${esc(c.relationshipMemory?.preferredName||"")}"></div>
@@ -5243,7 +5506,8 @@ function saveContact(){
     county:document.getElementById("contactAddressCounty").value.trim(),
     sameAsPrimaryProperty:document.getElementById("contactAddressSameAsProperty").checked
   };
-  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),address,type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,gci:Number(document.getElementById("contactGci").value||0),property:propertyValue,tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
+  const marketingConsent=document.getElementById("contactConsentMarketing").checked,emailConsent=document.getElementById("contactConsentEmail").checked,textConsent=document.getElementById("contactConsentText").checked;
+  const c={id,firstName,lastName,name:`${firstName} ${lastName}`,phone:document.getElementById("contactPhone").value.trim(),email:document.getElementById("contactEmail").value.trim(),address,type,stage,heat:document.getElementById("contactHeat").value,timeframe:document.getElementById("contactTimeframe").value,followUp,lastCommunication:old?.lastCommunication||"",source:document.getElementById("contactSource").value,sourceDetail:document.getElementById("contactSourceDetail").value.trim(),attribution:{contentId:old?.attribution?.contentId||"",campaign:document.getElementById("contactCampaign").value.trim(),form:old?.attribution?.form||"",event:old?.attribution?.event||"",originalSource:old?.attribution?.originalSource||document.getElementById("contactSource").value},consent:{marketing:marketingConsent,email:emailConsent,text:textConsent,doNotCall:document.getElementById("contactDoNotCall").checked,unsubscribed:document.getElementById("contactUnsubscribed").checked,capturedAt:(marketingConsent||emailConsent||textConsent)?(old?.consent?.capturedAt||NOW()):""},gci:Number(document.getElementById("contactGci").value||0),property:propertyValue,tags:document.getElementById("contactTags").value.split(",").map(x=>x.trim()).filter(Boolean),notes:document.getElementById("contactNotes").value.trim(),createdAt:old?.createdAt||TODAY(),updatedAt:TODAY(),household:old?.household||[],preferences:old?.preferences||{areas:"",minPrice:"",maxPrice:"",beds:"",baths:""},
   sellerDetails:type==="Seller"?{motivation:document.getElementById("sellerMotivation")?.value.trim()||"",estimatedValue:document.getElementById("sellerEstimatedValue")?.value||"",mortgageBalance:document.getElementById("sellerMortgageBalance")?.value||"",condition:document.getElementById("sellerCondition")?.value.trim()||"",decisionMakers:document.getElementById("sellerDecisionMakers")?.value.trim()||""}:(old?.sellerDetails||{motivation:"",estimatedValue:"",mortgageBalance:"",condition:"",decisionMakers:""}),
   buyerDetails:type==="Buyer"?{preapproval:document.getElementById("buyerPreapproval")?.value||"Unknown",lender:document.getElementById("buyerLender")?.value.trim()||"",budget:document.getElementById("buyerBudget")?.value||"",desiredPayment:document.getElementById("buyerDesiredPayment")?.value||"",areas:document.getElementById("buyerAreas")?.value.trim()||"",beds:document.getElementById("buyerBeds")?.value||"",baths:document.getElementById("buyerBaths")?.value||"",leaseExpiration:document.getElementById("buyerLeaseExpiration")?.value||""}:(old?.buyerDetails||{preapproval:"Unknown",lender:"",budget:"",desiredPayment:"",areas:"",beds:"",baths:"",leaseExpiration:""}),
   sphereDetails:["Sphere","Past Client"].includes(type)?{relationship:document.getElementById("sphereRelationship")?.value.trim()||"",homeowner:document.getElementById("sphereHomeowner")?.value||"Unknown",neighborhood:document.getElementById("sphereNeighborhood")?.value.trim()||"",birthday:document.getElementById("sphereBirthday")?.value||"",likelyOpportunity:document.getElementById("sphereLikelyOpportunity")?.value.trim()||""}:(old?.sphereDetails||{relationship:"",birthday:"",neighborhood:"",homeowner:"Unknown",likelyOpportunity:""}),
@@ -5736,12 +6000,32 @@ document.addEventListener("click",event=>{
   }
   const el=event.target.closest("[data-action]");if(!el)return;
   const action=el.dataset.action,id=el.dataset.id,channel=el.dataset.channel;
+  if(action==="open-health")openHealthModal();
+  if(action==="request-notifications")requestNotifications();
   if(action==="open-notifications")openNotifications();
   if(action==="close-notifications")closeNotifications();
   if(action==="notification-filter"){state.notificationFilter=id;renderNotificationDrawer()}
   if(action==="open-notification")openNotification(id);
   if(action==="dismiss-notification")dismissNotification(id);
   if(action==="open-setup-center")setupCenterModal();
+  if(action==="inbox-tab"){state.inboxTab=id;renderInbox()}
+  if(action==="open-inbox-tab")state.inboxTab=id;
+  if(action==="open-lead-intake")leadIntakeModal();
+  if(action==="save-lead-intake")saveLeadIntake();
+  if(action==="select-lead-intake"){state.leadInboxId=id;renderLeadInbox()}
+  if(action==="start-lead-response")startLeadResponse(id);
+  if(action==="convert-lead")convertLead(id,el.dataset.mode||"Seller");
+  if(action==="convert-lead-vendor")convertLeadVendor(id);
+  if(action==="archive-lead")archiveLead(id);
+  if(action==="open-content"||action==="edit-content")contentModal(id||"");
+  if(action==="save-content")saveContent();
+  if(action==="content-next")advanceContent(id);
+  if(action==="delete-content")deleteContent(id);
+  if(action==="open-vendor"||action==="edit-vendor")vendorModal(id||"");
+  if(action==="save-vendor")saveVendor();
+  if(action==="delete-vendor")deleteVendor(id);
+  if(action==="vendor-referral")logVendorReferral(id);
+  if(action==="vendor-category"){state.vendorCategory=id;renderNetwork()}
   if(action==="collapse-setup"){db.settings.onboardingCollapsed=true;save(false);renderToday()}
   if(action==="preview-person"||action==="open-contact-peek")openContactPeek(id);
   if(action==="close-contact-peek")closeContactPeek();
@@ -5980,6 +6264,7 @@ document.addEventListener("click",event=>{
   if(action==="ask-pip")askPip();
   
   if(action==="save-pro-ui"){db.settings.peopleDensity=document.getElementById("settingPeopleDensity").value;save();toast("Workspace updated",db.settings.peopleDensity==="compact"?"Compact desktop density enabled.":"Comfortable density enabled.")}
+  if(action==="save-financial-settings")saveFinancialSettings();
   if(action==="save-settings"){db.settings.agentName=document.getElementById("settingAgentName").value.trim()||"Jacob";db.settings.agentEmail=document.getElementById("settingAgentEmail").value.trim();db.settings.agentPhone=document.getElementById("settingAgentPhone").value.trim();save();toast("Settings saved","Agent profile updated.")}
   if(action==="save-goals"){
     db.settings.annualGciTarget=Number(document.getElementById("settingGciTarget").value||100000);
@@ -6055,11 +6340,18 @@ document.addEventListener("input",event=>{
   if(event.target.id==="globalSearch"){
     const q=event.target.value.toLowerCase().trim(),box=document.getElementById("globalSearchResults");
     if(!q){box.classList.remove("open");box.innerHTML="";return}
-    const hits=db.contacts.filter(c=>[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),...c.tags].join(" ").toLowerCase().includes(q)).slice(0,8);
-    box.innerHTML=hits.length?hits.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong class="person-name-link">${esc(fullName(c))}</strong><small>${esc(c.stage)} • ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`).join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
+    const people=db.contacts.filter(c=>[fullName(c),c.phone,c.email,contactAddressDisplay(c),c.address?.county,c.property,propertyDisplay(c),...propertiesForContact(c.id).map(propertyAddress),...c.tags].join(" ").toLowerCase().includes(q)).slice(0,5);
+    const stories=db.contentItems.filter(item=>[item.title,item.area,item.topic,item.angle,item.script].join(" ").toLowerCase().includes(q)).slice(0,3);
+    const vendors=db.vendors.filter(item=>[item.name,item.category,item.serviceArea,item.notes].join(" ").toLowerCase().includes(q)).slice(0,3);
+    const routes=[["today","Today"],["inbox","Inbox"],["people","People"],["pipeline","Opportunities"],["transactions","Transactions"],["calendar","Calendar"],["content","Content"],["network","Local Network"],["reports","Reports"],["settings","Settings"]].filter(([,label])=>label.toLowerCase().includes(q)).slice(0,3);
+    const results=[...people.map(c=>`<a class="search-hit" href="#/contact/${c.id}"><div><strong class="person-name-link">${esc(fullName(c))}</strong><small>Person · ${esc(c.stage)} · ${esc(c.phone||c.email||"No contact info")}</small></div><span class="score ${scoreClass(scoreContact(c).score)}">${scoreContact(c).score}</span></a>`),...stories.map(item=>`<a class="search-hit" href="#/content" data-action="edit-content" data-id="${item.id}"><div><strong>${esc(item.title)}</strong><small>Story · ${esc(item.stage)} · ${esc(item.area||item.topic||"No area")}</small></div><span class="badge">Content</span></a>`),...vendors.map(item=>`<a class="search-hit" href="#/network" data-action="edit-vendor" data-id="${item.id}"><div><strong>${esc(item.name)}</strong><small>Provider · ${esc(item.category)} · ${esc(item.serviceArea||"No service area")}</small></div><span class="badge">Network</span></a>`),...routes.map(([route,label])=>`<a class="search-hit" href="#/${route}"><div><strong>${label}</strong><small>Workspace</small></div><span>→</span></a>`)];
+    box.innerHTML=results.length?results.join(""):`<div class="empty">No matches.</div>`;box.classList.add("open")
   }
 });
 document.addEventListener("keydown",event=>{
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"){
+    event.preventDefault();const search=document.getElementById("globalSearch");search?.focus();search?.select();return
+  }
   if((event.key==="s"||event.key==="S")&&!event.metaKey&&!event.ctrlKey&&!event.altKey&&!["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)){
     const match=(location.hash||"").match(/^#\/contact\/([^/]+)/);
     if(match){event.preventDefault();openConversationMode(match[1],"profile");return}

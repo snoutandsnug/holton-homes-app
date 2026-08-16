@@ -1,66 +1,34 @@
-HOLTON HOMES CRM V3.3 — QA REPORT
-Generated: 2026-08-04
+HOLTON HOMES OS v13 — RELEASE QA
+Generated: 2026-08-16
 
-JavaScript syntax: PASSED
-Static data-action coverage: PASSED (236 actions checked)
-Supabase secret-key scan: PASSED
+STATIC VALIDATION
+- PASS: app.js parses with Node syntax validation.
+- PASS: manifest.webmanifest and vercel.json parse as valid JSON.
+- PASS: git diff whitespace/error check.
+- PASS: index.html and 404.html are identical release shells.
+- PASS: service worker precaches v13.css and the approved Holton Homes logo.
 
-Browser smoke tests:
-- PASS: Static route and action wiring — Interactive validation pending separate pass
+DESKTOP BROWSER — 1440 × 1000
+- PASS: Today, Inbox, People, Opportunities, Transactions, Calendar, Content,
+  Local Network, Reports, Launchpad, and Settings render usable views.
+- PASS: Lead Inbox create and seller conversion created the expected person.
+- PASS: Content story create and update persisted and rerendered.
+- PASS: Local provider create and update persisted and rerendered.
+- PASS: No page errors and no saved UI failure records.
 
-Tested viewports:
-- 390×844 (iPhone)
-- 820×1180 (iPad portrait)
-- 1024×768 (iPad landscape)
-- 1440×900 (desktop)
+PHONE BROWSER — 390 × 844
+- PASS: Today, Inbox, People, Opportunities, Transactions, Calendar, Content,
+  Local Network, Launchpad, and Settings render usable views.
+- PASS: Five core destinations are visible: Today, Inbox, People,
+  Opportunities, and More.
+- PASS: No page-level horizontal overflow on the tested routes.
+- PASS: No page errors.
 
-Critical flows tested:
-- Five-item mobile/iPad navigation
-- More tool directory and mobile cloud sync access
-- No page-level horizontal overflow
-- Desktop sync visibility
-- Open House staff back navigation
-- Kiosk launch and fixed Exit Guest Mode
-- Escape-key kiosk exit
-- Guest steps 1–3 navigation
-
-INTERACTIVE BROWSER VALIDATION
-Method: Chromium DOM/CSS/JavaScript interaction using the exact deploy files inlined into the test page. The cloud login overlay was dismissed in the test harness because no live Supabase session is available there.
-- PASS: iPhone five mobile destinations — 5
-- PASS: iPhone nav labels — ['Home', 'People', 'Inbox', 'Deals', 'More']
-- PASS: iPhone top sync hidden
-- PASS: iPhone More route — #/more
-- PASS: iPhone all tools visible — 11
-- PASS: iPhone cloud in More
-- PASS: iPhone no horizontal overflow — 0
-- PASS: iPhone no page errors
-- PASS: iPad portrait five mobile destinations — 5
-- PASS: iPad portrait nav labels — ['Home', 'People', 'Inbox', 'Deals', 'More']
-- PASS: iPad portrait top sync hidden
-- PASS: iPad portrait More route — #/more
-- PASS: iPad portrait all tools visible — 11
-- PASS: iPad portrait cloud in More
-- PASS: iPad portrait no horizontal overflow — 0
-- PASS: iPad portrait no page errors
-- PASS: iPad landscape five mobile destinations — 5
-- PASS: iPad landscape nav labels — ['Home', 'People', 'Inbox', 'Deals', 'More']
-- PASS: iPad landscape top sync hidden
-- PASS: iPad landscape More route — #/more
-- PASS: iPad landscape all tools visible — 11
-- PASS: iPad landscape cloud in More
-- PASS: iPad landscape no horizontal overflow — 0
-- PASS: iPad landscape no page errors
-- PASS: Desktop desktop sync visible
-- PASS: Desktop desktop nav visible
-- PASS: Desktop no horizontal overflow — 0
-- PASS: Desktop no page errors
-- PASS: Staff back link visible
-- PASS: Kiosk route entered — #/open-house-kiosk/oh1
-- PASS: Kiosk body class active
-- PASS: Fixed kiosk exit visible
-- PASS: Kiosk exits to staff route — #/open-house/oh1
-- PASS: Kiosk class removed
-- PASS: Escape exits kiosk — #/open-house/oh1
-- PASS: Kiosk advances to contact step
-- PASS: Kiosk advances to process step
-- PASS: Open House flow has no page errors
+PRODUCTION BOUNDARIES
+- The configured Supabase values were detected without exposing them in QA output.
+- This isolated test environment could not load the external Supabase browser
+  library from jsDelivr, so authenticated cloud sync must be checked once on the
+  public Vercel URL. Local persistence and all tested CRUD paths remained usable.
+- Calls, texts, email, maps, and published links intentionally hand off to the
+  device/provider. Full two-way communications and MLS/background automations
+  still require provider integrations.

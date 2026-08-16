@@ -1,11 +1,11 @@
 {
-  "name": "Holton Homes CRM V3.3",
-  "short_name": "Holton CRM",
-  "description": "A stabilized real-estate CRM with unified iPhone/iPad navigation and audited Open House controls.",
+  "name": "Holton Homes OS",
+  "short_name": "Holton OS",
+  "description": "The relationship-first real estate command center for Holton Homes.",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f4f6",
-  "theme_color": "#a92d66",
+  "background_color": "#fff8ef",
+  "theme_color": "#d95f82",
   "orientation": "portrait-primary"
 }
