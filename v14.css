@@ -674,3 +674,111 @@ body.open-house-kiosk-active .v14-workspace .view{padding-top:0!important}
   .v144-source-table>header,.v144-source-table>div{min-width:680px}
   .v144-playbook-goal{grid-template-columns:1fr}
 }
+
+
+/* ============================================================
+   v14.5 — PIP THE COACH
+   ============================================================ */
+
+/* Fix duplicate More on desktop. */
+@media (min-width:901px){
+  .v14-primary-nav .mobile-more-route{display:none!important}
+  .v14-primary-nav .desktop-more-route{display:flex!important}
+}
+@media (max-width:900px){
+  .v14-primary-nav .mobile-more-route{display:flex!important}
+  .v14-primary-nav .desktop-more-route{display:none!important}
+}
+
+/* Pip top-nav portrait */
+.pip-mini{
+  width:24px!important;height:24px!important;min-width:24px!important;
+  border-radius:50%!important;
+  background-repeat:no-repeat!important;
+  background-position:center 22%!important;
+  background-size:150%!important;
+  background-color:#fff5f8!important;
+  border:1px solid rgba(136,65,89,.18)!important;
+  box-shadow:0 1px 3px rgba(60,31,42,.10)!important;
+}
+
+/* Pip drawer avatar becomes the actual mascot. */
+.pip-avatar-large{
+  width:78px!important;height:78px!important;min-width:78px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  overflow:visible!important;background:transparent!important;border:0!important;
+}
+.pip-avatar-large::before,.pip-avatar-large::after{display:none!important}
+.pip-avatar-large img{
+  display:block;width:86px;height:86px;object-fit:contain;filter:drop-shadow(0 6px 9px rgba(76,33,48,.13));
+}
+.v145-pip-mode{
+  display:block;margin-top:3px;color:#a13b60;font-size:8px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;
+}
+.v145-pip-coach{
+  display:flex;align-items:center;gap:9px;margin:7px 0 8px;padding:8px 9px;
+  border:1px solid #ead6de;border-radius:11px;background:linear-gradient(135deg,#fffafd,#fff4f8);
+}
+.v145-pip-coach img{
+  width:58px;height:58px;object-fit:contain;flex:0 0 58px;filter:drop-shadow(0 5px 8px rgba(73,31,47,.10));
+}
+.v145-pip-coach strong{display:block;color:#30262b;font-size:11px}
+.v145-pip-coach span{display:block;margin-top:2px;color:#82767c;font-size:8px;line-height:1.35}
+.v145-pip-quick-prompts{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:0 0 9px;
+}
+.v145-pip-quick-prompts button{
+  appearance:none;border:1px solid #e5d6dc;border-radius:8px;background:#fff;color:#5e5258;
+  min-height:32px;padding:6px 7px;font-size:9px;font-weight:800;cursor:pointer;
+}
+.v145-pip-quick-prompts button:hover{border-color:#dbaebe;background:#fff5f8;color:#9c3157}
+.v145-pip-quick-prompts button:last-child{
+  grid-column:1/-1;background:#f8e8ee;border-color:#e7c5d1;color:#963252;
+}
+
+/* Local Pip output */
+.v145-local-answer{
+  white-space:normal!important;
+}
+.v145-answer-copy{
+  color:#43383e;font-size:10px;line-height:1.58;
+}
+.v145-chatgpt-row{
+  display:flex;gap:6px;flex-wrap:wrap;margin-top:11px;padding-top:9px;border-top:1px solid #eee3e7;
+}
+.v145-chatgpt-row button:first-child{
+  border-color:#d8afbd;background:#fff5f8;color:#953451;
+}
+
+/* Let Pip appear in the Growth OS without becoming a giant cartoon panel. */
+.v144-growth-head{position:relative}
+.v144-growth-head::after{
+  content:"";position:absolute;right:180px;top:-12px;width:88px;height:88px;
+  background:url("./pip-work.webp") center/contain no-repeat;
+  opacity:.96;pointer-events:none;filter:drop-shadow(0 7px 10px rgba(70,32,45,.10));
+}
+@media (max-width:1180px){.v144-growth-head::after{display:none}}
+
+/* Mood micro-animation: subtle, not annoying. */
+#pipMascotImage[data-mood="celebrate"],#pipCoachArt[data-mood="celebrate"]{
+  animation:v145PipCelebrate .55s ease both;
+}
+#pipMascotImage[data-mood="concerned"],#pipCoachArt[data-mood="concerned"]{
+  animation:v145PipConcern .45s ease both;
+}
+@keyframes v145PipCelebrate{
+  0%{transform:translateY(3px) scale(.96)}
+  55%{transform:translateY(-5px) scale(1.06)}
+  100%{transform:none}
+}
+@keyframes v145PipConcern{
+  0%,100%{transform:rotate(0)}
+  35%{transform:rotate(-2deg)}
+  70%{transform:rotate(2deg)}
+}
+
+@media (max-width:900px){
+  .pip-avatar-large{width:65px!important;height:65px!important;min-width:65px!important}
+  .pip-avatar-large img{width:72px;height:72px}
+  .v145-pip-coach img{width:50px;height:50px;flex-basis:50px}
+}
