@@ -423,3 +423,254 @@ body{font-size:14px}
 /* Open-house kiosk */
 body.open-house-kiosk-active .v14-topbar{display:none!important}
 body.open-house-kiosk-active .v14-workspace .view{padding-top:0!important}
+
+/* ============================================================
+   v14.4 — AGENT OPERATING SYSTEM
+   ============================================================ */
+
+/* Holton identity: FUB-efficient structure, not FUB-looking. */
+.v14-topbar{
+  background:#f2dfe6!important;
+  border-bottom-color:#dfc7d0!important;
+}
+.v14-brand,.v14-brand img{background:transparent!important;box-shadow:none!important}
+.v14-global-search{background:rgba(255,255,255,.75)!important}
+.v14-global-search:focus-within{background:#fff!important}
+.v144-growth-nav{
+  position:relative!important;
+  flex:0 0 auto!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  height:64px!important;
+  padding:0 10px!important;
+  color:#62595e!important;
+  font-size:12px!important;
+  font-weight:760!important;
+  text-decoration:none!important;
+}
+.v144-growth-nav:hover{background:rgba(255,255,255,.38)!important;color:#2f292c!important}
+.v144-growth-nav.active{color:#241d21!important}
+.v144-growth-nav.active::after{
+  content:"";position:absolute;left:9px;right:9px;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--v14-pink);
+}
+
+/* Cross-screen operational strip */
+.v144-today-flow{
+  display:flex;align-items:center;justify-content:space-between;gap:15px;
+  margin:0 0 15px;padding:12px 14px;border:1px solid #e3d5da;border-radius:12px;
+  background:#fff;
+}
+.v144-today-flow>div:first-child>span{
+  display:block;margin-bottom:2px;color:#a3385e;font-size:9px;font-weight:900;letter-spacing:.13em;
+}
+.v144-today-flow strong{display:block;font-size:13px;color:#2d2529}
+.v144-today-flow small{display:block;margin-top:2px;color:#786d72;font-size:10px}
+.v144-today-flow>div:last-child{display:flex;gap:7px;flex-wrap:wrap}
+
+/* Growth OS */
+.v144-growth-page{max-width:1500px;margin:0 auto}
+.v144-growth-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:22px;
+  margin-bottom:16px;padding:4px 1px;
+}
+.v144-growth-head>div:first-child>span,
+.v144-section-head>div>span{
+  display:block;margin-bottom:4px;color:#a2385d;font-size:9px;font-weight:900;letter-spacing:.14em;
+}
+.v144-growth-head h1{margin:0;color:#2a2226;font-size:32px;line-height:1.08;letter-spacing:-.04em}
+.v144-growth-head p{max-width:760px;margin:7px 0 0;color:#756a70;font-size:13px;line-height:1.55}
+.v144-growth-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.v144-scoreboard{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:hidden;
+  margin-bottom:14px;border:1px solid #e4d8dd;border-radius:13px;background:#e4d8dd;
+}
+.v144-scoreboard>div{min-width:0;padding:12px 14px;background:#fff}
+.v144-scoreboard span{display:block;color:#756a70;font-size:9px;font-weight:750}
+.v144-scoreboard strong{display:block;margin:2px 0;color:#2c2428;font-size:20px;letter-spacing:-.03em}
+.v144-scoreboard strong i{color:#9a8e94;font-size:11px;font-style:normal;font-weight:700}
+.v144-scoreboard small{display:block;color:#93878c;font-size:9px}
+
+.v144-growth-tabs{
+  display:flex;gap:3px;margin-bottom:12px;padding:4px;border:1px solid #e5dade;border-radius:11px;background:#fff;
+}
+.v144-growth-tabs button{
+  flex:0 0 auto;appearance:none;border:0;border-radius:8px;padding:8px 11px;background:transparent;
+  color:#665b61;font-size:10px;font-weight:800;cursor:pointer;
+}
+.v144-growth-tabs button:hover{background:#faf5f7}
+.v144-growth-tabs button.active{background:#f8e7ed;color:#9d3157}
+
+.v144-growth-body{
+  min-height:420px;border:1px solid #e4d8dd;border-radius:14px;background:#fff;overflow:hidden;
+}
+.v144-tab-panel{display:none;padding:18px}
+.v144-tab-panel.active{display:block}
+.v144-section-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:13px;
+}
+.v144-section-head h2{margin:0;color:#2c2428;font-size:19px;letter-spacing:-.025em}
+.v144-section-head p{max-width:780px;margin:4px 0 0;color:#786d72;font-size:11px;line-height:1.5}
+
+.v144-list{display:grid;gap:6px}
+.v144-person-row{
+  display:grid;grid-template-columns:minmax(0,1fr) 125px auto;align-items:center;gap:12px;
+  min-height:64px;padding:9px 11px;border:1px solid #eee6e9;border-radius:10px;background:#fff;
+}
+.v144-person-row:hover{border-color:#dfc3cd;background:#fffbfc}
+.v144-person-main{min-width:0}
+.v144-person-main strong{display:block;overflow:hidden;color:#30272c;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.v144-person-main span{display:block;margin-top:2px;color:#756a70;font-size:9px}
+.v144-person-main small{display:block;overflow:hidden;margin-top:3px;color:#8b7e84;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.v144-goal-chip{
+  padding:6px 8px;border-radius:8px;background:#f8f3f5;
+}
+.v144-goal-chip b{display:block;color:#a0385d;font-size:8px;letter-spacing:.07em}
+.v144-goal-chip span{display:block;margin-top:1px;color:#5e5359;font-size:9px;font-weight:750}
+.v144-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.v144-row-actions .quick{width:28px;height:28px;min-width:28px}
+.v144-open{
+  appearance:none;display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 8px;
+  border:1px solid #e4d9dd;border-radius:7px;background:#fff;color:#554a50;font-size:9px;font-weight:800;text-decoration:none;cursor:pointer;
+}
+.v144-open:hover{border-color:#d9aebb;background:#fff5f8}
+.v144-inquiry-row{background:#fff9fb;border-color:#edd3dc}
+.v144-empty{padding:18px;color:#786d72;font-size:11px;text-align:center}
+
+.v144-three-column{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:15px;
+}
+.v144-three-column>section{
+  padding:13px;border:1px solid #e9e0e4;border-radius:11px;background:#fbf9fa;
+}
+.v144-three-column header{display:flex;align-items:center;justify-content:space-between}
+.v144-three-column header span{color:#a1395d;font-size:8px;font-weight:900;letter-spacing:.1em}
+.v144-three-column header b{font-size:16px}
+.v144-three-column p{min-height:34px;margin:5px 0 9px;color:#7b7075;font-size:9px;line-height:1.45}
+.v144-three-column a{
+  display:block;padding:7px 0;border-top:1px solid #eee6e9;color:inherit;text-decoration:none;
+}
+.v144-three-column a strong{display:block;font-size:10px}
+.v144-three-column a small{display:block;margin-top:1px;color:#8a7e84;font-size:8px}
+.v144-three-column em{color:#93868c;font-size:9px;font-style:normal}
+
+.v144-seller-summary{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:12px;
+}
+.v144-seller-summary>div{
+  padding:10px 12px;border:1px solid #eadfe3;border-radius:9px;background:#fbf8f9;
+}
+.v144-seller-summary b{display:block;font-size:18px}
+.v144-seller-summary span{color:#756a70;font-size:9px}
+
+.v144-cadence-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;
+}
+.v144-cadence-grid article{
+  min-width:0;padding:12px;border:1px solid #e9e0e4;border-radius:11px;background:#fbf9fa;
+}
+.v144-cadence-grid article header{display:flex;align-items:center;justify-content:space-between}
+.v144-cadence-grid article header span{color:#a0395e;font-size:8px;font-weight:900;letter-spacing:.09em}
+.v144-cadence-grid article header b{font-size:17px}
+.v144-cadence-grid h3{margin:6px 0 3px;font-size:12px}
+.v144-cadence-grid p{min-height:45px;margin:0 0 7px;color:#7b7075;font-size:9px;line-height:1.45}
+.v144-cadence-grid article a{
+  display:block;padding:6px 0;border-top:1px solid #eee5e8;color:#4e4449;font-size:9px;font-weight:750;text-decoration:none;
+}
+.v144-cadence-grid article a small{display:block;margin-top:1px;color:#8f8389;font-size:8px;font-weight:500}
+.v144-cadence-grid article em{color:#91858a;font-size:9px;font-style:normal}
+
+.v144-health-grid{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;
+}
+.v144-health-grid article{
+  min-width:0;padding:11px;border:1px solid #e9e0e4;border-radius:10px;background:#fbf9fa;
+}
+.v144-health-grid article>div{display:flex;align-items:baseline;gap:7px}
+.v144-health-grid b{font-size:20px}
+.v144-health-grid span{color:#5e5359;font-size:9px;font-weight:800}
+.v144-health-grid p{min-height:56px;margin:5px 0 7px;color:#81757b;font-size:8px;line-height:1.45}
+.v144-health-grid a{
+  display:block;overflow:hidden;padding:4px 0;border-top:1px solid #eee6e9;color:#4f454a;font-size:8px;text-decoration:none;text-overflow:ellipsis;white-space:nowrap;
+}
+.v144-plan-audit{
+  display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:13px;padding:13px;
+  border:1px solid #e9d3dc;border-radius:10px;background:#fff8fa;
+}
+.v144-plan-audit>div>span{color:#a0395e;font-size:8px;font-weight:900;letter-spacing:.1em}
+.v144-plan-audit h3{margin:3px 0;font-size:12px}
+.v144-plan-audit p{margin:0;color:#796e73;font-size:9px}
+
+.v144-source-table{
+  overflow:hidden;border:1px solid #e8dfe3;border-radius:10px;
+}
+.v144-source-table>header,.v144-source-table>div{
+  display:grid;grid-template-columns:minmax(170px,2fr) repeat(4,minmax(65px,.7fr)) minmax(95px,1fr);
+  align-items:center;gap:8px;padding:9px 11px;
+}
+.v144-source-table>header{background:#f8f4f6;color:#756a70;font-size:8px;font-weight:900;letter-spacing:.06em}
+.v144-source-table>div{border-top:1px solid #eee6e9;font-size:9px}
+.v144-source-table strong{font-size:10px}
+.v144-source-table span{text-align:right}
+
+.v144-lead-engine{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:13px;
+}
+.v144-lead-engine article{padding:11px;border:1px solid #e9e0e4;border-radius:10px;background:#fbf9fa}
+.v144-lead-engine span{color:#a0395e;font-size:8px;font-weight:900;letter-spacing:.09em}
+.v144-lead-engine h3{margin:4px 0;font-size:11px}
+.v144-lead-engine p{margin:0;color:#7a6f74;font-size:8px;line-height:1.45}
+
+/* Pipeline intelligence */
+.v144-card-intel{
+  margin:8px 0 3px;padding-top:8px;border-top:1px solid #eee5e8;
+}
+.v144-card-intel>span{display:block;color:#a0395e;font-size:8px;font-weight:850}
+.v144-card-intel>small{display:block;margin:2px 0 6px;color:#7d7277;font-size:8px}
+.v144-card-intel .v144-row-actions{justify-content:flex-start}
+.v144-card-intel .v144-open{display:none}
+
+/* Contact playbook */
+.v144-playbook-goal{
+  flex:1 1 100%;display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:7px;
+  margin-top:8px;padding:8px 10px;border:1px solid #ead6de;border-radius:9px;background:#fff8fa;
+}
+.v144-playbook-goal b{color:#a0395e;font-size:8px;letter-spacing:.08em}
+.v144-playbook-goal strong{font-size:10px}
+.v144-playbook-goal span{color:#7b7075;font-size:9px}
+
+/* Inbox qualification */
+.v144-inbox-ai{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 11px;
+  border:1px solid #ead4dc;border-radius:9px;background:#fff8fa;
+}
+.v144-inbox-ai span{display:block;color:#a0395e;font-size:8px;font-weight:900;letter-spacing:.09em}
+.v144-inbox-ai strong{display:block;margin-top:2px;font-size:10px}
+
+/* Responsive */
+@media (min-width:901px) and (max-width:1500px){
+  .v144-cadence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v144-health-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .v144-growth-nav{padding:0 8px!important;font-size:11px!important}
+}
+@media (min-width:901px) and (max-width:1220px){
+  .v144-growth-nav{display:flex!important}
+}
+@media (max-width:900px){
+  .v144-growth-nav{display:none!important}
+  .v144-growth-head,.v144-section-head,.v144-plan-audit,.v144-inbox-ai,.v144-today-flow{display:block}
+  .v144-growth-head-actions,.v144-today-flow>div:last-child{margin-top:10px}
+  .v144-scoreboard{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .v144-scoreboard>div:last-child{grid-column:1/-1}
+  .v144-growth-tabs{overflow-x:auto}
+  .v144-tab-panel{padding:12px}
+  .v144-person-row{grid-template-columns:minmax(0,1fr);gap:7px}
+  .v144-goal-chip{width:max-content}
+  .v144-row-actions{justify-content:flex-start}
+  .v144-three-column,.v144-seller-summary{grid-template-columns:1fr}
+  .v144-cadence-grid,.v144-health-grid,.v144-lead-engine{grid-template-columns:1fr}
+  .v144-source-table{overflow-x:auto}
+  .v144-source-table>header,.v144-source-table>div{min-width:680px}
+  .v144-playbook-goal{grid-template-columns:1fr}
+}

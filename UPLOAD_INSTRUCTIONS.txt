@@ -1,31 +1,85 @@
-HOLTON HOMES OS v14 — REPO READY
+HOLTON HOMES OS v14.4 — AGENT OPERATING SYSTEM
 
-Upload these files into the ROOT of:
-snoutandsnug/holton-homes-app
+THIS PACKAGE SUPERSEDES v14.3.
+If you have not uploaded v14.3 yet, skip it and use v14.4.
+
+Stay on branch:
+v14-ai-rebuild
 
 REPLACE:
 - index.html
 - 404.html
+- v14.css
+- v14-agent.js
 - service-worker.js
 
 ADD:
-- v14.css
-- v14-agent.js
-- package.json
-- vercel.json
-- api/pip.js
+- v14-crm.js
 
-DO NOT DELETE:
+KEEP:
 - app.js
 - styles.css
 - v13.css
 - cloud-config.js
 - assets/
-- SUPABASE_SETUP.sql
+- api/pip.js
+- package.json
+- vercel.json
 
-IMPORTANT:
-The `api` folder must remain a folder, with `pip.js` inside it.
+WHAT v14.4 ADDS
 
-Once committed to GitHub, Vercel should deploy the repo automatically if Git integration is still connected.
+FUB-STYLE OPERATING DISCIPLINE
+- Priority Activity
+- Qualify New Leads
+- Revived Prospects
+- Appointments / Active Clients
+- Nurture Now
+- Nurture 3–12 Months
+- Long Nurture
+- Past Client / Sphere relationship work
+- Uses stage + last personal communication + activity signals
 
-AI Gateway must be enabled in Vercel for Pip's real AI calls.
+LOFTY-STYLE AGENT MODEL
+- Human Handoff
+- Prospecting
+- Monitoring
+- Four playbook goals:
+  1. Capture contact
+  2. Clarify intent
+  3. Win appointment
+  4. Grow trust
+- Context-aware Pip briefs and scripts
+
+HOLTON SELLER RADAR
+- Handoff / Warming / Nurture seller buckets
+- Uses only CRM-recorded intent, stage, timing, heat, follow-up and behavior
+- No protected-class targeting and no invented property facts
+
+DATABASE HEALTH
+- Missing next steps
+- No active nurture plan
+- Unknown timeframe
+- Never personally contacted
+- Missing usable contact information
+- Pip automation-coverage audit
+
+LEAD ENGINE
+- Source → contacts → appointments → closed/past-client → projected GCI
+- Designed for YouTube, What’s New Around Cincy?, sphere, open houses, referrals, website and other sources
+
+WORKFLOW UPGRADES
+- Growth OS added to desktop top nav
+- Today points into Growth OS
+- People gets a Who-to-Call strip
+- Pipeline cards show playbook goal + risk + Call/Text/Email/Script actions
+- Contact profiles get Pip Brief + playbook goal
+- Lead Inbox gets a qualification brief
+
+HEADER
+- muted Holton blush, transparent logo, still one compact top bar
+
+IMPORTANT BOUNDARIES
+- Native two-way SMS/calling/email still requires a communications provider.
+- Automatic MLS property alerts/IDX require MLS/broker/data integration.
+- v14.4 does not pretend those external services are connected.
+- AI remains advisory and drafting-focused; it does not silently send outreach.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#f2dfe6">
   <meta name="description" content="Holton Homes OS — relationship-first real estate command center">
   <title>Holton Homes OS</title>
   <link rel="manifest" href="./manifest.webmanifest">
@@ -48,6 +48,9 @@
       <a class="mobile-core" href="#/people" data-route="people">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.3.4 3.7 2.4 4 6"/></svg></span>
         <span>People</span>
+      </a>
+      <a class="v144-growth-nav" href="#/growth" data-v144-route="growth">
+        <span>Growth</span>
       </a>
       <a class="mobile-core" href="#/pipeline" data-route="pipeline">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v8h-4zM16 5h4v11h-4z"/></svg></span>
@@ -145,6 +148,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
 <script src="./v14-agent.js"></script>
+<script src="./v14-crm.js"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
