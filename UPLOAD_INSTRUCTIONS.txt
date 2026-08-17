@@ -1,50 +1,17 @@
-HOLTON HOMES — TOP NAV + PIP + AI RECOVERY
+HOLTON HOMES — COMPACT PEOPLE SELECT
 
-THIS IS A RECOVERY PACKAGE, NOT A REDESIGN.
-
-Upload these files to the same branch you are currently using for production.
-
-REPLACE:
+Replace:
 - index.html
-- 404.html
-- service-worker.js
-- vercel.json
 - holton-ai.css
 - holton-ai.js
+- service-worker.js
 
-ADD / REPLACE:
-- v14.css
-- pip-default.webp
-- pip-thinking.webp
-- pip-celebrate.webp
-- pip-work.webp
-- pip-concerned.webp
+Change:
+- People sort/select control is now intentionally SMALL:
+  112px wide
+  32px tall
+  10.5px text
 
-DO NOT TOUCH:
-- app.js
-- styles.css
-- v13.css
-- cloud-config.js
-- Supabase data/backend
-- assets/
+It is a secondary utility control, not a primary button.
 
-WHAT THIS DOES
-- Restores the known-good DARK TOP NAVIGATION shell from the pre-clutter CRM.
-- Does NOT load v14-agent.js, v14-crm.js, v15.js, v15-2.js, v15-3.js, or their later UI layers.
-- Keeps the original CRM screens/data/workflows from app.js.
-- Restores the real Pip mascot artwork (all 5 moods).
-- Keeps today's isolated AI add-on:
-  Find Business
-  Build My Day
-  Seller Radar
-  Pipeline Check
-  Ask ChatGPT
-  AI & Integrations
-  API keys
-  lead-ingest endpoint
-  integration activity
-
-NO SECOND SIDEBAR.
-NO DUPLICATE MORE.
-NO GROWTH/HUMAN-HANDOFF UI.
-NO TODAY REDESIGN.
+No CRM data, navigation, Pip, Supabase, or backend changes.
