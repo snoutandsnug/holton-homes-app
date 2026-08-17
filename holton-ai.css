@@ -6,3 +6,28 @@
 .hh-integrations-card{margin-bottom:14px}.hh-integrations-card .setting-card-head{gap:12px}.hh-integrations-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.hh-integrations-actions button{min-height:34px}
 .hh-addon-backdrop{position:fixed;inset:0;z-index:400;display:none;place-items:center;padding:20px;background:rgba(27,19,22,.52);backdrop-filter:blur(5px)}.hh-addon-backdrop.open{display:grid}.hh-addon-modal{width:min(860px,94vw);max-height:min(760px,90vh);overflow:auto;border:1px solid #dfd2d6;border-radius:18px;background:#fffdf9;box-shadow:0 28px 80px rgba(35,23,28,.28)}.hh-addon-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid #e8dfe2;background:rgba(255,253,249,.97)}.hh-addon-head span{display:block;color:#b73563;font-size:8px;font-weight:900;letter-spacing:.12em}.hh-addon-head h2{margin:2px 0 0;font-size:19px}.hh-addon-head button{width:36px;height:36px;border:1px solid #e0d5d9;border-radius:10px;background:#fff}.hh-addon-body{padding:16px}.hh-addon-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.hh-addon-panel{padding:13px;border:1px solid #e7dde1;border-radius:12px;background:#fff}.hh-addon-panel h3{margin:0 0 5px;font-size:12px}.hh-addon-panel p{margin:0;color:#746963;font-size:9px;line-height:1.45}.hh-addon-panel.ready{border-color:#cbded4;background:#f3f8f5}.hh-addon-panel.next{background:#fbf8f6}.hh-addon-section{margin-top:12px;padding:14px;border:1px solid #e7dde1;border-radius:12px;background:#fff}.hh-addon-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.hh-addon-section h3{margin:0;font-size:13px}.hh-addon-section small{color:#7c7076}.hh-addon-section button{min-height:34px;padding:7px 10px;border-radius:9px}.hh-endpoint{padding:10px;border-radius:9px;background:#292226;color:#f8eff2;font:9px ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}.hh-key-row,.hh-event-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid #eee6e9}.hh-key-row:last-child,.hh-event-row:last-child{border-bottom:0}.hh-key-row strong,.hh-event-row strong{display:block;font-size:9px}.hh-key-row small,.hh-event-row small{display:block;margin-top:2px;color:#80747a;font-size:8px}.hh-key-reveal{margin-top:9px;padding:10px;border:1px solid #e8becd;border-radius:10px;background:#fff1f6}.hh-key-reveal code{display:block;margin:5px 0;word-break:break-all;font-size:9px}.hh-chatgpt-fallback textarea{width:100%;min-height:220px;margin-top:8px;padding:10px;border:1px solid #ded3d7;border-radius:10px;font-size:10px}
 @media(max-width:760px){.hh-ai-tools{grid-template-columns:1fr}.hh-addon-grid{grid-template-columns:1fr}.hh-addon-backdrop{padding:0}.hh-addon-modal{width:100vw;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0}.pip-mini{background-size:150%!important}}
+
+
+/* ============================================================
+   NAV BADGE CLEANUP
+   Top navigation should stay calm. Counts belong in screens/bell,
+   not scattered across every tab.
+   ============================================================ */
+@media (min-width:901px){
+  .v14-primary-nav a > b,
+  .v14-primary-nav #navTodayCount,
+  .v14-primary-nav #navInboxCount,
+  .v14-primary-nav #navTransactionCount,
+  .v14-primary-nav #navTaskCount,
+  .v14-primary-nav #navMoreCount,
+  .v14-primary-nav #navMoreCountDesktop{
+    display:none!important;
+  }
+}
+
+/* Keep mobile bottom navigation clean too. */
+@media (max-width:900px){
+  .v14-primary-nav a > b{
+    display:none!important;
+  }
+}

@@ -1,4 +1,4 @@
-const CACHE="holton-homes-top-nav-ai-recovery-2026-08-17-v2";
+const CACHE="holton-homes-top-nav-ai-recovery-2026-08-17-v3";
 const ASSETS=[
   "./",
   "./index.html",
