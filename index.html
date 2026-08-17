@@ -9,6 +9,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./v13.css">
+  <link rel="stylesheet" href="./holton-ai.css?v=1">
 </head>
 <body>
 
@@ -110,9 +111,7 @@
 </div>
 <button class="quick-capture-fab" id="quickCaptureFab" data-action="open-quick-capture" aria-label="Quick capture">＋</button>
 <div class="contact-peek-backdrop" id="contactPeekBackdrop" data-action="close-contact-peek"></div>
-<aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true">
-  <div id="contactPeekContent"></div>
-</aside>
+<aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true"><div id="contactPeekContent"></div></aside>
 
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
 <aside class="pip-drawer" id="pipDrawer" aria-hidden="true">
@@ -123,10 +122,7 @@
   </div>
   <div class="pip-focus" id="pipFocus"></div>
   <div class="pip-list" id="pipNotices"></div>
-  <div class="pip-ask">
-    <input id="pipAskInput" placeholder="Ask what to do next">
-    <button class="primary-btn compact" data-action="ask-pip">Ask</button>
-  </div>
+  <div class="pip-ask"><input id="pipAskInput" placeholder="Ask what to do next"><button class="primary-btn compact" data-action="ask-pip">Ask</button></div>
   <div class="pip-answer" id="pipAnswer"></div>
 </aside>
 
@@ -137,15 +133,13 @@
   <div class="notification-list" id="notificationList"></div>
 </aside>
 
-<div class="modal-backdrop" id="modalBackdrop">
-  <section class="modal" id="modal"></section>
-</div>
-
+<div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"></section></div>
 <div class="toast" id="toast"><strong id="toastTitle"></strong><span id="toastText"></span></div>
 
 <script src="./cloud-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
+<script src="./holton-ai.js?v=1"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
