@@ -1,13 +1,12 @@
-const CACHE="holton-homes-os-v14-8-full-product-pass-2026-08-16";
+const CACHE="holton-homes-v15-usable-now-2026-08-17";
 const ASSETS=[
   "./",
   "./index.html",
   "./styles.css",
   "./v13.css",
-  "./v14.css",
+  "./v15.css",
   "./app.js",
-  "./v14-agent.js",
-  "./v14-crm.js",
+  "./v15.js",
   "./cloud-config.js",
   "./manifest.webmanifest",
   "./assets/Holton-Homes-Primary-Full-Color.svg",

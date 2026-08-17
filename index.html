@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f2dfe6">
-  <meta name="description" content="Holton Homes OS — relationship-first real estate command center with Pip Coach — visual polish">
+  <meta name="description" content="Holton Homes OS — real estate CRM built to create, convert, and protect business">
   <title>Holton Homes OS</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./v13.css">
-  <link rel="stylesheet" href="./v14.css">
+  <link rel="stylesheet" href="./v15.css">
 </head>
 <body>
 
@@ -49,9 +49,6 @@
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.3.4 3.7 2.4 4 6"/></svg></span>
         <span>People</span>
       </a>
-      <a class="v144-growth-nav" href="#/growth" data-v144-route="growth">
-        <span>Growth</span>
-      </a>
       <a class="mobile-core" href="#/pipeline" data-route="pipeline">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v8h-4zM16 5h4v11h-4z"/></svg></span>
         <span>Pipeline</span>
@@ -75,6 +72,10 @@
       <a class="desktop-secondary desktop-grow" href="#/reports" data-route="reports">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>
         <span>Reports</span>
+      </a>
+      <a class="desktop-secondary desktop-grow v15-integrations-nav" href="#/integrations" data-route="integrations">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>
+        <span>Integrations</span>
       </a>
       <a class="mobile-core mobile-more-route" href="#/more" data-route="more">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span>
@@ -119,52 +120,29 @@
 <aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true"><div id="contactPeekContent"></div></aside>
 
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
-<aside class="pip-drawer v146-pip-drawer" id="pipDrawer" aria-hidden="true">
-  <div class="v146-pip-shell">
-    <header class="pip-drawer-head v146-pip-header">
-      <div class="v146-pip-identity">
-        <div class="pip-avatar-large" aria-hidden="true"></div>
-        <div class="v146-pip-title">
-          <span>HOLTON HOMES COACH</span>
-          <strong>Pip</strong>
-          <small>Your CRM brain for what deserves attention next.</small>
-        </div>
-      </div>
-      <button class="icon-btn v146-pip-close" data-action="close-pip" aria-label="Close Pip">×</button>
-    </header>
-
-    <section class="v146-pip-stage">
-      <div class="v146-pip-stage-copy">
-        <span class="v146-stage-kicker">RIGHT NOW</span>
-        <div class="pip-focus" id="pipFocus"></div>
-      </div>
-      <img id="pipStageArt" src="./pip-default.webp" alt="" aria-hidden="true">
-    </section>
-
-    <section class="v146-next-section">
-      <div class="v146-section-heading">
-        <div><span>NEXT BEST MOVES</span><strong>Keep momentum without hunting through the CRM.</strong></div>
-      </div>
-      <div class="pip-list" id="pipNotices"></div>
-    </section>
-
-    <section class="v146-tools-section">
-      <div class="v146-section-heading">
-        <div><span>COACH TOOLS</span><strong>One-click answers from your CRM.</strong></div>
-      </div>
-      <div class="v146-prompt-mount"></div>
-    </section>
-
-    <section class="v146-ask-section">
-      <div class="v146-section-heading">
-        <div><span>ASK PIP</span><strong>Ask about your database in plain English.</strong></div>
-      </div>
-      <div class="pip-ask">
-        <input id="pipAskInput" placeholder="Try “who should I call first?”">
-        <button class="primary-btn compact" data-action="ask-pip">Ask</button>
-      </div>
-      <div class="pip-answer" id="pipAnswer"></div>
-    </section>
+<aside class="pip-drawer v15-pip-drawer" id="pipDrawer" aria-hidden="true">
+  <header class="v15-pip-head">
+    <div class="v15-pip-identity">
+      <img id="pipMascotImage" src="./pip-default.webp" alt="Pip">
+      <div><span>HOLTON HOMES COACH</span><strong>Pip</strong><small>What should you do next?</small></div>
+    </div>
+    <button class="v15-pip-collapse" data-action="close-pip" aria-label="Close Pip">⌄</button>
+  </header>
+  <section class="v15-pip-focus">
+    <div class="pip-focus" id="pipFocus"></div>
+    <img id="pipStageArt" src="./pip-thinking.webp" alt="" aria-hidden="true">
+  </section>
+  <section class="v15-pip-actions">
+    <button data-v15-pip="business"><b>Find business</b><span>Who should I contact now?</span></button>
+    <button data-v15-pip="day"><b>Build my day</b><span>Put today in order</span></button>
+    <button data-v15-pip="seller"><b>Seller opportunities</b><span>Who may be worth a listing conversation?</span></button>
+    <button data-v15-pip="pipeline"><b>Pipeline check</b><span>What is slipping?</span></button>
+  </section>
+  <div class="pip-list" id="pipNotices"></div>
+  <div class="v15-pip-answer" id="pipAnswer"></div>
+  <div class="v15-pip-ask">
+    <input id="pipAskInput" placeholder="Ask Pip about your CRM…">
+    <button data-v15-pip="ask">Ask</button>
   </div>
 </aside>
 
@@ -181,8 +159,7 @@
 <script src="./cloud-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
-<script src="./v14-agent.js"></script>
-<script src="./v14-crm.js"></script>
+<script src="./v15.js"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
