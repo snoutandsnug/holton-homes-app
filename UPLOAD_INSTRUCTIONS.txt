@@ -1,28 +1,50 @@
-HOLTON HOMES OS v15.3 — WORKSPACES
+HOLTON HOMES OS — CALM WORKDAY UPDATE
 
-REPLACE:
-- index.html
-- 404.html
+Stay on:
+v14-ai-rebuild
 
-ADD:
+REPLACE THESE FIVE EXISTING FILES:
+- v15-2.css
+- v15-2.js
 - v15-3.css
 - v15-3.js
+- service-worker.js
 
-KEEP:
-- v15.css / v15.js
-- v15-2.css / v15-2.js
-- app.js / v13.css / styles.css
-- Supabase and integration backend
+DO NOT CHANGE:
+- index.html
+- 404.html
+- app.js
+- v15.css
+- v15.js
+- Supabase/cloud config
+- Pip images
+- backend/integration functions
 
-WHAT CHANGED
-- Content now reads like a real newsroom/workspace.
-- Story editor is wider, higher contrast, and uses the monitor properly.
-- Adds a clear Story → Verify → Learn → Teach Back → Script → Film → Published progress rail.
-- Larger labels, inputs, textareas, and focus states.
-- Modal/editor backdrop is darker and cleaner instead of washed-out white.
-- Large editors become consistent premium workspaces.
-- Contact/task/transaction/appointment/vendor modals also receive the same modern editor shell.
-- Mobile editors become full-screen sheets rather than tiny desktop modals.
+WHY FIVE FILES?
+The old v15.2 and v15.3 layers were both modifying Today after the original CRM rendered.
+This update retires the v15.2 Today experiment and makes v15.3 the ONE active UX layer.
+
+NEW TODAY WORKFLOW
+1. Respond
+2. Follow up
+3. Keep promises
+4. Prospect
+
+The page shows one next action, then the existing work queue.
+It removes:
+- duplicate scoreboards
+- "Who is worth a conversation right now?"
+- giant Three Wins cards
+- duplicate Today experiment panels
+
+COMFORT / EYE-STRAIN PASS
+- warm mushroom/taupe canvas instead of bright white
+- warm off-white cards
+- darker readable text
+- larger labels, small text, buttons, queue text, tables and forms
+- quieter secondary rail
+- warmer contact peek
+- low-glare modal/editor surfaces
 
 No database changes.
-Do not merge main until previewed.
+Do not merge main until PC and phone are checked.
