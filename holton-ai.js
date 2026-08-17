@@ -91,7 +91,18 @@ function fullContactFromPeopleClick(e){
   location.hash=`#/contact/${encodeURIComponent(id)}`;
   return true;
 }
-function run(){ensurePipFab();enhancePip();addIntegrationCard()}
+function normalizePeopleSelect(){
+  if(route()!=="people")return;
+  const candidates=$$("button,select,[role='button']",$("#view")||document);
+  candidates.forEach(el=>{
+    const text=((el.tagName==="SELECT" ? el.options?.[el.selectedIndex]?.text : el.textContent)||"").trim().toLowerCase();
+    const label=(el.getAttribute("aria-label")||"").trim().toLowerCase();
+    if(text==="select" || label==="select"){
+      el.classList.add("hh-people-select-normalized");
+    }
+  });
+}
+function run(){ensurePipFab();enhancePip();normalizePeopleSelect();addIntegrationCard()}
 document.addEventListener("click",e=>{
   if(fullContactFromPeopleClick(e))return;
   if(e.target.closest("#hhPipFab")||e.target.closest("[data-action='open-pip']")){
