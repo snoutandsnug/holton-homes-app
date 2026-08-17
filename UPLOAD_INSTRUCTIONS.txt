@@ -1,56 +1,86 @@
-HOLTON HOMES OS v14.6 — VISUAL POLISH
+HOLTON HOMES OS v14.8 — FULL PRODUCT PASS
 
 Stay on:
 v14-ai-rebuild
 
-This builds directly on v14.5. No new Pip images are needed.
+This supersedes the v14.7 mobile-only patch.
 
 REPLACE:
-- index.html
-- 404.html
 - v14.css
 - v14-agent.js
 - service-worker.js
 
-KEEP EVERYTHING ELSE, INCLUDING:
-- pip-default.webp
-- pip-thinking.webp
-- pip-celebrate.webp
-- pip-work.webp
-- pip-concerned.webp
-- v14-crm.js
-- app.js
-- v13.css
-- styles.css
-- cloud-config.js
+KEEP EVERYTHING ELSE.
 
-WHAT CHANGED
+WHAT WAS FIXED
 
-PIP DRAWER
-- One composed coach panel instead of stacked random cards
-- Large contextual Pip artwork inside the primary coaching card
-- Concerned Pip for overdue/cleanup/risk states
-- Work Pip for calls/pipeline/business creation
-- Thinking Pip for seller/strategy states
-- Celebration Pip after completed work
-- Face-cropped Pip in the top header button/drawer header
-- Removed “PIP LOCAL · $0” and “Business first. Mascot second.” developer-ish copy
-- Removed redundant second Pip card
-- Clear hierarchy: Right Now → Next Best Moves → Coach Tools → Ask Pip
-- Rich tool cards instead of generic outline buttons
-- ChatGPT handoff looks intentional instead of being another plain button
-- Pip answers expand into a proper result card instead of leaving dead white space
+MOBILE APP SHELL
+- Bottom nav is physically moved outside the sticky desktop header on phones.
+- Today / Inbox / People / Pipeline / More are fixed thumb tabs.
+- Quick + stays lower-right above the tabs.
+- Top bar is only logo, Pip, notifications.
+- Safe-area support for iPhone.
+- No desktop nav stacked at the top.
 
-WHOLE CRM
-- More premium blush top bar
-- Better active nav states
-- Cleaner search/actions
-- Today command strip has stronger visual hierarchy
-- Business Builder is one composed surface
-- Opportunity cells are less flat
-- Three Wins cards are more decisive
-- Main operational panels use subtler borders/shadows and less “card soup”
-- Overall background has depth without becoming pink everywhere
+MOBILE TODAY
+- New CRM cockpit with New Leads / Due / Priority / At Risk counts.
+- Up Next list gives the next 3–4 actual conversations/actions.
+- Giant Run the Business duplicate card hidden on phone.
+- Business Builder is a horizontal swipe queue.
+- Three Wins is a swipe row.
+- Safety backup warning becomes compact.
 
-DO NOT MERGE MAIN YET.
-Preview this branch first.
+MOBILE INBOX
+- Conversation list first.
+- Tapping a thread opens conversation as a full mobile detail view.
+- Back to Inbox button.
+- Lead intake list first.
+- Tapping an inquiry opens the lead detail full-width.
+- Composer stays usable above bottom nav.
+
+MOBILE PEOPLE
+- Smart Lists become a horizontal list rail.
+- Existing mobile contact cards are tightened around:
+  relationship → why now → next step → quick actions.
+- Desktop table is hidden on phone.
+- Filters/search fit phone width.
+
+MOBILE PIPELINE
+- Horizontal stage swiping.
+- Stage cards nearly full-screen width.
+- Clear swipe guidance.
+- Opportunity cards remain tappable/actionable.
+
+MOBILE CONTACT
+- Relationship-first hero.
+- Large tap actions.
+- Stage / source / timeframe stack cleanly.
+- Tabs scroll horizontally.
+
+MOBILE TRANSACTIONS / CALENDAR / CONTENT / NETWORK / REPORTS / MORE / GROWTH
+- All receive phone-specific layouts instead of desktop stacking.
+- Horizontal filters/stages where appropriate.
+- Cards and rows tightened for one-thumb use.
+
+DESKTOP
+- People database keeps FUB-like density.
+- Inbox is conversation-first.
+- Pipeline stages/cards are cleaner.
+- Transactions are deadline-first.
+- Calendar is row-based.
+- Content feels like a newsroom.
+- Network feels like a provider directory.
+- More feels like a utility directory.
+- Contact page is the relationship cockpit.
+- Global spacing, borders, shadows, and buttons are more consistent.
+
+PIP
+- Keeps v14.6 coach experience and mood system.
+- Mobile Pip remains full-height and compact.
+
+PRODUCT PRINCIPLES USED
+- FUB: Inbox, People/Smart Lists, Deals/Pipeline, Quick Actions, dense contact workflow.
+- Lofty: mobile priorities, opportunity/follow-up buckets, swipe actions and behavior-driven work.
+- Holton: business creation, seller radar, local/content attribution, Pip Coach.
+
+DO NOT MERGE MAIN UNTIL DESKTOP + IPHONE PREVIEWS BOTH LOOK RIGHT.

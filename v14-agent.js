@@ -451,3 +451,390 @@ setTimeout(runEnhancements,90);
   },20));
   observer.observe(drawer,{childList:true,subtree:true});
 })();
+
+
+
+
+/* ============================================================
+   v14.8 — HOLTON HOMES PRODUCT PASS
+   FUB-inspired mobile operating patterns + Holton business engine
+   ============================================================ */
+const V148 = (() => {
+  let navHome = null;
+  let navNext = null;
+  let inboxDetailMode = sessionStorage.getItem("hh-mobile-inbox-detail") || "";
+  let leadDetailMode = sessionStorage.getItem("hh-mobile-lead-detail") || "";
+
+  const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
+  const view = () => document.getElementById("view");
+
+  function relocatePrimaryNav() {
+    const nav = document.getElementById("primaryNav");
+    const topbar = document.querySelector(".v14-topbar");
+    if (!nav || !topbar) return;
+
+    if (!navHome) {
+      navHome = nav.parentNode;
+      navNext = nav.nextSibling;
+    }
+
+    if (isMobile()) {
+      if (nav.parentNode !== document.body) document.body.appendChild(nav);
+      document.documentElement.classList.add("v148-mobile-shell");
+    } else {
+      if (nav.parentNode === document.body && navHome) {
+        if (navNext && navNext.parentNode === navHome) navHome.insertBefore(nav, navNext);
+        else navHome.appendChild(nav);
+      }
+      document.documentElement.classList.remove("v148-mobile-shell");
+    }
+  }
+
+  function currentDb() {
+    try { return parseDb(); } catch { return {}; }
+  }
+
+  function countTodayData(db) {
+    const inquiries = openLeads(db).length;
+    const due = (db.tasks || []).filter(t => t.status !== "Done" && t.due && t.due <= TODAY()).length;
+    const handoffs = topBusiness(db, 20).filter(x => x.score >= 24).length;
+    const risks = pipelineRisks(db).length;
+    return { inquiries, due, handoffs, risks };
+  }
+
+  function priorityItems(db) {
+    const items = [];
+    const leads = openLeads(db);
+    const tasks = dueTasks(db);
+    const business = topBusiness(db, 5);
+    const risks = pipelineRisks(db);
+
+    if (leads[0]) {
+      const lead = leads[0];
+      const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "New inquiry";
+      items.push({
+        type:"New lead",
+        title:name,
+        detail:[lead.source, lead.intent, lead.timeframe].filter(Boolean).join(" · "),
+        action:"Open inbox",
+        route:"#/inbox",
+        tone:"urgent"
+      });
+    }
+
+    if (tasks[0]) {
+      items.push({
+        type:tasks[0].due < TODAY() ? "Overdue" : "Due today",
+        title:tasks[0].title || "Task",
+        detail:tasks[0].type || "Commitment",
+        action:"Open calendar",
+        route:"#/calendar",
+        tone:tasks[0].due < TODAY() ? "urgent" : "due"
+      });
+    }
+
+    const best = business.find(x => !items.some(i => i.title === fullName(x.c)));
+    if (best) {
+      items.push({
+        type:"Create business",
+        title:fullName(best.c),
+        detail:best.why.slice(0,2).join(" · ") || "Relationship worth working",
+        action:hasPhone(best.c) ? "Call" : "Open",
+        route:`#/contact/${encodeURIComponent(best.c.id)}`,
+        contact:best.c,
+        tone:"business"
+      });
+    }
+
+    const risk = risks.find(x => !items.some(i => i.title === fullName(x.c)));
+    if (risk) {
+      items.push({
+        type:"Pipeline risk",
+        title:fullName(risk.c),
+        detail:risk.why.slice(0,2).join(" · "),
+        action:"Open",
+        route:`#/contact/${encodeURIComponent(risk.c.id)}`,
+        tone:"risk"
+      });
+    }
+
+    return items.slice(0,4);
+  }
+
+  function mobileTodayCockpit() {
+    if (!isMobile() || routeName() !== "today") return;
+    const root = view();
+    if (!root || root.querySelector(".v148-mobile-cockpit")) return;
+
+    const header = root.querySelector(".v13-today-header");
+    if (!header) return;
+
+    const db = currentDb();
+    const counts = countTodayData(db);
+    const items = priorityItems(db);
+
+    const html = `
+      <section class="v148-mobile-cockpit">
+        <div class="v148-mobile-kpis">
+          <a href="#/inbox"><strong>${counts.inquiries}</strong><span>New leads</span></a>
+          <a href="#/calendar"><strong>${counts.due}</strong><span>Due</span></a>
+          <a href="#/growth"><strong>${counts.handoffs}</strong><span>Priority</span></a>
+          <a href="#/pipeline"><strong>${counts.risks}</strong><span>At risk</span></a>
+        </div>
+        <div class="v148-mobile-upnext">
+          <header>
+            <div><span>UP NEXT</span><strong>Work the next conversation, not the whole database.</strong></div>
+            <a href="#/growth">See all</a>
+          </header>
+          <div class="v148-mobile-priority-list">
+            ${items.length ? items.map((item,index) => `
+              <article class="${item.tone}">
+                <span class="v148-priority-num">${String(index+1).padStart(2,"0")}</span>
+                <div>
+                  <em>${esc(item.type)}</em>
+                  <strong>${esc(item.title)}</strong>
+                  <small>${esc(item.detail)}</small>
+                </div>
+                ${item.contact && hasPhone(item.contact)
+                  ? `<button data-v148-contact-call="${esc(item.contact.id)}">Call</button>`
+                  : `<a href="${item.route}">${esc(item.action)}</a>`}
+              </article>`).join("")
+              : `<div class="v148-mobile-clear"><strong>You’re clear.</strong><span>Use the next block for seller and sphere prospecting.</span></div>`}
+          </div>
+        </div>
+      </section>`;
+
+    header.insertAdjacentHTML("afterend", html);
+  }
+
+  function compactBackupBanner() {
+    if (!isMobile()) return;
+    const root = view();
+    if (!root) return;
+
+    const candidates = Array.from(root.querySelectorAll("section,article,.card,.v13-signal-strip,div"));
+    const banner = candidates.find(el => {
+      const txt = (el.textContent || "").toLowerCase();
+      return txt.includes("download a safety backup") && txt.includes("not cloud-synced");
+    });
+    if (!banner) return;
+
+    banner.classList.add("v148-backup-banner");
+    const button = Array.from(banner.querySelectorAll("button,a"))
+      .find(el => /download backup/i.test(el.textContent || ""));
+    if (button) button.textContent = "Backup";
+  }
+
+  function routeHook() {
+    const root = view();
+    if (!root) return;
+
+    Array.from(root.classList)
+      .filter(c => c.startsWith("v148-route-"))
+      .forEach(c => root.classList.remove(c));
+
+    root.classList.add(`v148-route-${routeName()}`);
+  }
+
+  function injectMobilePageTitleTools() {
+    if (!isMobile()) return;
+    const root = view();
+    if (!root) return;
+    const head = root.querySelector(".page-head");
+    if (!head || head.querySelector(".v148-mobile-page-tools")) return;
+
+    const route = routeName();
+    const labels = {
+      inbox:["Inbox","Respond first"],
+      people:["People","Work your lists"],
+      pipeline:["Pipeline","Move opportunities"],
+      transactions:["Transactions","Protect the deal"],
+      calendar:["Calendar","Keep promises"],
+      content:["Content","Create demand"],
+      network:["Network","Referral partners"],
+      reports:["Reports","Know what works"],
+      more:["More","Everything else"],
+      growth:["Growth","Create business"]
+    };
+    if (!labels[route]) return;
+
+    head.classList.add("v148-page-head");
+    head.insertAdjacentHTML("afterbegin", `
+      <div class="v148-mobile-page-tools">
+        <span>${labels[route][0]}</span>
+        <small>${labels[route][1]}</small>
+      </div>`);
+  }
+
+  function polishPeopleMobile() {
+    if (!isMobile() || routeName() !== "people") return;
+    const root = view();
+    if (!root) return;
+
+    root.querySelectorAll(".fub-mobile-person").forEach(card => {
+      if (card.dataset.v148 === "1") return;
+      card.dataset.v148 = "1";
+      const main = card.querySelector(".fub-mobile-main");
+      const next = card.querySelector(".fub-mobile-next");
+      const actions = card.querySelector(".fub-mobile-actions");
+      if (main && next && actions) {
+        const shell = document.createElement("div");
+        shell.className = "v148-person-card-shell";
+        card.insertBefore(shell, main);
+        shell.appendChild(main);
+        shell.appendChild(next);
+        shell.appendChild(actions);
+      }
+    });
+  }
+
+  function mobileInboxState() {
+    if (!isMobile() || routeName() !== "inbox") return;
+    const root = view();
+    if (!root) return;
+
+    const conversation = root.querySelector(".pro-conversation,.conversation");
+    const threadList = root.querySelector(".thread-list");
+    const folders = root.querySelector(".inbox-folders");
+    const leadPreview = root.querySelector(".v13-lead-preview");
+    const leadList = root.querySelector(".v13-lead-list");
+
+    root.classList.toggle("v148-show-conversation", !!conversation && inboxDetailMode === "conversation");
+    root.classList.toggle("v148-show-lead-detail", !!leadPreview && leadDetailMode === "lead");
+
+    if (conversation && inboxDetailMode === "conversation" && !conversation.querySelector(".v148-mobile-back")) {
+      conversation.insertAdjacentHTML("afterbegin", `
+        <button class="v148-mobile-back" data-v148-inbox-back>‹ Inbox</button>`);
+    }
+
+    if (leadPreview && leadDetailMode === "lead" && !leadPreview.querySelector(".v148-mobile-back")) {
+      leadPreview.insertAdjacentHTML("afterbegin", `
+        <button class="v148-mobile-back" data-v148-lead-back>‹ Inquiries</button>`);
+    }
+
+    if (!conversation && !leadPreview) {
+      inboxDetailMode = "";
+      leadDetailMode = "";
+    }
+  }
+
+  function mobilePipelineAssist() {
+    if (!isMobile() || routeName() !== "pipeline") return;
+    const root = view();
+    if (!root || root.querySelector(".v148-pipeline-guide")) return;
+    const wrap = root.querySelector(".kanban-wrap");
+    if (!wrap) return;
+
+    wrap.insertAdjacentHTML("beforebegin", `
+      <div class="v148-pipeline-guide">
+        <span>Swipe stages →</span>
+        <small>Tap a name to open the relationship. Use Pip when something feels stuck.</small>
+      </div>`);
+  }
+
+  function mobileContentAssist() {
+    if (!isMobile() || routeName() !== "content") return;
+    const root = view();
+    if (!root) return;
+    const board = root.querySelector(".v13-stage-board");
+    if (board) board.setAttribute("aria-label","Swipe content stages horizontally");
+  }
+
+  function decorateMore() {
+    if (routeName() !== "more") return;
+    const root = view();
+    if (!root) return;
+    root.querySelectorAll(".mobile-tool-directory a,.more-grid a,.more-grid button").forEach(item => {
+      if (item.dataset.v148 === "1") return;
+      item.dataset.v148 = "1";
+    });
+  }
+
+  function polishContactMobile() {
+    if (!isMobile() || routeName() !== "contact") return;
+    const root = view();
+    if (!root) return;
+    const hero = root.querySelector(".contact-hero");
+    if (!hero || hero.querySelector(".v148-contact-label")) return;
+
+    hero.insertAdjacentHTML("afterbegin", `<span class="v148-contact-label">RELATIONSHIP</span>`);
+  }
+
+  function run() {
+    relocatePrimaryNav();
+    routeHook();
+    compactBackupBanner();
+    mobileTodayCockpit();
+    injectMobilePageTitleTools();
+    polishPeopleMobile();
+    mobileInboxState();
+    mobilePipelineAssist();
+    mobileContentAssist();
+    decorateMore();
+    polishContactMobile();
+  }
+
+  document.addEventListener("click", event => {
+    const thread = event.target.closest('[data-action="open-thread"]');
+    if (isMobile() && thread) {
+      inboxDetailMode = "conversation";
+      sessionStorage.setItem("hh-mobile-inbox-detail","conversation");
+    }
+
+    const lead = event.target.closest('[data-action="select-lead-intake"]');
+    if (isMobile() && lead) {
+      leadDetailMode = "lead";
+      sessionStorage.setItem("hh-mobile-lead-detail","lead");
+    }
+
+    const inboxBack = event.target.closest("[data-v148-inbox-back]");
+    if (inboxBack) {
+      event.preventDefault();
+      inboxDetailMode = "";
+      sessionStorage.removeItem("hh-mobile-inbox-detail");
+      const root = view();
+      root?.classList.remove("v148-show-conversation");
+      return;
+    }
+
+    const leadBack = event.target.closest("[data-v148-lead-back]");
+    if (leadBack) {
+      event.preventDefault();
+      leadDetailMode = "";
+      sessionStorage.removeItem("hh-mobile-lead-detail");
+      const root = view();
+      root?.classList.remove("v148-show-lead-detail");
+      return;
+    }
+
+    const call = event.target.closest("[data-v148-contact-call]");
+    if (call) {
+      event.preventDefault();
+      const db = currentDb();
+      const c = (db.contacts || []).find(x => String(x.id) === String(call.dataset.v148ContactCall));
+      if (c?.phone) window.location.href = `tel:${String(c.phone).replace(/[^\d+]/g,"")}`;
+      return;
+    }
+  }, true);
+
+  window.addEventListener("hashchange", () => {
+    if (routeName() !== "inbox") {
+      inboxDetailMode = "";
+      leadDetailMode = "";
+      sessionStorage.removeItem("hh-mobile-inbox-detail");
+      sessionStorage.removeItem("hh-mobile-lead-detail");
+    }
+    setTimeout(run, 55);
+  });
+
+  window.addEventListener("resize", () => setTimeout(run, 45));
+  window.addEventListener("orientationchange", () => setTimeout(run, 70));
+  window.addEventListener("load", () => setTimeout(run, 150));
+
+  const root = view();
+  if (root) new MutationObserver(() => setTimeout(run, 25))
+    .observe(root, {childList:true, subtree:false});
+
+  setTimeout(run, 100);
+  return { run };
+})();
