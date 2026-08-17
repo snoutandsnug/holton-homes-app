@@ -1,30 +1,28 @@
-HOLTON HOMES OS v15.2 — MODERN CRM
-
-This fixes the problems visible in the latest desktop screenshot.
+HOLTON HOMES OS v15.3 — WORKSPACES
 
 REPLACE:
 - index.html
 - 404.html
 
 ADD:
-- v15-2.css
-- v15-2.js
+- v15-3.css
+- v15-3.js
 
-KEEP EVERYTHING ELSE.
+KEEP:
+- v15.css / v15.js
+- v15-2.css / v15-2.js
+- app.js / v13.css / styles.css
+- Supabase and integration backend
 
 WHAT CHANGED
-- Removes Network and Integrations from the daily top navigation.
-- Keeps one More item only (••• More).
-- Integrations and Local Network live under More.
-- Shrinks Synced to a compact status indicator on desktop.
-- Makes desktop typography substantially more readable.
-- Replaces decorative dashboard hierarchy with:
-  New Leads / Replies / Follow-Up Due / Open Clients
-  then one unified Today's Focus surface
-  then the actual work queue.
-- Adds Who To Call to the right rail using CRM timing/follow-up data.
-- Changes the Today tagline to operational language.
-- Stabilizes the Integrations page so Today cannot sit under an Integrations URL.
-- Leaves mobile behavior alone in this patch.
+- Content now reads like a real newsroom/workspace.
+- Story editor is wider, higher contrast, and uses the monitor properly.
+- Adds a clear Story → Verify → Learn → Teach Back → Script → Film → Published progress rail.
+- Larger labels, inputs, textareas, and focus states.
+- Modal/editor backdrop is darker and cleaner instead of washed-out white.
+- Large editors become consistent premium workspaces.
+- Contact/task/transaction/appointment/vendor modals also receive the same modern editor shell.
+- Mobile editors become full-screen sheets rather than tiny desktop modals.
 
-DO NOT MERGE MAIN YET.
+No database changes.
+Do not merge main until previewed.
