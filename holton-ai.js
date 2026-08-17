@@ -16,7 +16,7 @@ function ranked(d,n=6){return (d.contacts||[]).map(c=>({c,...rank(d,c)})).filter
 function pipelineRisks(d){return (d.contacts||[]).filter(c=>["Seller","Buyer"].includes(c.type)&&!["Closed","Lost"].includes(c.stage)).map(c=>{let why=[];if(!c.followUp)why.push("no next follow-up");if(c.followUp&&c.followUp<today())why.push("follow-up overdue");const a=age(latestTouch(d,c));if(a>=14&&a<9999)why.push(`${a} days since contact`);return {c,why}}).filter(x=>x.why.length).slice(0,7)}
 function sellerRadar(d){return ranked(d,20).filter(x=>x.c.type==="Seller").slice(0,6)}
 function dueTasks(d){return (d.tasks||[]).filter(t=>t.status!=="Done"&&t.due&&t.due<=today()).sort((a,b)=>String(a.due).localeCompare(String(b.due)))}
-function setMood(mood){const file={default:"pip-default.webp",thinking:"pip-thinking.webp",work:"pip-work.webp",concerned:"pip-concerned.webp",celebrate:"pip-celebrate.webp"}[mood]||"pip-default.webp";$$('.pip-mini,.pip-avatar-large').forEach(el=>{el.style.backgroundImage=`url('./${file}')`})}
+function setMood(mood){const file={default:"pip-default.webp",thinking:"pip-thinking.webp",work:"pip-work.webp",concerned:"pip-concerned.webp",celebrate:"pip-celebrate.webp"}[mood]||"pip-default.webp";$$('.pip-mini,.pip-avatar-large').forEach(el=>{el.style.backgroundImage=`url('./${file}')`});const fab=$("#hhPipFab img");if(fab)fab.src=`./${file}`}
 function result(text,mood="thinking"){const el=$("#hhAiResult");if(el){el.textContent=text;el.classList.add("open")}setMood(mood)}
 function pipAction(kind){const d=db();if(kind==="business"){const list=ranked(d,5);return result(list.length?`CALL THESE FIRST\n\n${list.map((x,i)=>`${i+1}. ${fullName(x.c)} — ${x.why.slice(0,2).join(" · ")||"relationship worth working"}`).join("\n")}\n\nGoal: make contact, learn what changed, and set the next follow-up date.`:"No active contacts are ready to rank yet.","work")}if(kind==="day"){const tasks=dueTasks(d),list=ranked(d,3);return result(`TODAY\n\n1. ${tasks.length?`Finish ${tasks.length} due/overdue commitment${tasks.length===1?"":"s"}.`:"No overdue commitments."}\n2. ${list.length?`Contact ${list.map(x=>fullName(x.c)).join(", ")}.`:"Prospect your sphere or seller database."}\n3. Give every live relationship a clear next step and date.`,tasks.length?"concerned":"work")}if(kind==="seller"){const list=sellerRadar(d);return result(list.length?`SELLER RADAR\n\n${list.map((x,i)=>`${i+1}. ${fullName(x.c)} — ${x.why.slice(0,2).join(" · ")}`).join("\n")}\n\nUse the call to understand motivation, timing, property, and what would have to change for a move to make sense.`:"No seller relationships are strong enough to surface yet.","thinking")}if(kind==="pipeline"){const list=pipelineRisks(d);return result(list.length?`PIPELINE CHECK\n\n${list.map((x,i)=>`${i+1}. ${fullName(x.c)} — ${x.why.join(" · ")}`).join("\n")}\n\nFix the oldest promises and missing next steps first.`:"Pipeline hygiene looks clean right now.",list.length?"concerned":"celebrate")}if(kind==="chatgpt")return askChatGPT()}
 function selectedContact(d){const m=location.hash.match(/^#\/contact\/([^/?]+)/);if(!m)return null;return (d.contacts||[]).find(c=>String(c.id)===decodeURIComponent(m[1]))||null}
@@ -31,7 +31,85 @@ function ensureModal(){if($("#hhAddonBackdrop"))return;document.body.insertAdjac
 function closeModal(){$("#hhAddonBackdrop")?.classList.remove("open")}
 function openModal(html,title="AI & Integrations"){ensureModal();$("#hhAddonTitle").textContent=title;$("#hhAddonBody").innerHTML=html;$("#hhAddonBackdrop").classList.add("open")}
 async function integrations(){openModal(`<p>Loading your integration backend…</p>`);try{const data=await api("load");const keys=data.keys||[],events=data.events||[];openModal(`<div class="hh-addon-grid"><article class="hh-addon-panel ready"><h3>Lead API & webhooks</h3><p><b>Ready now.</b> Website forms, Zapier, Make, or custom tools can send leads directly to the existing Lead Inbox.</p></article><article class="hh-addon-panel ready"><h3>ChatGPT handoff</h3><p><b>Ready now.</b> Pip creates a CRM context packet, copies it, and opens ChatGPT. No paid CRM AI gateway required.</p></article><article class="hh-addon-panel next"><h3>Gmail + Google Calendar</h3><p>Backend slot is ready; real Google OAuth still needs to be wired before this should say connected.</p></article><article class="hh-addon-panel next"><h3>Calling + texting</h3><p>Provider layer is ready for Twilio or another phone/SMS provider once credentials and a number are chosen.</p></article></div><section class="hh-addon-section"><div class="hh-addon-section-head"><div><h3>API keys</h3><small>For website / Zapier / Make / custom lead sources.</small></div><button class="primary-btn compact" data-hh-create-key>Create key</button></div><div class="hh-endpoint">POST ${FN}/crm-lead-ingest<br>x-api-key: hh_live_…<br>JSON: firstName, lastName, phone, email, source, intent, timeframe, property, area, message</div><div id="hhKeyReveal"></div><div>${keys.length?keys.map(k=>`<div class="hh-key-row"><div><strong>${esc(k.name)}</strong><small>${esc(k.key_prefix)}•••• · ${k.revoked_at?"Revoked":k.last_used_at?`Last used ${new Date(k.last_used_at).toLocaleString()}`:"Never used"}</small></div>${k.revoked_at?"":`<button class="ghost-btn compact" data-hh-revoke-key="${k.id}">Revoke</button>`}</div>`).join(""):`<div class="hh-key-row"><div><strong>No API keys yet</strong><small>Create one when you are ready to connect a lead source.</small></div></div>`}</div></section><section class="hh-addon-section"><div class="hh-addon-section-head"><div><h3>Recent integration activity</h3><small>Successes and errors from the real backend.</small></div></div>${events.length?events.slice(0,10).map(e=>`<div class="hh-event-row"><div><strong>${esc(e.message)}</strong><small>${esc(e.provider)} · ${new Date(e.created_at).toLocaleString()}</small></div><span>${esc(e.level)}</span></div>`).join(""):`<div class="hh-event-row"><div><strong>No activity yet</strong><small>Incoming lead and connection events will appear here.</small></div></div>`}</section>`)}catch(e){openModal(`<h3>Couldn’t load integrations</h3><p>${esc(e.message)}</p><p>The CRM itself is unaffected.</p>`)}}
-function run(){enhancePip();addIntegrationCard()}
+
+function ensurePipFab(){
+  if($("#hhPipFab"))return;
+  document.body.insertAdjacentHTML("beforeend",`<button class="hh-pip-fab" id="hhPipFab" type="button" aria-label="Ask Pip" title="Ask Pip"><img src="./pip-default.webp" alt="Pip"></button>`);
+}
+function openPipAddon(){
+  ensurePipFab();
+  enhancePip();
+  const drawer=$("#pipDrawer"),backdrop=$("#drawerBackdrop");
+  if(!drawer)return;
+  drawer.classList.add("hh-open");
+  drawer.setAttribute("aria-hidden","false");
+  backdrop?.classList.add("hh-pip-open");
+  document.body.classList.add("hh-pip-is-open");
+  setMood("default");
+}
+function closePipAddon(){
+  const drawer=$("#pipDrawer"),backdrop=$("#drawerBackdrop");
+  drawer?.classList.remove("hh-open");
+  drawer?.setAttribute("aria-hidden","true");
+  backdrop?.classList.remove("hh-pip-open");
+  document.body.classList.remove("hh-pip-is-open");
+}
+function closeContactPeek(){
+  const drawer=$("#contactPeekDrawer"),backdrop=$("#contactPeekBackdrop");
+  drawer?.classList.remove("open","active","show");
+  drawer?.setAttribute("aria-hidden","true");
+  backdrop?.classList.remove("open","active","show");
+}
+function contactIdFromNode(node){
+  let el=node;
+  for(let i=0;el&&i<5;i++,el=el.parentElement){
+    const id=el.dataset?.contactId||el.dataset?.contact||el.dataset?.id||"";
+    if(id)return id;
+    const href=el.getAttribute?.("href")||"";
+    const match=href.match(/^#\/contact\/([^/?#]+)/);
+    if(match)return decodeURIComponent(match[1]);
+  }
+  return "";
+}
+function fullContactFromPeopleClick(e){
+  if(route()!=="people")return false;
+  const explicit=e.target.closest("[data-action*='contact-peek'],[data-action*='open-contact'],[data-action*='peek-contact']");
+  const person=e.target.closest(".fub-person-button");
+  const card=e.target.closest(".fub-mobile-person");
+  const trigger=explicit||person||card;
+  if(!trigger)return false;
+
+  // Preserve direct communication/action controls inside a person row.
+  if(e.target.closest("a[href^='tel:'],a[href^='mailto:'],[data-action*='call'],[data-action*='text'],[data-action*='email'],button.quick"))return false;
+
+  const id=contactIdFromNode(trigger);
+  if(!id)return false;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  closeContactPeek();
+  location.hash=`#/contact/${encodeURIComponent(id)}`;
+  return true;
+}
+function run(){ensurePipFab();enhancePip();addIntegrationCard()}
+document.addEventListener("click",e=>{
+  if(fullContactFromPeopleClick(e))return;
+  if(e.target.closest("#hhPipFab")||e.target.closest("[data-action='open-pip']")){
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    openPipAddon();
+    return;
+  }
+  if(e.target.closest("[data-action='close-pip']")||e.target.id==="drawerBackdrop"){
+    if($("#pipDrawer")?.classList.contains("hh-open")){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      closePipAddon();
+    }
+  }
+},true);
 document.addEventListener("click",async e=>{const a=e.target.closest("[data-hh-ai]");if(a){e.preventDefault();pipAction(a.dataset.hhAi);return}if(e.target.closest("[data-hh-open-integrations]")){e.preventDefault();integrations();return}if(e.target.closest("[data-hh-close-modal]")){closeModal();return}if(e.target.id==="hhAddonBackdrop"){closeModal();return}const create=e.target.closest("[data-hh-create-key]");if(create){const name=prompt("Name this API key","Website / Automation");if(!name)return;try{const data=await api("create_key",{name});const el=$("#hhKeyReveal");if(el)el.innerHTML=`<div class="hh-key-reveal"><strong>Copy this now. It is only shown once.</strong><code>${esc(data.key)}</code><button class="ghost-btn compact" data-hh-copy-key="${esc(data.key)}">Copy key</button></div>`}catch(err){alert(err.message)}return}const copy=e.target.closest("[data-hh-copy-key]");if(copy){await navigator.clipboard.writeText(copy.dataset.hhCopyKey);copy.textContent="Copied";return}const rev=e.target.closest("[data-hh-revoke-key]");if(rev){if(!confirm("Revoke this API key?"))return;await api("revoke_key",{id:rev.dataset.hhRevokeKey});integrations();return}},true)
 window.addEventListener("hashchange",()=>setTimeout(run,60));window.addEventListener("load",()=>setTimeout(run,140));const view=$("#view");if(view)new MutationObserver(()=>setTimeout(run,25)).observe(view,{childList:true,subtree:false});setTimeout(run,100)
 })();
