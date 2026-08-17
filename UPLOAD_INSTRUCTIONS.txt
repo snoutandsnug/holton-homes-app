@@ -1,61 +1,50 @@
-HOLTON HOMES OS — CLEAN AI ADD-ON RESET
+HOLTON HOMES — TOP NAV + PIP + AI RECOVERY
 
-THIS IS THE IMPORTANT ONE.
-It restores the exact working MAIN CRM shell and adds today’s useful work as ONE isolated add-on.
+THIS IS A RECOVERY PACKAGE, NOT A REDESIGN.
 
-UPLOAD TO v14-ai-rebuild FIRST. DO NOT MERGE MAIN YET.
+Upload these files to the same branch you are currently using for production.
 
 REPLACE:
 - index.html
 - 404.html
 - service-worker.js
 - vercel.json
-
-ADD:
 - holton-ai.css
 - holton-ai.js
 
-KEEP THESE EXISTING PIP FILES ON THE BRANCH:
+ADD / REPLACE:
+- v14.css
 - pip-default.webp
 - pip-thinking.webp
 - pip-celebrate.webp
 - pip-work.webp
 - pip-concerned.webp
 
-KEEP ALL ORIGINAL CRM FILES:
+DO NOT TOUCH:
 - app.js
 - styles.css
 - v13.css
 - cloud-config.js
+- Supabase data/backend
 - assets/
-- manifest.webmanifest
 
-YOU DO NOT NEED TO DELETE v14.css, v15.css, etc. yet.
-The restored index.html DOES NOT LOAD THEM, so they stop affecting the app completely.
+WHAT THIS DOES
+- Restores the known-good DARK TOP NAVIGATION shell from the pre-clutter CRM.
+- Does NOT load v14-agent.js, v14-crm.js, v15.js, v15-2.js, v15-3.js, or their later UI layers.
+- Keeps the original CRM screens/data/workflows from app.js.
+- Restores the real Pip mascot artwork (all 5 moods).
+- Keeps today's isolated AI add-on:
+  Find Business
+  Build My Day
+  Seller Radar
+  Pipeline Check
+  Ask ChatGPT
+  AI & Integrations
+  API keys
+  lead-ingest endpoint
+  integration activity
 
-WHAT YOU GET BACK
-- original main CRM shell/navigation/layout
-- original Today page
-- original mobile behavior
-- no duplicate More
-- no redesign layers fighting app.js
-
-WHAT YOU KEEP FROM TODAY
-- Pip mascot images/states
-- Pip: Find Business
-- Pip: Build My Day
-- Pip: Seller Radar
-- Pip: Pipeline Check
-- Ask ChatGPT handoff using selected CRM context
-- AI & Integrations card inside Settings / Launchpad
-- real Supabase API-key management
-- real external lead-ingest endpoint
-- real integration activity/error log
-- backend integration tables/functions already installed in Supabase
-
-NOT FAKED
-- Gmail/Calendar OAuth is NOT claimed connected yet
-- phone/SMS provider is NOT claimed connected yet
-- no paid Vercel AI Gateway dependency
-
-This package changes the shell back to the CRM you liked and isolates all new functionality to holton-ai.css/js.
+NO SECOND SIDEBAR.
+NO DUPLICATE MORE.
+NO GROWTH/HUMAN-HANDOFF UI.
+NO TODAY REDESIGN.
