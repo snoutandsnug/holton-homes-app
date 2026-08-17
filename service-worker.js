@@ -1,13 +1,13 @@
-const CACHE="holton-homes-compact-people-select-v7";
+const CACHE="holton-homes-people-cleanup-v8";
 const ASSETS=[
   "./",
   "./index.html",
   "./styles.css",
   "./v13.css",
   "./v14.css?v=topnav-recovery",
-  "./holton-ai.css?v=7",
+  "./holton-ai.css?v=8",
   "./app.js",
-  "./holton-ai.js?v=7",
+  "./holton-ai.js?v=8",
   "./cloud-config.js",
   "./manifest.webmanifest",
   "./assets/Holton-Homes-Primary-Full-Color.svg",

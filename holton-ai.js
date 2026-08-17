@@ -91,7 +91,49 @@ function fullContactFromPeopleClick(e){
   location.hash=`#/contact/${encodeURIComponent(id)}`;
   return true;
 }
-function run(){ensurePipFab();enhancePip();addIntegrationCard()}
+function refineTopNav(){
+  const pipeline=$(".v13-primary-nav a[data-route='pipeline'] span:nth-child(2)");
+  if(pipeline)pipeline.textContent="Business";
+  const more=$(".v13-primary-nav a[data-route='more']:not(.mobile-more-route) span:nth-child(2)");
+  if(more)more.textContent="More";
+
+  // Hidden business-support modules live under More.
+  if(["transactions","network","reports"].includes(route())){
+    $$(".v13-primary-nav a").forEach(a=>a.classList.remove("active"));
+    $(".v13-primary-nav a[data-route='more']:not(.mobile-more-route)")?.classList.add("active");
+  }
+}
+function refinePeople(){
+  if(route()!=="people")return;
+  const railTitle=$(".fub-rail-title strong");
+  if(railTitle)railTitle.textContent="Smart Lists";
+  $$(".fub-list-rail b").forEach(b=>{
+    b.classList.toggle("hh-zero-count",b.textContent.trim()==="0");
+  });
+}
+function refineBusiness(){
+  if(route()!=="pipeline")return;
+  const head=$(".page-head");
+  if(!head)return;
+  const h=head.querySelector("h1");
+  const eyebrow=head.querySelector(".eyebrow");
+  const desc=head.querySelector("p");
+  if(h)h.textContent="Business";
+  if(eyebrow)eyebrow.textContent="OPPORTUNITIES → ACTIVE DEALS";
+  if(desc)desc.textContent="Work seller and buyer opportunities here. Active transaction progress stays attached to the relationship.";
+}
+function refineMore(){
+  if(route()!=="more")return;
+  const grid=$(".more-grid");
+  if(!grid||grid.querySelector('a[href="#/transactions"]'))return;
+  const reports=grid.querySelector('a[href="#/reports"]');
+  const tile=document.createElement("a");
+  tile.className="more-tile hh-transactions-more";
+  tile.href="#/transactions";
+  tile.innerHTML='<span>⌂</span><div><strong>Transactions</strong><small>Contract-to-close files, deadlines, and deal health.</small></div>';
+  if(reports)grid.insertBefore(tile,reports);else grid.appendChild(tile);
+}
+function run(){ensurePipFab();enhancePip();refineTopNav();refinePeople();refineBusiness();refineMore();addIntegrationCard()}
 document.addEventListener("click",e=>{
   if(fullContactFromPeopleClick(e))return;
   if(e.target.closest("#hhPipFab")||e.target.closest("[data-action='open-pip']")){
