@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./v13.css">
   <link rel="stylesheet" href="./v15.css">
+<link rel="stylesheet" href="./v15-2.css?v=152">
 </head>
 <body>
 
@@ -65,25 +66,15 @@
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg></span>
         <span>Content</span>
       </a>
-      <a class="desktop-secondary desktop-grow" href="#/network" data-route="network">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="12" cy="17" r="3"/><path d="m9.5 8.5 1.5 5.5M14.5 8.5 13 14"/></svg></span>
-        <span>Network</span>
-      </a>
-      <a class="desktop-secondary desktop-grow" href="#/reports" data-route="reports">
+<a class="desktop-secondary desktop-grow" href="#/reports" data-route="reports">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>
         <span>Reports</span>
       </a>
-      <a class="desktop-secondary desktop-grow v15-integrations-nav" href="#/integrations" data-route="integrations">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg></span>
-        <span>Integrations</span>
-      </a>
-      <a class="mobile-core mobile-more-route" href="#/more" data-route="more">
+<a class="mobile-core mobile-more-route" href="#/more" data-route="more">
         <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span>
         <span>More</span><b id="navMoreCount"></b>
       </a>
-      <a class="desktop-more-route" href="#/more" data-route="more">
-        <span>More</span><b id="navMoreCountDesktop"></b>
-      </a>
+      <a class="desktop-more-route" href="#/more" data-route="more"><span class="v152-more-dots">•••</span><span>More</span><b id="navMoreCountDesktop"></b></a>
     </nav>
 
     <div class="fub-global-search global-search-wrap v14-global-search">
@@ -160,6 +151,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
 <script src="./v15.js"></script>
+<script src="./v15-2.js?v=152"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
