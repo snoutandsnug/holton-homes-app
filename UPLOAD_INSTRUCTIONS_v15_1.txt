@@ -1,0 +1,33 @@
+HOLTON HOMES OS v15.1 — DESKTOP POLISH
+
+Stay on v14-ai-rebuild.
+
+REPLACE ONLY:
+- v15.css
+- v15.js
+- service-worker.js
+
+WHY THIS PASS EXISTS
+The PC screenshot showed a wide monitor being used like a narrow webpage:
+- tiny type
+- excessive dead space
+- weak card hierarchy
+- miniature logo/nav/search
+- Today information spread too thinly
+- right rail too small to read
+
+WHAT CHANGED
+- Wider real desktop workspace (up to 1560px)
+- Larger logo, navigation, search, Pip and top actions
+- Larger greeting and action buttons
+- New desktop KPI strip: New Leads / Follow-Up Due / Seller Opportunities / Appointments
+- New Create Business section ranking the five best CRM conversations
+- Existing Three Wins upgraded into readable decision cards
+- Today operating area becomes a deliberate main column + readable 370px business rail
+- Queue rows and panel headings enlarged
+- PC floating + removed because the top New button already exists
+- Mobile rules remain untouched
+- Integration screen render loop stabilized
+
+NO DATABASE CHANGE IN THIS PATCH.
+The v15 Supabase integrations backend remains intact.

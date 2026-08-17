@@ -1,4 +1,4 @@
-const CACHE="holton-homes-v15-usable-now-2026-08-17";
+const CACHE="holton-homes-v15-1-desktop-polish-2026-08-17";
 const ASSETS=[
   "./",
   "./index.html",
