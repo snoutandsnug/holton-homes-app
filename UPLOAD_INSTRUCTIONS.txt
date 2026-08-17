@@ -1,0 +1,28 @@
+HOLTON HOMES OS v15.3 — WORKSPACES
+
+REPLACE:
+- index.html
+- 404.html
+
+ADD:
+- v15-3.css
+- v15-3.js
+
+KEEP:
+- v15.css / v15.js
+- v15-2.css / v15-2.js
+- app.js / v13.css / styles.css
+- Supabase and integration backend
+
+WHAT CHANGED
+- Content now reads like a real newsroom/workspace.
+- Story editor is wider, higher contrast, and uses the monitor properly.
+- Adds a clear Story → Verify → Learn → Teach Back → Script → Film → Published progress rail.
+- Larger labels, inputs, textareas, and focus states.
+- Modal/editor backdrop is darker and cleaner instead of washed-out white.
+- Large editors become consistent premium workspaces.
+- Contact/task/transaction/appointment/vendor modals also receive the same modern editor shell.
+- Mobile editors become full-screen sheets rather than tiny desktop modals.
+
+No database changes.
+Do not merge main until previewed.

@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#d95f82">
-  <meta name="description" content="Holton Homes OS — relationship-first real estate command center">
+  <meta name="theme-color" content="#f2dfe6">
+  <meta name="description" content="Holton Homes OS — real estate CRM built to create, convert, and protect business">
   <title>Holton Homes OS</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./v13.css">
+  <link rel="stylesheet" href="./v15.css">
+<link rel="stylesheet" href="./v15-2.css?v=152">
+<link rel="stylesheet" href="./v15-3.css?v=153">
 </head>
 <body>
 
@@ -29,105 +32,110 @@
   </section>
 </div>
 
-<div id="app" class="v13-app">
-  <aside class="v13-sidebar" aria-label="Primary navigation">
-    <a class="v13-brand" href="#/today" aria-label="Holton Homes OS Today">
+<div id="app" class="fub-app v14-app">
+  <header class="fub-topbar v14-topbar">
+    <a class="fub-brand v14-brand" href="#/today" aria-label="Holton Homes OS Today">
       <img src="./assets/Holton-Homes-Primary-Full-Color.svg" alt="Holton Homes">
-      <span>Command Center</span>
     </a>
 
-    <nav class="primary-nav v13-primary-nav" id="primaryNav">
-      <span class="v13-nav-label">Work</span>
+    <nav class="primary-nav fub-primary-nav v14-primary-nav" id="primaryNav" aria-label="Primary navigation">
       <a class="mobile-core" href="#/today" data-route="today">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5zM9 21v-7h6v7"/></svg></span><span>Today</span><b id="navTodayCount"></b>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5zM9 21v-7h6v7"/></svg></span>
+        <span>Today</span><b id="navTodayCount"></b>
       </a>
       <a class="mobile-core" href="#/inbox" data-route="inbox">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 13h4l2 3h4l2-3h4"/></svg></span><span>Inbox</span><b id="navInboxCount"></b>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 13h4l2 3h4l2-3h4"/></svg></span>
+        <span>Inbox</span><b id="navInboxCount"></b>
       </a>
       <a class="mobile-core" href="#/people" data-route="people">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.3.4 3.7 2.4 4 6"/></svg></span><span>People</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M16.5 14c2.3.4 3.7 2.4 4 6"/></svg></span>
+        <span>People</span>
       </a>
       <a class="mobile-core" href="#/pipeline" data-route="pipeline">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v8h-4zM16 5h4v11h-4z"/></svg></span><span>Opportunities</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v8h-4zM16 5h4v11h-4z"/></svg></span>
+        <span>Pipeline</span>
       </a>
-      <a href="#/transactions" data-route="transactions">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM9 11h6M9 15h6"/></svg></span><span>Transactions</span><b id="navTransactionCount"></b>
+      <a class="desktop-secondary" href="#/transactions" data-route="transactions">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM9 11h6M9 15h6"/></svg></span>
+        <span>Transactions</span><b id="navTransactionCount"></b>
       </a>
-      <a href="#/calendar" data-route="calendar">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4zM8 3v6M16 3v6M4 10h16"/></svg></span><span>Calendar</span><b id="navTaskCount"></b>
+      <a class="desktop-secondary" href="#/calendar" data-route="calendar">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4zM8 3v6M16 3v6M4 10h16"/></svg></span>
+        <span>Calendar</span><b id="navTaskCount"></b>
       </a>
-
-      <span class="v13-nav-label">Grow</span>
-      <a href="#/content" data-route="content">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg></span><span>Content</span>
+      <a class="desktop-secondary desktop-grow" href="#/content" data-route="content">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM10 9l5 3-5 3z"/></svg></span>
+        <span>Content</span>
       </a>
-      <a href="#/network" data-route="network">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="12" cy="17" r="3"/><path d="m9.5 8.5 1.5 5.5M14.5 8.5 13 14"/></svg></span><span>Local Network</span>
+<a class="desktop-secondary desktop-grow" href="#/reports" data-route="reports">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>
+        <span>Reports</span>
       </a>
-      <a href="#/reports" data-route="reports">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span><span>Reports</span>
+<a class="mobile-core mobile-more-route" href="#/more" data-route="more">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span>
+        <span>More</span><b id="navMoreCount"></b>
       </a>
-      <a href="#/more" data-route="more">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span><span>Launchpad</span><b id="navMoreCount"></b>
-      </a>
-      <a class="mobile-core mobile-more-route" href="#/more" data-route="more">
-        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span><span>More</span>
-      </a>
+      <a class="desktop-more-route" href="#/more" data-route="more"><span class="v152-more-dots">•••</span><span>More</span><b id="navMoreCountDesktop"></b></a>
     </nav>
 
-    <div class="v13-sidebar-foot">
-      <button class="v13-pip-button" data-action="open-pip"><span class="pip-mini"></span><span><strong>Ask Pip</strong><small>What matters next?</small></span><b id="pipNavCount"></b></button>
-      <a href="#/settings" data-route="settings"><span>Settings</span><small>Data, goals & connections</small></a>
+    <div class="fub-global-search global-search-wrap v14-global-search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/></svg>
+      <input id="globalSearch" placeholder="Search people, property, phone…" aria-label="Search Holton Homes OS">
+      <div class="search-results" id="globalSearchResults"></div>
     </div>
-  </aside>
 
-  <div class="v13-shell">
-    <header class="fub-topbar v13-topbar">
-      <a class="v13-mobile-brand" href="#/today"><img src="./assets/Holton-Homes-Primary-Full-Color.svg" alt="Holton Homes"></a>
-      <div class="fub-global-search global-search-wrap">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/></svg>
-        <input id="globalSearch" placeholder="Search people, properties, stories, vendors…" aria-label="Search Holton Homes OS">
-        <kbd>Ctrl K</kbd>
-        <div class="search-results" id="globalSearchResults"></div>
-      </div>
+    <div class="fub-top-actions v14-top-actions" aria-label="CRM actions">
+      <button class="v14-pip-button" data-action="open-pip" aria-label="Ask Pip" title="Ask Pip">
+        <span class="pip-mini"></span><span>Ask Pip</span><b id="pipNavCount"></b>
+      </button>
+      <button class="fub-sync-action cloud-sync-pill" id="cloudSyncButton" data-action="open-health" title="Reliability and sync health" aria-label="Reliability and sync health">
+        <span class="fub-sync-led" id="cloudSyncDot"></span>
+        <span class="fub-sync-copy" id="cloudSyncLabel">Health</span>
+      </button>
+      <button class="fub-top-icon notification-button" id="notificationButton" data-action="open-notifications" aria-label="Notifications" title="Notifications">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8M10 21h4"/></svg>
+        <b id="notificationCount"></b>
+      </button>
+      <button class="v14-quick-add" data-action="open-quick-capture" aria-label="Quick add">
+        <span>＋</span><b>New</b>
+      </button>
+    </div>
+  </header>
 
-      <div class="fub-top-actions v13-top-actions" aria-label="CRM actions">
-        <button class="fub-sync-action cloud-sync-pill" id="cloudSyncButton" data-action="open-health" title="Reliability and sync health" aria-label="Reliability and sync health">
-          <span class="fub-sync-led" id="cloudSyncDot"></span>
-          <span class="fub-sync-copy" id="cloudSyncLabel">Health</span>
-        </button>
-        <button class="fub-top-icon notification-button" id="notificationButton" data-action="open-notifications" aria-label="Notifications" title="Notifications">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8M10 21h4"/></svg><b id="notificationCount"></b>
-        </button>
-        <button class="v13-quick-add" data-action="open-quick-capture" aria-label="Quick add"><span>＋</span><b>New</b></button>
-      </div>
-    </header>
-
-    <section class="workspace fub-workspace">
-      <main id="view" class="view fub-view"></main>
-    </section>
-  </div>
+  <section class="workspace fub-workspace v14-workspace">
+    <main id="view" class="view fub-view"></main>
+  </section>
 </div>
+
 <button class="quick-capture-fab" id="quickCaptureFab" data-action="open-quick-capture" aria-label="Quick capture">＋</button>
 <div class="contact-peek-backdrop" id="contactPeekBackdrop" data-action="close-contact-peek"></div>
-<aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true">
-  <div id="contactPeekContent"></div>
-</aside>
+<aside class="contact-peek-drawer" id="contactPeekDrawer" aria-hidden="true"><div id="contactPeekContent"></div></aside>
 
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
-<aside class="pip-drawer" id="pipDrawer" aria-hidden="true">
-  <div class="pip-drawer-head">
-    <div class="pip-avatar-large" aria-hidden="true"></div>
-    <div><strong>Pip Coach</strong><small>Business first. Mascot second.</small></div>
-    <button class="icon-btn" data-action="close-pip">×</button>
-  </div>
-  <div class="pip-focus" id="pipFocus"></div>
+<aside class="pip-drawer v15-pip-drawer" id="pipDrawer" aria-hidden="true">
+  <header class="v15-pip-head">
+    <div class="v15-pip-identity">
+      <img id="pipMascotImage" src="./pip-default.webp" alt="Pip">
+      <div><span>HOLTON HOMES COACH</span><strong>Pip</strong><small>What should you do next?</small></div>
+    </div>
+    <button class="v15-pip-collapse" data-action="close-pip" aria-label="Close Pip">⌄</button>
+  </header>
+  <section class="v15-pip-focus">
+    <div class="pip-focus" id="pipFocus"></div>
+    <img id="pipStageArt" src="./pip-thinking.webp" alt="" aria-hidden="true">
+  </section>
+  <section class="v15-pip-actions">
+    <button data-v15-pip="business"><b>Find business</b><span>Who should I contact now?</span></button>
+    <button data-v15-pip="day"><b>Build my day</b><span>Put today in order</span></button>
+    <button data-v15-pip="seller"><b>Seller opportunities</b><span>Who may be worth a listing conversation?</span></button>
+    <button data-v15-pip="pipeline"><b>Pipeline check</b><span>What is slipping?</span></button>
+  </section>
   <div class="pip-list" id="pipNotices"></div>
-  <div class="pip-ask">
-    <input id="pipAskInput" placeholder="Ask what to do next">
-    <button class="primary-btn compact" data-action="ask-pip">Ask</button>
+  <div class="v15-pip-answer" id="pipAnswer"></div>
+  <div class="v15-pip-ask">
+    <input id="pipAskInput" placeholder="Ask Pip about your CRM…">
+    <button data-v15-pip="ask">Ask</button>
   </div>
-  <div class="pip-answer" id="pipAnswer"></div>
 </aside>
 
 <div class="notification-backdrop" id="notificationBackdrop"></div>
@@ -137,15 +145,15 @@
   <div class="notification-list" id="notificationList"></div>
 </aside>
 
-<div class="modal-backdrop" id="modalBackdrop">
-  <section class="modal" id="modal"></section>
-</div>
-
+<div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"></section></div>
 <div class="toast" id="toast"><strong id="toastTitle"></strong><span id="toastText"></span></div>
 
 <script src="./cloud-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./app.js"></script>
+<script src="./v15.js"></script>
+<script src="./v15-2.js?v=152"></script>
+<script src="./v15-3.js?v=153"></script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
