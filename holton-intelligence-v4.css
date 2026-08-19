@@ -1,0 +1,645 @@
+/* Holton Homes Intelligence v4
+   Visual hierarchy pass: identity first, one obvious move, signal bars, ambient AI.
+   This file intentionally overrides v2/v3 surfaces without touching CRM data. */
+
+:root{
+  --hv4-ink:#201b1a;
+  --hv4-muted:#746966;
+  --hv4-line:#e7dfdc;
+  --hv4-line-soft:#f0e9e6;
+  --hv4-surface:#ffffff;
+  --hv4-page:#faf8f7;
+  --hv4-pink:#d6537a;
+  --hv4-pink-deep:#aa3159;
+  --hv4-pink-soft:#fcecf1;
+  --hv4-coral:#c94d61;
+  --hv4-coral-soft:#fff0f2;
+  --hv4-gold:#b67a2e;
+  --hv4-gold-soft:#fbf3e6;
+  --hv4-indigo:#586aa5;
+  --hv4-indigo-soft:#eef1fb;
+  --hv4-green:#3d7a66;
+  --hv4-shadow:0 10px 28px rgba(53,40,35,.055);
+}
+
+body.holton-intelligence-v4{
+  background:#f8f6f5;
+}
+
+/* ---------- CONTACT PAGE DENSITY / HIERARCHY ---------- */
+.hv4-contact-view{
+  --contact-gap:10px;
+}
+.hv4-contact-view .pro-contact-hero{
+  margin:0 0 10px!important;
+  padding:14px 18px!important;
+  min-height:0!important;
+  border-radius:14px!important;
+  border-color:var(--hv4-line)!important;
+  box-shadow:none!important;
+  background:#fff!important;
+}
+.hv4-contact-view .contact-identity{
+  align-items:flex-start!important;
+  gap:12px!important;
+}
+.hv4-contact-view .contact-identity .avatar,
+.hv4-contact-view .contact-identity .contact-avatar{
+  width:48px!important;
+  height:48px!important;
+  min-width:48px!important;
+  border-radius:13px!important;
+}
+.hv4-contact-view .contact-hero h1{
+  margin:2px 0 5px!important;
+  font-size:28px!important;
+  line-height:1.02!important;
+  letter-spacing:-.045em!important;
+}
+.hv4-contact-view .contact-lines{
+  gap:6px!important;
+  margin:0!important;
+  font-size:11px!important;
+}
+.hv4-contact-view .contact-hero-address{
+  margin-top:6px!important;
+}
+.hv4-contact-view .contact-map-button,
+.hv4-contact-view .missing-address-hero{
+  padding:5px 8px!important;
+  border-radius:7px!important;
+  font-size:9px!important;
+}
+.hv4-contact-view .inline-fields{
+  margin-top:8px!important;
+  gap:8px!important;
+}
+.hv4-contact-view .inline-fields .field-label{
+  gap:4px!important;
+  font-size:9px!important;
+}
+.hv4-contact-view .inline-fields select{
+  min-height:32px!important;
+  height:32px!important;
+  padding:0 28px 0 9px!important;
+  border-radius:8px!important;
+  font-size:11px!important;
+}
+.hv4-contact-view .hero-actions{
+  gap:6px!important;
+}
+.hv4-contact-view .hero-actions button{
+  min-height:34px!important;
+  padding:0 10px!important;
+  border-radius:9px!important;
+  font-size:10px!important;
+}
+
+/* Turn five metric cards into one lightweight instrument strip. */
+.hv4-contact-view .contact-metric-strip{
+  display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  gap:0!important;
+  margin:0 0 10px!important;
+  padding:0!important;
+  overflow:hidden!important;
+  border:1px solid var(--hv4-line)!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+.hv4-contact-view .contact-metric-strip>div{
+  min-height:62px!important;
+  padding:10px 13px!important;
+  border:0!important;
+  border-right:1px solid var(--hv4-line-soft)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.hv4-contact-view .contact-metric-strip>div:last-child{border-right:0!important}
+.hv4-contact-view .contact-metric-strip label{
+  display:block!important;
+  margin:0 0 3px!important;
+  color:#9a8e89!important;
+  font-size:8px!important;
+  font-weight:850!important;
+  letter-spacing:.07em!important;
+  text-transform:uppercase!important;
+}
+.hv4-contact-view .contact-metric-strip strong{
+  display:block!important;
+  margin:0!important;
+  font-size:14px!important;
+  line-height:1.2!important;
+}
+.hv4-contact-view .contact-metric-strip span{
+  display:block!important;
+  margin-top:2px!important;
+  color:#8c807c!important;
+  font-size:8px!important;
+}
+
+/* Tabs should behave like navigation, not another big card. */
+.hv4-contact-view .contact-tabs{
+  display:flex!important;
+  gap:18px!important;
+  margin:0 0 10px!important;
+  padding:0 4px!important;
+  border:0!important;
+  border-bottom:1px solid var(--hv4-line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.hv4-contact-view .contact-tabs button{
+  position:relative!important;
+  min-height:38px!important;
+  padding:0 2px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  color:#6f6460!important;
+  font-size:11px!important;
+  font-weight:800!important;
+}
+.hv4-contact-view .contact-tabs button.active{
+  background:transparent!important;
+  color:var(--hv4-ink)!important;
+}
+.hv4-contact-view .contact-tabs button.active:after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:2px;
+  border-radius:2px 2px 0 0;
+  background:var(--hv4-pink);
+}
+
+/* V4 replaces these two duplicated boxes with the pulse above. */
+body:has(.hv4-pulse) .pro-what-matters,
+body:has(.hv4-pulse) .pro-next-work{
+  display:none!important;
+}
+body:has(.hv4-pulse) .contact-tab-layout{
+  gap:14px!important;
+}
+body:has(.hv4-pulse) .pro-overview-grid{
+  gap:12px!important;
+}
+body:has(.hv4-pulse) .pro-overview-grid>article,
+body:has(.hv4-pulse) .timeline-card{
+  border-color:var(--hv4-line)!important;
+  border-radius:12px!important;
+  box-shadow:none!important;
+}
+body:has(.hv4-pulse) .pro-side-card{
+  border-color:var(--hv4-line)!important;
+  border-radius:11px!important;
+  box-shadow:none!important;
+}
+
+/* ---------- THE PULSE ---------- */
+.hv4-pulse{
+  margin:0 0 10px;
+  overflow:visible;
+  border:1px solid var(--hv4-line);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:var(--hv4-shadow);
+}
+.hv4-topline{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-height:46px;
+  padding:7px 12px 7px 16px;
+  border-bottom:1px solid var(--hv4-line-soft);
+}
+.hv4-brand{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+}
+.hv4-brand i{
+  width:7px;height:7px;flex:0 0 auto;
+  border-radius:50%;
+  background:var(--hv4-green);
+  box-shadow:0 0 0 4px rgba(61,122,102,.08);
+}
+.hv4-brand>span{
+  color:#544945;
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+}
+.hv4-brand em{
+  padding:3px 6px;
+  border-radius:999px;
+  background:#f2efed;
+  color:#81746f;
+  font-size:7px;
+  font-style:normal;
+  font-weight:900;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.hv4-brand b{
+  min-width:0;
+  overflow:hidden;
+  color:var(--hv4-pink-deep);
+  font-size:8px;
+  font-weight:800;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hv4-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+}
+.hv4-actions button{
+  min-height:31px;
+  padding:0 10px;
+  border:0;
+  border-radius:8px;
+  background:#f1ece9;
+  color:#514743;
+  font-size:9px;
+  font-weight:900;
+  cursor:pointer;
+  transition:.14s ease;
+}
+.hv4-actions button:hover{transform:translateY(-1px);background:#eae2de}
+.hv4-actions button.primary{
+  background:var(--hv4-pink);
+  color:#fff;
+}
+.hv4-actions button.primary:hover{background:var(--hv4-pink-deep)}
+
+.hv4-grid{
+  display:grid;
+  grid-template-columns:minmax(380px,1.35fr) minmax(220px,.62fr) minmax(330px,.95fr);
+  min-height:142px;
+}
+.hv4-focus,.hv4-signal-panel,.hv4-ai-panel{
+  min-width:0;
+  padding:14px 16px;
+}
+.hv4-signal-panel,.hv4-ai-panel{
+  border-left:1px solid var(--hv4-line-soft);
+}
+.hv4-label{
+  display:block;
+  color:#9a8d88;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.hv4-focus h2{
+  margin:5px 0 2px;
+  color:var(--hv4-ink);
+  font-size:20px;
+  line-height:1.08;
+  letter-spacing:-.035em;
+}
+.hv4-why{
+  max-width:640px;
+  margin:0;
+  color:#6e625e;
+  font-size:10px;
+  line-height:1.4;
+}
+.hv4-statusline{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-top:9px;
+}
+.hv4-statusline>span{
+  display:inline-flex;
+  align-items:center;
+  min-height:23px;
+  padding:0 7px;
+  border-radius:7px;
+  font-size:8px;
+  font-weight:850;
+}
+.hv4-statusline>span.overdue{background:var(--hv4-coral-soft);color:#a93b4d}
+.hv4-statusline>span.neutral{background:#f2efed;color:#756964}
+
+.hv4-gaps{position:relative}
+.hv4-gaps summary{
+  list-style:none;
+  cursor:pointer;
+  color:#766a65;
+  font-size:8px;
+  font-weight:850;
+}
+.hv4-gaps summary::-webkit-details-marker{display:none}
+.hv4-gaps summary:after{content:"  ▾";color:#b1a39e}
+.hv4-gaps[open] summary:after{content:"  ▴"}
+.hv4-gaps>div{
+  position:absolute;
+  z-index:15;
+  left:0;
+  top:24px;
+  display:flex;
+  width:max-content;
+  max-width:320px;
+  gap:5px;
+  flex-wrap:wrap;
+  padding:8px;
+  border:1px solid var(--hv4-line);
+  border-radius:9px;
+  background:#fff;
+  box-shadow:0 12px 30px rgba(40,30,27,.14);
+}
+.hv4-gaps>div span{
+  padding:4px 6px;
+  border-radius:6px;
+  background:#fff1ed;
+  color:#8e4d3d;
+  font-size:8px;
+  font-weight:800;
+}
+.hv4-gaps>div span.good{background:#edf6f2;color:var(--hv4-green)}
+
+.hv4-opener{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:8px;
+  align-items:center;
+  margin-top:10px;
+  padding-top:9px;
+  border-top:1px solid var(--hv4-line-soft);
+}
+.hv4-opener>span{
+  color:#9a8d88;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.09em;
+}
+.hv4-opener p{
+  min-width:0;
+  margin:0;
+  overflow:hidden;
+  color:#3d3431;
+  font-size:9px;
+  line-height:1.35;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hv4-opener button{
+  padding:4px 6px;
+  border:0;
+  border-radius:6px;
+  background:#f2efed;
+  color:#6e625e;
+  font-size:7px;
+  font-weight:850;
+  cursor:pointer;
+}
+
+/* Signal bars: color has meaning instead of decorating every box pink. */
+.hv4-signal-panel{
+  display:grid;
+  align-content:center;
+  gap:9px;
+  background:#fdfcfc;
+}
+.hv4-signal-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:8px;
+}
+.hv4-signal-head span{
+  color:#615652;
+  font-size:8px;
+  font-weight:850;
+}
+.hv4-signal-head strong{
+  color:#392f2c;
+  font-size:11px;
+  line-height:1;
+}
+.hv4-track{
+  height:5px;
+  margin-top:4px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#eee9e7;
+}
+.hv4-track i{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  transition:width .45s ease;
+}
+.hv4-signal>small{
+  display:block;
+  margin-top:3px;
+  color:#9a8d88;
+  font-size:7px;
+}
+.hv4-signal.priority .hv4-track i{background:linear-gradient(90deg,#e67b98,var(--hv4-pink-deep))}
+.hv4-signal.intent .hv4-track i{background:linear-gradient(90deg,#d8a558,var(--hv4-gold))}
+.hv4-signal.confidence .hv4-track i{background:linear-gradient(90deg,#8d9bd0,var(--hv4-indigo))}
+.hv4-signal-panel>small{
+  padding-top:2px;
+  color:#9a8d88;
+  font-size:7px;
+  line-height:1.35;
+}
+.hv4-signal-panel>small b{color:#6f625e}
+
+/* AI is a quiet briefing, not a third giant form. */
+.hv4-ai-panel{
+  background:linear-gradient(135deg,#f7f9fd,#fff 70%);
+}
+.hv4-ai-panel>header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+}
+.hv4-ai-panel>header small{
+  display:block;
+  margin-top:3px;
+  color:#9a8d88;
+  font-size:7px;
+}
+.hv4-ai-panel>header>button{
+  width:25px;height:25px;
+  border:0;
+  border-radius:7px;
+  background:#edf0f7;
+  color:#677399;
+  cursor:pointer;
+}
+.hv4-ai-read{
+  margin-top:6px;
+}
+.hv4-ai-read .hv3-ambient-row{
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr);
+  gap:7px;
+  padding:6px 0;
+  border-top:1px solid rgba(88,106,165,.10);
+}
+.hv4-ai-read .hv3-ambient-row:first-child{border-top:0}
+.hv4-ai-read .hv3-ambient-row b{
+  color:var(--hv4-indigo);
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.hv4-ai-read .hv3-ambient-row span{
+  color:#4d4b56;
+  font-size:9px;
+  line-height:1.38;
+}
+.hv4-ai-read p,.hv4-ai-read .hv3-bullet{
+  margin:4px 0;
+  color:#4d4b56;
+  font-size:9px;
+  line-height:1.4;
+}
+
+/* ---------- TODAY / COMMAND CENTER FLATTENING ---------- */
+.hv3-command{
+  margin-bottom:14px!important;
+  border-radius:13px!important;
+  box-shadow:none!important;
+}
+.hv3-command-top{
+  padding:16px 18px 13px!important;
+}
+.hv3-command-top h1{
+  font-size:21px!important;
+}
+.hv3-kpis article{
+  min-height:0!important;
+  padding:9px 16px!important;
+}
+.hv3-kpis strong{font-size:17px!important}
+.hv3-command-list{padding:13px 16px!important}
+.hv3-command-next{padding:16px!important}
+.hv3-command-next h3{font-size:17px!important}
+
+/* ---------- STUDIO: LESS CARD CATALOG, MORE WORKSPACE ---------- */
+.hv3-studio .hh-studio-hero{
+  padding:17px 20px!important;
+  border-radius:13px!important;
+  box-shadow:none!important;
+}
+.hv3-studio .hh-studio-hero h1{font-size:27px!important}
+.hv3-studio .hh-studio-tabs{
+  gap:16px!important;
+  padding:0 4px!important;
+  border:0!important;
+  border-bottom:1px solid var(--hv4-line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+.hv3-studio .hh-studio-tabs a{
+  position:relative!important;
+  min-height:38px!important;
+  padding:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  color:#746965!important;
+}
+.hv3-studio .hh-studio-tabs a.active{
+  background:transparent!important;
+  color:var(--hv4-ink)!important;
+  box-shadow:none!important;
+}
+.hv3-studio .hh-studio-tabs a.active:after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--hv4-pink);
+}
+.hv3-studio .hh-tool-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:8px!important;
+}
+.hv3-studio .hh-tool-card{
+  min-height:0!important;
+  padding:11px 12px!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+}
+
+/* ---------- AI DRAWER: CLEANER, MORE READABLE ---------- */
+.hv3-drawer-backdrop{
+  background:rgba(30,24,22,.28)!important;
+  backdrop-filter:blur(3px)!important;
+}
+.hv3-drawer{
+  width:min(620px,95vw)!important;
+  border-left:1px solid var(--hv4-line)!important;
+  box-shadow:-18px 0 50px rgba(35,28,25,.14)!important;
+}
+.hv3-drawer>header{
+  padding:15px 18px!important;
+  background:#fff!important;
+  color:var(--hv4-ink)!important;
+}
+.hv3-drawer>header span{color:var(--hv4-pink-deep)!important}
+.hv3-drawer>header button{
+  background:#f2efed!important;
+  color:#6b605c!important;
+}
+.hv3-drawer-body{padding:16px 18px 26px!important}
+.hv3-drawer-summary{
+  grid-template-columns:90px minmax(0,1fr) 100px!important;
+}
+.hv3-drawer-toolbar{
+  margin:12px 0 8px!important;
+}
+.hv3-drawer-toolbar button{
+  background:var(--hv4-pink)!important;
+  padding:8px 10px!important;
+}
+.hv3-ai-result{
+  min-height:130px!important;
+}
+.hv3-ai-result .hv3-ambient-row{
+  grid-template-columns:86px minmax(0,1fr)!important;
+  padding:8px 0!important;
+}
+.hv3-ai-result .hv3-ambient-row b{
+  color:var(--hv4-indigo)!important;
+}
+.hv3-result-tools{
+  margin-bottom:2px!important;
+}
+
+/* Responsive */
+@media(max-width:1180px){
+  .hv4-grid{grid-template-columns:minmax(360px,1.2fr) minmax(220px,.7fr)}
+  .hv4-ai-panel{grid-column:1/-1;border-left:0;border-top:1px solid var(--hv4-line-soft)}
+}
+@media(max-width:850px){
+  .hv4-topline{align-items:flex-start;flex-direction:column}
+  .hv4-actions{width:100%}
+  .hv4-grid{grid-template-columns:1fr}
+  .hv4-signal-panel,.hv4-ai-panel{border-left:0;border-top:1px solid var(--hv4-line-soft)}
+  .hv4-opener p{white-space:normal}
+  .hv4-contact-view .contact-metric-strip{grid-template-columns:repeat(2,1fr)!important}
+  .hv4-contact-view .contact-metric-strip>div{border-bottom:1px solid var(--hv4-line-soft)!important}
+  .hv4-contact-view .contact-tabs{overflow-x:auto;gap:14px!important}
+}
+@media(max-width:600px){
+  .hv4-contact-view .pro-contact-hero{padding:12px!important}
+  .hv4-focus,.hv4-signal-panel,.hv4-ai-panel{padding:12px}
+  .hv4-actions button{flex:1}
+  .hv4-focus h2{font-size:18px}
+  .hv4-statusline{align-items:flex-start;flex-direction:column}
+}
