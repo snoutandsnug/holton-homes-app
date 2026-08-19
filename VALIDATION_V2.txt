@@ -1,0 +1,51 @@
+HOLTON HOMES WORTH-IT UPDATE v2 — VALIDATION
+Date: 2026-08-19
+
+WHAT PASSED
+- node --check: holton-studio-engine.js
+- node --check: holton-studio.js
+- node --check: holton-worth-it.js
+- Python compile: apply_holton_worth_it_update.py
+- Python compile: optional HoltonClipCutter.pyw
+- 36 specialized Studio tool definitions still present
+- Every v2 referenced AI tool ID resolves to a real tool
+- Worth-It UX smoke: Command Center, Relationship Copilot, Seller Desk, CMA Workbench, Content Factory markers present
+- Seller readiness logic smoke test
+- Privacy firewall engine smoke: phone/email/SSN/bank/routing/password/passport/PIN/mortgage test values did not reach Ollama
+- Compliance scanner engine smoke
+- CMA smoke: sold/closed evidence produces a range; active-only evidence cannot generate an indicated value
+- Mock Ollama /api/tags + /api/chat protocol smoke
+- Installer run twice against a Holton-shaped mock repo: no duplicate tags/cache entries
+- upload-ready runtime copies match package runtime
+- app.js is not copied or overwritten by the installer
+- no automated Zillow/Redfin fetch/scraper in runtime
+- seller net sheet has no preset compensation rate
+
+WHAT V2 CHANGES
+1. Today gets Holton Command Center.
+2. Person records get a stronger Relationship Copilot and in-place local AI drawer.
+3. Studio home is reorganized around five complete workflows instead of a tool catalog.
+4. Seller Desk combines readiness, property, seller AI tools, CMA launch, local net estimate, and source links.
+5. Content gets a real Content Factory embedded in the existing Content section.
+6. CMA can be prefilled from the seller/property record.
+7. Source notes from Content Factory are mapped to the producer fields the AI actually consumes.
+
+NOT YET PROVEN / INTENTIONALLY NOT CLAIMED
+- Real browser E2E against the user's Vercel preview and Windows Ollama has not been completed here.
+- Automatic county public-record ingestion is not live yet.
+- Authorized CincyMLS feed is not connected yet.
+- No autonomous texting, email sending, posting, ad publishing or contract actions.
+- Compliance tools flag/retrieve risk; they do not certify legal compliance.
+- CMA is a research/CMA tool, not an appraisal.
+
+MERGE GATE
+Only merge after the real preview proves:
+- Today feels materially more useful.
+- A real contact's Copilot uses the correct CRM facts.
+- Seller Desk preloads the correct seller/property.
+- CMA launch carries subject facts correctly.
+- Content Factory sends the supplied source facts into Video/Blog/Social/Campaign tools.
+- Ollama online generation works.
+- Quit Ollama: CRM, scoring, CMA math and net-sheet math still work.
+- Leave/reopen routes repeatedly without a render/navigation break.
+- Mobile layout remains usable.

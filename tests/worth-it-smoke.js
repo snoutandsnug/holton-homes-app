@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),path=require('path');
+global.window=global;
+global.document={querySelector:()=>null,querySelectorAll:()=>[],addEventListener:()=>{},body:{insertAdjacentHTML:()=>{}}};
+global.location={hash:'#/today'};
+global.MutationObserver=class{observe(){}};
+global.addEventListener=()=>{};
+global.setTimeout=(fn)=>0;
+vm.runInThisContext(fs.readFileSync(path.join(__dirname,'..','holton-worth-it.js'),'utf8'));
+assert(global.HoltonWorthIt,'WorthIt exported');
+const r=global.HoltonWorthIt.sellerReadiness({phone:'1',timeframe:'0-3',followUp:'2026-08-20',sellerDetails:{decisionMakers:'Owner'}},{street:'1 Main',city:'Cincinnati',sqft:1800,condition:'Updated',motivation:'Move'});
+assert.strictEqual(r.score,100,'complete seller should score 100 readiness');
+const incomplete=global.HoltonWorthIt.sellerReadiness({},{ });
+assert(incomplete.score<40,'empty seller should be visibly incomplete');
+console.log('PASS Worth-It helper smoke: seller readiness logic');
