@@ -1,4 +1,4 @@
-const CACHE="holton-homes-people-cleanup-v8";
+const CACHE="holton-homes-worth-it-v2";
 const ASSETS=[
   "./",
   "./index.html",
@@ -8,6 +8,11 @@ const ASSETS=[
   "./holton-ai.css?v=8",
   "./app.js",
   "./holton-ai.js?v=8",
+  "./holton-studio.css?v=2",
+  "./holton-studio-engine.js?v=2",
+  "./holton-studio.js?v=2",
+  "./holton-worth-it.css?v=2",
+  "./holton-worth-it.js?v=2",
   "./cloud-config.js",
   "./manifest.webmanifest",
   "./assets/Holton-Homes-Primary-Full-Color.svg",
